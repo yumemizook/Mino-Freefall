@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris the Grand Master clone idk</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: #fff;
+            overflow: hidden; /* Prevent scrollbars in fullscreen mode */
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        .controls {
+            display: none; /* Hidden as requested */
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-size: 16px;
+            line-height: 1.6;
+            max-width: 800px;
+            z-index: 1000; /* Keep controls on top */
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .controls h3 {
+            color: #ffff00;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            text-align: left;
+        }
+        .control-item {
+            display: flex;
+            justify-content: space-between;
+        }
+        .key {
+            background: #333;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        /* Hide controls on smaller screens to make room for game */
+        @media (max-height: 600px) {
+            .controls {
+                display: none;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                font-size: 12px;
+                padding: 10px;
+                max-width: 90%;
+            }
+            .controls-grid {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .controls h3 {
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div class="controls">
+        <h3>Tetris The Grand Master 1 - Controls</h3>
+        <div class="controls-grid">
+            <div class="control-item">
+                <span>Move Left:</span>
+                <span class="key">Z</span>
+            </div>
+            <div class="control-item">
+                <span>Move Right:</span>
+                <span class="key">C</span>
+            </div>
+            <div class="control-item">
+                <span>Soft Drop:</span>
+                <span class="key">S</span>
+            </div>
+            <div class="control-item">
+                <span>Rotate Clockwise:</span>
+                <span class="key">K</span>
+            </div>
+            <div class="control-item">
+                <span>Rotate Counter-Clockwise:</span>
+                <span class="key">SPACE</span> or <span class="key">L</span>
+            </div>
+            <div class="control-item">
+                <span>Hard Drop:</span>
+                <span class="key">X</span>
+            </div>
+            <div class="control-item">
+                <span>Pause:</span>
+                <span class="key">ESC</span>
+            </div>
+            <div class="control-item">
+                <span>Restart (Game Over):</span>
+                <span class="key">ENTER</span>
+            </div>
+        </div>
+        <p style="margin-top: 15px; font-size: 12px; color: #ccc;">
+            Goal: Reach level 999 with the highest grade possible!<br>
+            Grades are earned based on score thresholds. Grand Master requires reaching level 999 with 126,000+ points in under 13:30.
+        </p>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
