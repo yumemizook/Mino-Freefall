@@ -114,10 +114,10 @@ const SEGA_ROTATIONS = {
                 [1, 1, 0]
             ], // Rotation 1
             [
+                [0, 0, 0],
                 [1, 0, 0],
-                [1, 1, 1],
-                [0, 0, 0]
-            ], // Rotation 2 (3-wide)
+                [1, 1, 1]
+            ], // Rotation 2 (3-wide) - shifted down
             [
                 [0, 1, 1],
                 [0, 1, 0],
@@ -139,10 +139,10 @@ const SEGA_ROTATIONS = {
                 [0, 1, 0]
             ], // Rotation 1
             [
+                [0, 0, 0],
                 [0, 0, 1],
-                [1, 1, 1],
-                [0, 0, 0]
-            ], // Rotation 2 (3-wide)
+                [1, 1, 1]
+            ], // Rotation 2 (3-wide) - shifted down
             [
                 [0, 1, 0],
                 [0, 1, 0],
@@ -369,28 +369,28 @@ const TETROMINOES = {
 
 const SRS_KICKS = {
     JLSTZ_CW: [
-        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]], // 0->1
-        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]], // 1->2
-        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]], // 2->3
-        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]] // 3->0
+        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2], [-2, 0], [2, 0], [0, 1], [0, -1]], // 0->1 extended
+        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2], [2, 0], [-2, 0], [0, 1], [0, -1]], // 1->2 extended
+        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2], [2, 0], [-2, 0], [0, 1], [0, -1]], // 2->3 extended
+        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2], [-2, 0], [2, 0], [0, 1], [0, -1]] // 3->0 extended
     ],
     JLSTZ_CCW: [
-        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]], // 0->3
-        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]], // 3->2
-        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]], // 2->1
-        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]] // 1->0
+        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2], [2, 0], [-2, 0], [0, 1], [0, -1]], // 0->3 extended
+        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2], [2, 0], [-2, 0], [0, 1], [0, -1]], // 3->2 extended
+        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2], [-2, 0], [2, 0], [0, 1], [0, -1]], // 2->1 extended
+        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2], [-2, 0], [2, 0], [0, 1], [0, -1]] // 1->0 extended
     ],
     I_CW: [
-        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]], // 0->1
-        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]], // 1->2
-        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]], // 2->3
-        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]] // 3->0
+        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2], [-1, 0], [2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 0->1 extended
+        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1], [1, 0], [-2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 1->2 extended
+        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2], [-2, 0], [1, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 2->3 extended
+        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1], [0, 0], [2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]] // 3->0 extended
     ],
     I_CCW: [
-        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]], // 0->3
-        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]], // 3->2
-        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]], // 2->1
-        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]] // 1->0
+        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1], [1, 0], [-2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 0->3 extended
+        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2], [-2, 0], [1, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 3->2 extended
+        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1], [0, 0], [2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]], // 2->1 extended
+        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2], [-1, 0], [2, 0], [0, 1], [0, -1], [0, -2], [-1, -1], [1, -1]] // 1->0 extended
     ]
 };
 
@@ -512,18 +512,19 @@ class Board {
 }
 
 class Piece {
-    constructor(type, rotationSystem = 'SRS') {
+    constructor(type, rotationSystem = 'SRS', initialRotation = 0) {
         this.type = type;
         this.rotationSystem = rotationSystem;
         // Use Sega rotations for ARS, SRS rotations for SRS
         const rotations = rotationSystem === 'ARS' ? SEGA_ROTATIONS[type].rotations : TETROMINOES[type].rotations;
-        this.shape = rotations[0].map(row => [...row]); // Start with rotation 0
+        this.shape = rotations[initialRotation].map(row => [...row]); // Start with specified rotation
         // Use ARS colors for ARS mode, SRS colors for SRS mode
         this.color = rotationSystem === 'ARS' ? ARS_COLORS[type] : TETROMINOES[type].color;
         this.x = 3; // spawn position
-        this.y = 2; // Spawn at rows 19-20 from bottom (equivalent to rows 2-3 from top)
+        if (this.type === 'O') this.x = 4; // Move O piece 1 column to the right
+        this.y = 1; // Spawn at rows 18-19 from bottom (equivalent to rows 1-2 from top) - will be overridden in spawnPiece
         this.fractionalY = 0; // For fractional gravity movement
-        this.rotation = 0;
+        this.rotation = initialRotation;
     }
 
     getRotatedShape() {
@@ -532,52 +533,48 @@ class Piece {
     }
 
     rotate(board, direction, rotationSystem = 'SRS') {
-        const newRotation = (this.rotation + direction + 4) % 4; // Proper 0→1→2→3→0 cycling
+        // S and Z pieces only have 2 rotation states
+        const rotationStates = (this.type === 'S' || this.type === 'Z') ? 2 : 4;
+        const newRotation = (this.rotation + direction + rotationStates) % rotationStates; // Proper cycling
         const rotations = rotationSystem === 'ARS' ? SEGA_ROTATIONS[this.type].rotations : TETROMINOES[this.type].rotations;
         const newShape = rotations[newRotation];
-        
+
         if (rotationSystem === 'ARS') {
             // ARS (Arika Rotation System) implementation
-            return this.rotateARS(board, newRotation, newShape);
+            return this.rotateARS(board, direction, newRotation, newShape);
         } else {
             // SRS (Super Rotation System) implementation
             return this.rotateSRS(board, direction, newRotation, newShape);
         }
     }
     
-    rotateARS(board, newRotation, newShape) {
-        // ARS uses Sega-style kicks: basic rotation, kick right, kick left
-        // Only for L, J, T pieces from 3-wide orientations (rotations 0 and 2)
-        const kicks = [[0, 0], [1, 0], [-1, 0]]; // Basic, right, left
-        
-        // I-piece never kicks in ARS
+    rotateARS(board, direction, newRotation, newShape) {
         if (this.type === 'I') {
-            kicks.length = 1; // Only basic rotation
-        }
-        
-        // Check center column rule for L, J, T pieces in 3-wide orientations
-        if (['L', 'J', 'T'].includes(this.type) && (this.rotation === 0 || this.rotation === 2)) {
-            for (let kick of kicks) {
+            // I-piece uses special ARS kick table with wall and floor kicks
+            const isCW = direction === 1;
+            const kickTable = isCW ? ARS_KICKS.I_CW : ARS_KICKS.I_CCW;
+            const kickTableIndex = this.rotation;
+
+            for (let i = 0; i < kickTable[kickTableIndex].length; i++) {
+                const kick = kickTable[kickTableIndex][i];
                 const newX = this.x + kick[0];
                 const newY = this.y + kick[1];
-                
                 if (board.isValidPosition({ shape: newShape }, newX, newY)) {
-                    // Check center column rule
-                    if (!this.isCenterColumnCollision(newShape, newX, newY, board)) {
-                        this.x = newX;
-                        this.y = newY;
-                        this.shape = newShape.map(row => [...row]);
-                        this.rotation = newRotation;
-                        return true;
-                    }
+                    this.x = newX;
+                    this.y = newY;
+                    this.shape = newShape.map(row => [...row]);
+                    this.rotation = newRotation;
+                    return true;
                 }
             }
         } else {
-            // No center column rule applies
-            for (let kick of kicks) {
+            // Other pieces use simple wall kicks: basic, right, left
+            const kicks = [[0, 0], [1, 0], [-1, 0]]; // Basic, right, left
+
+            for (let i = 0; i < kicks.length; i++) {
+                const kick = kicks[i];
                 const newX = this.x + kick[0];
                 const newY = this.y + kick[1];
-                
                 if (board.isValidPosition({ shape: newShape }, newX, newY)) {
                     this.x = newX;
                     this.y = newY;
@@ -587,58 +584,22 @@ class Piece {
                 }
             }
         }
-        
+
         return false;
     }
     
-    isCenterColumnCollision(newShape, newX, newY, board) {
-        // Check center column collision using 123/456/789 search pattern
-        // Only for L, J, T pieces from 3-wide orientations (rotations 0 and 2)
-        if (!['L', 'J', 'T'].includes(this.type) || (this.rotation !== 0 && this.rotation !== 2)) {
-            return false; // No center column rule applies
-        }
-        
-        // For 3x3 bounding box, center column is column index 1 (middle column)
-        // We check if any block in the new position would collide and is in the center column
-        
-        // Create a temporary piece to check collision
-        const tempPiece = { shape: newShape };
-        
-        // If basic rotation position has collision, check if first colliding block is center column
-        if (!board.isValidPosition(tempPiece, newX, newY)) {
-            // Find the first colliding block in 123/456/789 pattern
-            for (let row = 0; row < newShape.length; row++) {
-                for (let col = 0; col < newShape[row].length; col++) {
-                    if (newShape[row][col]) {
-                        const globalX = newX + col;
-                        const globalY = newY + row;
-                        
-                        // Check if this block is in center column (col === 1 for 3x3 box)
-                        if (col === 1) {
-                            // This block is in the center column - check for actual collision
-                            if (globalX < 0 || globalX >= 10 || globalY < 0 || globalY >= 22 || 
-                                (globalY >= 0 && board.grid[globalY] && board.grid[globalY][globalX])) {
-                                return true; // Center column collision detected
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        return false;
-    }
     
     rotateSRS(board, direction, newRotation, newShape) {
         const isCW = direction === 1;
-        
+
         // Select kick tables based on rotation system and piece type
         let kicks;
         kicks = this.type === 'I' ? (isCW ? SRS_KICKS.I_CW : SRS_KICKS.I_CCW) : (isCW ? SRS_KICKS.JLSTZ_CW : SRS_KICKS.JLSTZ_CCW);
-        
+
         const kickTable = kicks[this.rotation];
 
-        for (let kick of kickTable) {
+        for (let i = 0; i < kickTable.length; i++) {
+            const kick = kickTable[i];
             const newX = this.x + kick[0];
             const newY = this.y + kick[1];
             if (board.isValidPosition({ shape: newShape }, newX, newY)) {
@@ -712,11 +673,9 @@ class Piece {
     }
 
     getGhostPosition(board) {
-        const ghost = new Piece(this.type, this.rotationSystem);
+        const ghost = new Piece(this.type, this.rotationSystem, this.rotation);
         ghost.x = this.x;
         ghost.y = this.y;
-        ghost.shape = this.shape.map(row => [...row]); // Copy current shape
-        ghost.rotation = this.rotation;
         ghost.hardDrop(board);
         return ghost;
     }
@@ -733,6 +692,120 @@ function getStartingLevel() {
         }
     }
     return 0; // Default starting level
+}
+
+class MenuScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'MenuScene' });
+    }
+
+    preload() {
+        // Load assets if needed
+    }
+
+    create() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+
+        // Title
+        this.add.text(centerX, centerY - 200, 'MINO FREEFALL', {
+            fontSize: '48px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Mode buttons (placeholders)
+        const modes = ['Mode 1', 'Mode 2', 'Mode 3'];
+        modes.forEach((mode, index) => {
+            const button = this.add.text(centerX, centerY - 100 + index * 60, mode, {
+                fontSize: '24px',
+                fill: '#ffffff',
+                fontFamily: 'Courier New'
+            }).setOrigin(0.5).setInteractive();
+
+            button.on('pointerdown', () => {
+                this.scene.start('GameScene', { mode: mode });
+            });
+        });
+
+        // Settings button
+        const settingsButton = this.add.text(centerX, centerY + 50, 'Settings', {
+            fontSize: '24px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        settingsButton.on('pointerdown', () => {
+            this.scene.start('SettingsScene');
+        });
+
+        // Best scores display
+        this.displayBestScores(centerX, centerY + 120);
+    }
+
+    displayBestScores(centerX, startY) {
+        const modes = ['Mode 1', 'Mode 2', 'Mode 3'];
+        modes.forEach((mode, index) => {
+            const bestScore = this.getBestScore(mode);
+            this.add.text(centerX, startY + index * 40, `${mode} Best: ${bestScore.score} pts, Lvl ${bestScore.level}, ${bestScore.grade}, ${bestScore.time}`, {
+                fontSize: '16px',
+                fill: '#cccccc',
+                fontFamily: 'Courier New'
+            }).setOrigin(0.5);
+        });
+    }
+
+    getBestScore(mode) {
+        const key = `bestScore_${mode}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            return JSON.parse(stored);
+        }
+        return { score: 0, level: 0, grade: '9', time: '0:00.00' };
+    }
+}
+
+class SettingsScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'SettingsScene' });
+    }
+
+    create() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+
+        // Title
+        this.add.text(centerX, centerY - 100, 'Settings', {
+            fontSize: '36px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Rotation system toggle
+        const rotationSystem = localStorage.getItem('rotationSystem') || 'SRS';
+        this.rotationText = this.add.text(centerX, centerY - 20, `Rotation System: ${rotationSystem}`, {
+            fontSize: '24px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        this.rotationText.on('pointerdown', () => {
+            const newSystem = rotationSystem === 'SRS' ? 'ARS' : 'SRS';
+            localStorage.setItem('rotationSystem', newSystem);
+            this.rotationText.setText(`Rotation System: ${newSystem}`);
+        });
+
+        // Back to menu
+        const backButton = this.add.text(centerX, centerY + 60, 'Back to Menu', {
+            fontSize: '24px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        backButton.on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
+    }
 }
 
 class GameScene extends Phaser.Scene {
@@ -761,28 +834,28 @@ class GameScene extends Phaser.Scene {
         this.visibleRows = 20; // Only show bottom 20 rows of the 22-row matrix
         // Calculate cell size and positioning for full screen
         this.calculateLayout();
-        
+
         // DAS (Delayed Auto Shift) variables
         this.dasDelay = 16; // frames until auto-repeat starts
-        this.arrDelay = 1.5; // frames between repeats
+        this.arrDelay = 1; // frames between repeats
         this.leftKeyPressed = false;
         this.rightKeyPressed = false;
         this.leftTimer = 0;
         this.rightTimer = 0;
         this.leftInRepeat = false;
         this.rightInRepeat = false;
-        
+
         // Rotation and action key states
         this.kKeyPressed = false;
         this.spaceKeyPressed = false;
         this.lKeyPressed = false;
         this.xKeyPressed = false;
-        
+
         // ARE (Appearance Delay)
         this.areDelay = 30; // frames until next piece appears
         this.areTimer = 0;
         this.areActive = false;
-        
+
         // Line clear animation tracking
         this.clearedLines = []; // Lines being cleared for animation
         this.isClearingLines = false; // Flag for line clear animation phase
@@ -794,7 +867,7 @@ class GameScene extends Phaser.Scene {
         this.areLeftHeld = false;
         this.areRightHeld = false;
         this.areRotationKeys = { k: false, space: false, l: false }; // Track which rotation keys are held during ARE
-        
+
         // Enhanced scoring system
         this.comboCount = -1; // -1 means no combo active
         this.lastClearType = null; // 'single', 'double', 'triple', 'tetris', 'tspin'
@@ -810,38 +883,39 @@ class GameScene extends Phaser.Scene {
         // Drop tracking for scoring
         this.softDropRows = 0;
         this.hardDropRows = 0;
-        
+
         // Time tracking for grade system
         this.startTime = null;
         this.currentTime = 0;
         this.bestTime = null;
         this.gradeHistory = [];
         this.sectionTimes = {}; // Track time for each 100-level section
-        
+
         // Sections and level caps
         this.sectionCap = 99; // Start at first section cap
         this.sectionTransition = false;
         this.sectionMessage = null;
         this.sectionMessageTimer = 0;
-        
+
         // Piece randomizer history (TGM1 system)
         this.pieceHistory = ['Z', 'Z', 'S', 'S']; // Start with [Z,Z,S,S] as specified
         this.pieceHistoryIndex = 0; // Current position in history for rotation
         this.firstPiece = true; // Track if this is the first piece
-        
+        this.isFirstSpawn = true; // Track if this is the first spawn for level setting
+
         // Validate piece history to ensure it's correct
         this.validatePieceHistory();
-        
+
         // Pause functionality
         this.isPaused = false;
         this.pauseOverlay = null;
-        
+
         // BGM system
         this.stage1BGM = null;
         this.stage2BGM = null;
         this.currentBGM = null;
         this.bgmEnabled = true;
-        
+
         // Credits system
         this.creditsActive = false;
         this.creditsTimer = 0;
@@ -851,24 +925,43 @@ class GameScene extends Phaser.Scene {
         this.creditsAlpha = 1;
         this.congratulationsActive = false;
         this.gameComplete = false;
-        
+
         // Mino fading system
         this.minoFadeActive = false;
         this.minoFadeProgress = 0;
         this.minoFadeDelay = 30; // frames between each mino fade
         this.minoFadeTimer = 0;
         this.placedMinos = []; // Track all placed minos for fading
-        
+
         // GM grade tracking
         this.gmConditions = {
             level300: { achieved: false, time: 0, score: 0 },
             level500: { achieved: false, time: 0, score: 0 },
             level999: { achieved: false, time: 0, score: 0 }
         };
-        
+
         // Rotation system selection
-        this.rotationSystem = 'SRS'; // 'SRS' or 'ARS'
+        this.rotationSystem = localStorage.getItem('rotationSystem') || 'SRS'; // 'SRS' or 'ARS'
         this.rotationSystemDisplay = null;
+
+        // Keybind and IRS display
+        this.irsActivated = false;
+
+        // FPS limiter
+        this.lastUpdateTime = 0;
+
+        // Pause time tracking
+        this.pauseStartTime = null;
+
+        // Mode and best score tracking
+        this.selectedMode = null;
+
+        // Game over timer
+        this.gameOverTimer = 0;
+    }
+
+    init(data) {
+        this.selectedMode = data.mode || 'Mode 1';
     }
 
     preload() {
@@ -913,40 +1006,49 @@ class GameScene extends Phaser.Scene {
         const uiFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
         const largeFontSize = Math.max(20, Math.min(32, Math.floor(this.cellSize * 1.2)));
         const xlargeFontSize = Math.max(28, Math.min(48, Math.floor(this.cellSize * 1.8)));
-        
-        // UI positioned to the left of border
-        const uiX = Math.max(20, this.borderOffsetX - 200);
-        const uiY = this.borderOffsetY;
-        
-        // Score
-        this.scoreText = this.add.text(uiX, uiY + 300, 'Score: 0', { fontSize: `${largeFontSize}px`, fill: '#fff' });
-        
-        // Level display
-        this.levelLabel = this.add.text(uiX, uiY + 250, 'LEVEL', { fontSize: `${uiFontSize}px`, fill: '#fff' });
-        this.levelNumber = this.add.text(uiX, uiY + 270, '0', { fontSize: `${largeFontSize}px`, fill: '#fff' });
-        
-        // Grade display
+        const timeFontSize = Math.max(24, Math.min(40, Math.floor(this.cellSize * 1.5))); // Larger for time
+
+        // UI positioned to the left of border, moved 50px right
+        const uiX = Math.max(20, this.borderOffsetX - 200) + 50;
+
+        // Grade display - next to matrix on left, right-aligned, moved 25px right
+        const gradeX = uiX + 25;
+        const gradeY = this.borderOffsetY;
+        const gradeWidth = 80;
         this.gradeDisplay = this.add.graphics();
         this.gradeDisplay.lineStyle(2, 0xffffff);
-        this.gradeDisplay.strokeRect(uiX, uiY + 150, 80, 80);
-        this.gradeText = this.add.text(uiX + 40, uiY + 190, '9', { fontSize: `${xlargeFontSize}px`, fill: '#fff' }).setOrigin(0.5);
-        
-        // Time - positioned below border
-        this.timeText = this.add.text(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50, 'Time: 0:00', { 
-            fontSize: `${largeFontSize}px`, 
-            fill: '#fff' 
+        this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+        this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', { fontSize: `${xlargeFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(0.5);
+        // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
+        const nextGradeWidth = gradeWidth * 1.5;
+        this.nextGradeText = this.add.text(gradeX + gradeWidth, gradeY + 90, 'Next: 400 pts', {
+            fontSize: `${uiFontSize}px`,
+            fill: '#ccc',
+            fontFamily: 'Courier New',
+            wordWrap: { width: nextGradeWidth },
+            align: 'right'
+        }).setOrigin(1, 0);
+
+        // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
+        const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
+        const levelRowHeight = 20; // Decreased spacing
+        const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
+        this.levelLabel = this.add.text(uiX + 120, levelBottomY - 3.5 * levelRowHeight, 'LEVEL', { fontSize: `${uiFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        // Level bar and texts will be added in draw
+
+        // Score display - next to matrix on left, right-aligned, moved 30px up and 20px right
+        const scoreRowHeight = 25;
+        this.scoreLabel = this.add.text(uiX + 125, levelBottomY - 78, 'SCORE', { fontSize: `${uiFontSize - 4}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        this.scoreText = this.add.text(uiX + 145, levelBottomY, '0', { fontSize: `${xlargeFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+
+        // Time - centered below border, larger font, bold
+        this.timeText = this.add.text(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50, '0:00.00', {
+            fontSize: `${timeFontSize}px`,
+            fill: '#fff',
+            fontFamily: 'Courier New',
+            fontWeight: 'bold'
         }).setOrigin(0.5, 0);
-        
-        // Rotation system display
-        this.rotationSystemText = this.add.text(uiX, uiY + 350, 'Rotation System: SRS', { 
-            fontSize: `${uiFontSize}px`, 
-            fill: '#fff' 
-        });
-        this.rotationSystemHint = this.add.text(uiX, uiY + 370, '(Press R to switch)', { 
-            fontSize: `${Math.max(12, Math.floor(uiFontSize * 0.8))}px`, 
-            fill: '#888' 
-        });
-        
+
         // Playfield border - adjusted to fit exactly 10x20 with smaller width and height
         this.playfieldBorder = this.add.graphics();
         this.playfieldBorder.lineStyle(3, 0xffffff);
@@ -1011,11 +1113,13 @@ class GameScene extends Phaser.Scene {
     }
     
     updateBGM() {
+
+
         if (!this.bgmEnabled) return;
-        
         // Pause BGM after level 490
         if (this.level >= 491 && this.level < 500) {
             if (this.currentBGM) {
+                console.log('Stopping BGM at level', this.level);
                 this.currentBGM.stop();
                 this.currentBGM = null;
             }
@@ -1043,11 +1147,21 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
+        // Limit to 60fps by skipping updates if too fast
+        const now = this.time.now;
+        if (this.lastUpdateTime > 0) {
+            const delta = now - this.lastUpdateTime;
+            if (delta < 1000 / 60) {
+                return; // Skip this update
+            }
+        }
+        this.lastUpdateTime = now;
+
         // Input handling
         const leftDown = this.cursors.left.isDown;
         const rightDown = this.cursors.right.isDown;
         const downDown = this.cursors.down.isDown;
-        
+
         // Custom key bindings
         const sKeyDown = this.keys.s.isDown;
         const xKeyDown = this.keys.x.isDown;
@@ -1056,7 +1170,66 @@ class GameScene extends Phaser.Scene {
         const spaceKeyDown = this.keys.space.isDown;
         const lKeyDown = this.keys.l.isDown;
         const kKeyDown = this.keys.k.isDown;
-        
+
+        if (this.rotationSystem === 'ARS') {
+            // ARS: Process rotation before movement
+
+            // Track rotation keys for immediate response
+            this.kKeyPressed = this.kKeyPressed || false;
+            this.spaceKeyPressed = this.spaceKeyPressed || false;
+            this.lKeyPressed = this.lKeyPressed || false;
+            this.xKeyPressed = this.xKeyPressed || false;
+
+            // K key for clockwise rotation - immediate response
+            if (kKeyDown && !this.kKeyPressed) {
+                this.kKeyPressed = true;
+                if (this.currentPiece && this.currentPiece.rotate(this.board, 1, this.rotationSystem)) {
+                    this.resetLockDelay();
+                } else if (this.currentPiece) {
+                    this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+                }
+            } else if (!kKeyDown && this.kKeyPressed) {
+                this.kKeyPressed = false;
+            }
+
+            // Space key for counter-clockwise rotation - immediate response
+            if (spaceKeyDown && !this.spaceKeyPressed) {
+                this.spaceKeyPressed = true;
+                if (this.currentPiece && this.currentPiece.rotate(this.board, -1, this.rotationSystem)) {
+                    this.resetLockDelay();
+                } else if (this.currentPiece) {
+                    this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+                }
+            } else if (!spaceKeyDown && this.spaceKeyPressed) {
+                this.spaceKeyPressed = false;
+            }
+
+            // L key for counter-clockwise rotation - immediate response
+            if (lKeyDown && !this.lKeyPressed) {
+                this.lKeyPressed = true;
+                if (this.currentPiece && this.currentPiece.rotate(this.board, -1, this.rotationSystem)) {
+                    this.resetLockDelay();
+                } else if (this.currentPiece) {
+                    this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+                }
+            } else if (!lKeyDown && this.lKeyPressed) {
+                this.lKeyPressed = false;
+            }
+
+            // X key for hard drop - immediate response
+            if (xKeyDown && !this.xKeyPressed) {
+                this.xKeyPressed = true;
+                if (this.currentPiece) {
+                    // Calculate hard drop rows before dropping
+                    const ghost = this.currentPiece.getGhostPosition(this.board);
+                    this.hardDropRows = ghost.y - this.currentPiece.y;
+                    this.currentPiece.hardDrop(this.board);
+                    this.lockPiece();
+                }
+            } else if (!xKeyDown && this.xKeyPressed) {
+                this.xKeyPressed = false;
+            }
+
             // Track key states for DAS using custom keys (z for left, c for right)
             if ((leftDown || zKeyDown) && !this.leftKeyPressed) {
                 this.leftKeyPressed = true;
@@ -1078,13 +1251,37 @@ class GameScene extends Phaser.Scene {
                 }
                 // Don't set grounded state here - let gravity/soft drop logic handle it
             }
-            
+        } else {
+            // SRS: Process movement before rotation
+
+            // Track key states for DAS using custom keys (z for left, c for right)
+            if ((leftDown || zKeyDown) && !this.leftKeyPressed) {
+                this.leftKeyPressed = true;
+                this.leftTimer = 0;
+                this.leftInRepeat = false;
+                // Initial movement
+                if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
+                    this.resetLockDelay();
+                }
+                // Don't set grounded state here - let gravity/soft drop logic handle it
+            }
+            if ((rightDown || cKeyDown) && !this.rightKeyPressed) {
+                this.rightKeyPressed = true;
+                this.rightTimer = 0;
+                this.rightInRepeat = false;
+                // Initial movement
+                if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
+                    this.resetLockDelay();
+                }
+                // Don't set grounded state here - let gravity/soft drop logic handle it
+            }
+
             // Track rotation keys for immediate response
             this.kKeyPressed = this.kKeyPressed || false;
             this.spaceKeyPressed = this.spaceKeyPressed || false;
             this.lKeyPressed = this.lKeyPressed || false;
             this.xKeyPressed = this.xKeyPressed || false;
-            
+
             // K key for clockwise rotation - immediate response
             if (kKeyDown && !this.kKeyPressed) {
                 this.kKeyPressed = true;
@@ -1096,7 +1293,7 @@ class GameScene extends Phaser.Scene {
             } else if (!kKeyDown && this.kKeyPressed) {
                 this.kKeyPressed = false;
             }
-            
+
             // Space key for counter-clockwise rotation - immediate response
             if (spaceKeyDown && !this.spaceKeyPressed) {
                 this.spaceKeyPressed = true;
@@ -1108,7 +1305,7 @@ class GameScene extends Phaser.Scene {
             } else if (!spaceKeyDown && this.spaceKeyPressed) {
                 this.spaceKeyPressed = false;
             }
-            
+
             // L key for counter-clockwise rotation - immediate response
             if (lKeyDown && !this.lKeyPressed) {
                 this.lKeyPressed = true;
@@ -1120,7 +1317,7 @@ class GameScene extends Phaser.Scene {
             } else if (!lKeyDown && this.lKeyPressed) {
                 this.lKeyPressed = false;
             }
-            
+
             // X key for hard drop - immediate response
             if (xKeyDown && !this.xKeyPressed) {
                 this.xKeyPressed = true;
@@ -1134,6 +1331,7 @@ class GameScene extends Phaser.Scene {
             } else if (!xKeyDown && this.xKeyPressed) {
                 this.xKeyPressed = false;
             }
+        }
         
         // Handle DAS for left key (cursors.left or z key)
         if ((this.leftKeyPressed && (leftDown || zKeyDown))) {
@@ -1213,20 +1411,25 @@ class GameScene extends Phaser.Scene {
         if (this.areActive) {
             this.areLeftHeld = leftDown || zKeyDown;
             this.areRightHeld = rightDown || cKeyDown;
-            
+
             // Track rotation key states during ARE for IRS (Initial Rotation System)
             this.areRotationKeys.k = kKeyDown;
             this.areRotationKeys.space = spaceKeyDown;
             this.areRotationKeys.l = lKeyDown;
-            
+
             // Determine rotation direction based on held keys
             // Priority: K (clockwise) > Space/L (counter-clockwise)
             if (kKeyDown) {
                 this.areRotationDirection = 1;
             } else if (spaceKeyDown || lKeyDown) {
                 this.areRotationDirection = -1;
+            } else {
+                this.areRotationDirection = 0; // Deactivate IRS if no rotation keys held
             }
-            
+
+            // Update IRS state
+            this.irsActivated = this.areRotationDirection !== 0;
+
             // TGM1 has no hold mechanics - commented out for TGM1 mode
             // Uncomment for other modes that support hold
             /*
@@ -1238,16 +1441,12 @@ class GameScene extends Phaser.Scene {
             // Reset ARE rotation tracking when not in ARE
             this.areRotationKeys = { k: false, space: false, l: false };
             this.areRotationDirection = 0;
+            this.irsActivated = false;
         }
         
         // Pause/unpause with ESC - handle BEFORE early return
         if (Phaser.Input.Keyboard.JustDown(this.keys.pause) && !this.gameOver) {
             this.togglePause();
-        }
-        
-        // Switch rotation system with R key
-        if (Phaser.Input.Keyboard.JustDown(this.keys.r) && !this.gameOver && !this.isPaused) {
-            this.switchRotationSystem();
         }
         
         // Skip ALL game logic if paused or game over
@@ -1298,11 +1497,6 @@ class GameScene extends Phaser.Scene {
             */
         }
         
-        // Restart game if game over and ENTER is pressed
-        if (this.gameOver && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-            this.restartGame();
-        }
-
         // Pause/unpause with ESC
         if (Phaser.Input.Keyboard.JustDown(this.keys.pause) && !this.gameOver) {
             this.togglePause();
@@ -1420,11 +1614,11 @@ class GameScene extends Phaser.Scene {
         // Update credits system
         if (this.creditsActive) {
             this.creditsTimer += 1/60; // Convert frame time to seconds
-            
+
             // End credits after duration
             if (this.creditsTimer >= this.creditsDuration) {
                 this.creditsActive = false;
-                this.showCongratulationsScreen();
+                this.showGameOverScreen();
             }
         }
 
@@ -1434,16 +1628,25 @@ class GameScene extends Phaser.Scene {
             if (this.minoFadeTimer >= this.minoFadeDelay) {
                 this.minoFadeTimer = 0;
                 this.minoFadeProgress++;
-                
+
                 // Mark next mino as faded
                 if (this.minoFadeProgress <= this.placedMinos.length) {
                     this.placedMinos[this.minoFadeProgress - 1].faded = true;
                 }
-                
+
                 // Check if all minos are faded
                 if (this.minoFadeProgress >= this.placedMinos.length) {
                     this.minoFadeActive = false;
                 }
+            }
+        }
+
+        // Update game over timer
+        if (this.gameOver) {
+            this.gameOverTimer++;
+            if (this.gameOverTimer >= 600) { // 10 seconds at 60fps
+                this.saveBestScore();
+                this.scene.start('MenuScene');
             }
         }
 
@@ -1456,21 +1659,54 @@ class GameScene extends Phaser.Scene {
             this.generateNextPieces();
         }
         const type = this.nextPieces.shift();
-        this.currentPiece = new Piece(type, this.rotationSystem);
-        if (!this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y)) {
-            // Game over - piece can't spawn (reached top of visible area)
-            this.gameOver = true;
-            // Stop BGM on game over
-            if (this.currentBGM) {
-                this.currentBGM.stop();
-                this.currentBGM = null;
-            }
-            
-            // Start mino fading for game over
-            this.startMinoFading();
-            return;
+
+        // Determine initial rotation based on ARE inputs for IRS
+        let initialRotation = 0;
+        if (this.areRotationDirection === 1) {
+            initialRotation = 1; // Clockwise 90 degrees
+        } else if (this.areRotationDirection === -1) {
+            initialRotation = 3; // Counter-clockwise 90 degrees (270 degrees)
         }
-        
+
+        this.currentPiece = new Piece(type, this.rotationSystem, initialRotation);
+
+        if (!this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y)) {
+            // If prerotated piece can't spawn, try shifting up to give player a chance
+            if (initialRotation !== 0) {
+                let shifted = false;
+                for (let shiftY = -1; shiftY >= -3; shiftY--) {
+                    if (this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y + shiftY)) {
+                        this.currentPiece.y += shiftY;
+                        shifted = true;
+                        break;
+                    }
+                }
+                if (!shifted) {
+                    // Still can't spawn after shifting - game over
+                    // Stop BGM on game over
+                    if (this.currentBGM) {
+                        this.currentBGM.stop();
+                        this.currentBGM = null;
+                    }
+    
+                    // Show game over screen
+                    this.showGameOverScreen();
+                    return;
+                }
+            } else {
+                // Game over - piece can't spawn (reached top of visible area)
+                // Stop BGM on game over
+                if (this.currentBGM) {
+                    this.currentBGM.stop();
+                    this.currentBGM = null;
+                }
+
+                // Show game over screen
+                this.showGameOverScreen();
+                return;
+            }
+        }
+
         // Check for 20G gravity (level 500+)
         const internalGravity = this.getTGMGravitySpeed(this.level);
         if (internalGravity >= 5120) {
@@ -1491,11 +1727,9 @@ class GameScene extends Phaser.Scene {
         this.pieceSpawnTime = this.time.now;
         this.pieceActiveTime = 0;
 
-        // Apply ARE inputs
-        if (this.areRotationDirection !== 0) {
-            this.currentPiece.rotate(this.board, this.areRotationDirection, this.rotationSystem);
-            this.areRotationDirection = 0;
-        }
+        // Reset ARE rotation tracking
+        this.areRotationDirection = 0;
+
         // TGM1 has no hold mechanics - commented out for TGM1 mode
         // Uncomment for other modes that support hold
         /*
@@ -1516,6 +1750,14 @@ class GameScene extends Phaser.Scene {
         }
         this.areLeftHeld = false;
         this.areRightHeld = false;
+
+        // Update level on piece spawn
+        if (this.isFirstSpawn) {
+            this.level = 0;
+            this.isFirstSpawn = false;
+        } else {
+            this.updateLevel('piece');
+        }
     }
 
     generateNextPieces() {
@@ -1597,8 +1839,7 @@ class GameScene extends Phaser.Scene {
         }
         
         this.board.placePiece(this.currentPiece, this.currentPiece.x, this.currentPiece.y);
-        this.updateLevel('piece');
-        
+
         // Check for T-spin before clearing lines
         const isTSpin = this.detectTSpin(this.currentPiece, this.board);
         
@@ -1787,7 +2028,7 @@ class GameScene extends Phaser.Scene {
 
             // Check if CURRENT level is a stop level BEFORE incrementing
             // This allows reaching stop levels but prevents advancing from them
-            const currentIsStopLevel = (this.level % 100 === 99) || (this.level === 998);
+            const currentIsStopLevel = (this.level % 100 === 99) || (this.level === 999);
             if (!currentIsStopLevel) {
                 this.level += 1; // Advance only if current level is NOT a stop level
             }
@@ -1813,15 +2054,8 @@ class GameScene extends Phaser.Scene {
             this.level !== oldLevel) {
             if (this.level === 999) {
                 // Keep the Grand Master message for credits trigger
-                this.showSectionMessage(`Level 999 - Grand Master!`);
                 this.startCredits(); // Start credits when reaching level 999
             }
-            // Section milestone messages removed - uncomment if needed for other modes
-            /*
-            else {
-                this.showSectionMessage(`Level ${this.level}!`);
-            }
-            */
         }
         
         // Update BGM based on level
@@ -1830,7 +2064,7 @@ class GameScene extends Phaser.Scene {
     
     handleSectionTransition(section) {
         this.sectionTransition = true;
-        
+
         // Section completion messages removed - uncomment if needed for other modes
         /*
         // Show section completion message
@@ -1841,27 +2075,14 @@ class GameScene extends Phaser.Scene {
         }
         this.showSectionMessage(`Section ${sectionStart}-${sectionEnd} Complete!`);
         */
-        
+
         // Adjust section cap based on mode (default to Normal mode)
-        if (section === 0) {
-            this.sectionCap = 99;
-        } else if (section === 1) {
-            this.sectionCap = 199;
-        } else if (section === 2) {
-            this.sectionCap = 299;
-        } else if (section === 3) {
-            this.sectionCap = 399;
-        } else if (section === 4) {
-            this.sectionCap = 499;
-        } else if (section >= 5) {
-            this.sectionCap = 999; // Final section, no further caps
+        this.sectionCap = (section + 1) * 100;
+        if (section >= 9) {
+            this.sectionCap = 999;
         }
     }
     
-    showSectionMessage(message) {
-        this.sectionMessage = message;
-        this.sectionMessageTimer = 180; // 3 seconds at 60fps
-    }
 
     getTGMGravitySpeed(level) {
         // Official TGM1 Internal Gravity system
@@ -1981,6 +2202,7 @@ class GameScene extends Phaser.Scene {
         // Update grade if it improved (only upgrade, don't downgrade)
         if (this.getGradeValue(newGrade) > this.getGradeValue(this.grade)) {
             this.grade = newGrade;
+            this.animateGradeUpgrade();
             this.gradeHistory.push({
                 grade: newGrade,
                 level: this.level,
@@ -1998,8 +2220,47 @@ class GameScene extends Phaser.Scene {
         };
         return gradeValues[grade] || 0;
     }
-    
-    
+
+    updateNextGradeText() {
+        const gradeThresholds = {
+            '9': 400, '8': 800, '7': 1400, '6': 2000, '5': 3500, '4': 5500, '3': 8000, '2': 12000, '1': 16000,
+            'S1': 22000, 'S2': 30000, 'S3': 40000, 'S4': 52000, 'S5': 66000, 'S6': 82000, 'S7': 100000, 'S8': 120000,
+            'S9': 126000, 'GM': Infinity
+        };
+        const nextThreshold = gradeThresholds[this.grade];
+        if (nextThreshold === Infinity) {
+            this.nextGradeText.setText('Next grade at ?????? points');
+        } else {
+            this.nextGradeText.setText(`Next grade at  ${nextThreshold} points`);
+        }
+    }
+
+    animateGradeUpgrade() {
+        // Simple flash animation
+        this.gradeText.setTint(0xffff00);
+        this.time.delayedCall(200, () => {
+            this.gradeText.setTint(0xffffff);
+        });
+        this.time.delayedCall(400, () => {
+            this.gradeText.setTint(0xffff00);
+        });
+        this.time.delayedCall(600, () => {
+            this.gradeText.setTint(0xffffff);
+        });
+    }
+
+    getHeldKeys() {
+        const held = [];
+        if (this.leftKeyPressed) held.push('Z');
+        if (this.rightKeyPressed) held.push('C');
+        if (this.kKeyPressed) held.push('K');
+        if (this.spaceKeyPressed) held.push('Space');
+        if (this.lKeyPressed) held.push('L');
+        if (this.xKeyPressed) held.push('X');
+        if (this.keys.s.isDown) held.push('S');
+        return held;
+    }
+
     restartGame() {
         // Reset all game variables
         this.board = new Board();
@@ -2038,6 +2299,7 @@ class GameScene extends Phaser.Scene {
         this.pieceHistory = ['Z', 'Z', 'S', 'S']; // Reset to initial state
         this.pieceHistoryIndex = 0;
         this.firstPiece = true;
+        this.isFirstSpawn = true;
         
         // Reset key states
         this.kKeyPressed = false;
@@ -2051,6 +2313,7 @@ class GameScene extends Phaser.Scene {
         // Reset time tracking
         this.startTime = this.time.now;
         this.currentTime = 0;
+        this.pauseStartTime = null;
 
         // Clear game elements
         this.gameGroup.clear(true, true);
@@ -2077,7 +2340,20 @@ class GameScene extends Phaser.Scene {
     
     togglePause() {
         this.isPaused = !this.isPaused;
-        
+
+        // Handle time tracking during pause
+        if (this.isPaused) {
+            // Pausing: record the pause start time
+            this.pauseStartTime = this.time.now;
+        } else {
+            // Resuming: adjust startTime to account for paused duration
+            if (this.pauseStartTime && this.startTime) {
+                const pausedDuration = this.time.now - this.pauseStartTime;
+                this.startTime += pausedDuration;
+                this.pauseStartTime = null;
+            }
+        }
+
         // Pause/resume BGM
         if (this.currentBGM) {
             if (this.isPaused) {
@@ -2088,25 +2364,6 @@ class GameScene extends Phaser.Scene {
         }
     }
     
-    switchRotationSystem() {
-        // Toggle between SRS and ARS
-        this.rotationSystem = this.rotationSystem === 'SRS' ? 'ARS' : 'SRS';
-        
-        // Update the display
-        if (this.rotationSystemText) {
-            this.rotationSystemText.setText(`Rotation System: ${this.rotationSystem}`);
-        }
-        
-        // Change text color to indicate the active system
-        if (this.rotationSystem === 'ARS') {
-            this.rotationSystemText.setColor('#00ff00'); // Green for ARS
-        } else {
-            this.rotationSystemText.setColor('#ffffff'); // White for SRS
-        }
-        
-        // Restart the game to apply the new rotation system
-        this.restartGame();
-    }
     
     startCredits() {
         this.creditsActive = true;
@@ -2136,14 +2393,40 @@ class GameScene extends Phaser.Scene {
         this.minoFadeTimer = 0;
     }
     
-    showCongratulationsScreen() {
-        this.congratulationsActive = true;
-        this.gameComplete = true;
-        
-        // Start mino fading after a brief delay
-        this.time.delayedCall(60, () => { // 1 second delay
-            this.startMinoFading();
-        });
+    saveBestScore() {
+        if (!this.selectedMode) return;
+        const key = `bestScore_${this.selectedMode}`;
+        const currentBest = this.getBestScore(this.selectedMode);
+        const newScore = {
+            score: this.score,
+            level: this.level,
+            grade: this.grade,
+            time: `${Math.floor(this.currentTime / 60)}:${Math.floor(this.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((this.currentTime % 1) * 100).toString().padStart(2, '0')}`
+        };
+
+        // Update if better score, or same score but higher level, or same level but better grade
+        if (newScore.score > currentBest.score ||
+            (newScore.score === currentBest.score && newScore.level > currentBest.level) ||
+            (newScore.score === currentBest.score && newScore.level === currentBest.level && this.getGradeValue(newScore.grade) > this.getGradeValue(currentBest.grade))) {
+            localStorage.setItem(key, JSON.stringify(newScore));
+        }
+    }
+
+    getBestScore(mode) {
+        const key = `bestScore_${mode}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            return JSON.parse(stored);
+        }
+        return { score: 0, level: 0, grade: '9', time: '0:00.00' };
+    }
+
+    showGameOverScreen() {
+        this.gameOver = true;
+        this.gameOverTimer = 0; // Start timer for 10 seconds
+
+        // Start mino fading immediately
+        this.startMinoFading();
     }
     
     drawCreditsScreen() {
@@ -2182,10 +2465,10 @@ class GameScene extends Phaser.Scene {
             'Thank you for playing!',
             'Continue striving for perfection!'
         ];
-        
+
         const scrollY = (this.creditsTimer * this.creditsScrollSpeed * 60) % (creditsText.length * 40);
         const centerX = this.windowWidth / 2;
-        
+
         for (let i = 0; i < creditsText.length; i++) {
             const y = this.windowHeight - scrollY + (i * 40);
             if (y > -50 && y < this.windowHeight + 50) {
@@ -2195,77 +2478,64 @@ class GameScene extends Phaser.Scene {
                     fontSize: `${fontSize}px`,
                     fill: fillColor,
                     stroke: '#000000',
-                    strokeThickness: 2
+                    strokeThickness: 2,
+                    fontFamily: 'Courier New'
                 }).setOrigin(0.5);
                 this.gameGroup.add(text);
             }
         }
-        
-        // Show remaining time
-        const remainingTime = Math.max(0, this.creditsDuration - this.creditsTimer);
-        const timeText = this.add.text(centerX, 50, `Credits End In: ${remainingTime.toFixed(1)}s`, {
-            fontSize: '20px',
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        this.gameGroup.add(timeText);
     }
     
-    drawCongratulationsScreen() {
-        const overlay = this.add.rectangle(this.windowWidth / 2, this.windowHeight / 2, this.windowWidth, this.windowHeight, 0x000000, 0.9);
-        const titleFontSize = Math.max(48, Math.min(72, Math.floor(this.cellSize * 2.4)));
-        const statsFontSize = Math.max(20, Math.min(36, Math.floor(this.cellSize * 1.2)));
-        const smallFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
-        
-        const centerY = this.windowHeight / 2;
-        const centerX = this.windowWidth / 2;
-        
-        const titleText = this.add.text(centerX, centerY - 120, 'CONGRATULATIONS!', {
-            fontSize: `${titleFontSize}px`,
-            fill: '#ffff00',
-            stroke: '#000',
-            strokeThickness: 3
-        }).setOrigin(0.5);
-        
-        const gradeText = this.add.text(centerX, centerY - 70, `Final Grade: ${this.grade}`, {
-            fontSize: `${statsFontSize}px`,
-            fill: '#00ff00'
-        }).setOrigin(0.5);
-        
-        const scoreText = this.add.text(centerX, centerY - 40, `Final Score: ${this.score}`, {
-            fontSize: `${statsFontSize}px`,
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        
-        const levelText = this.add.text(centerX, centerY - 10, `Final Level: ${this.level}`, {
-            fontSize: `${statsFontSize}px`,
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        
-        const timeText = this.add.text(centerX, centerY + 20, `Time: ${Math.floor(this.currentTime / 60)}:${Math.floor(this.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((this.currentTime % 1) * 100).toString().padStart(2, '0')}`, {
-            fontSize: `${statsFontSize}px`,
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        
-        const messageText = this.add.text(centerX, centerY + 70, 'You have achieved the Grand Master rank!', {
-            fontSize: `${smallFontSize}px`,
-            fill: '#ffff00'
-        }).setOrigin(0.5);
-        
-        const restartText = this.add.text(centerX, centerY + 110, 'Press ENTER to play again', {
-            fontSize: `${smallFontSize}px`,
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        
-        this.gameGroup.add(overlay);
-        this.gameGroup.add(titleText);
-        this.gameGroup.add(gradeText);
-        this.gameGroup.add(scoreText);
-        this.gameGroup.add(levelText);
-        this.gameGroup.add(timeText);
-        this.gameGroup.add(messageText);
-        this.gameGroup.add(restartText);
-    }
     
+    drawLevelBar() {
+        const uiX = Math.max(20, this.borderOffsetX - 200) + 50;
+        const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
+        const levelRowHeight = 20; // Decreased spacing
+        const rightX = uiX + 120;
+        const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
+
+        // Calculate section cap
+        const section = Math.floor(this.level / 100);
+        const sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+
+        // Current level - top row
+        const currentY = levelBottomY - 3 * levelRowHeight;
+        const currentLevelText = this.level.toString();
+        if (!this.currentLevelText) {
+            this.currentLevelText = this.add.text(rightX, currentY, currentLevelText, { fontSize: `${levelFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        } else {
+            this.currentLevelText.setText(currentLevelText);
+        }
+
+        // Bar - middle row, white background with red fill
+        const barY = levelBottomY - 2 * levelRowHeight;
+        const barWidth = 60;
+        const barHeight = 4;
+        const barX = rightX - barWidth;
+        const internalGravity = this.getTGMGravitySpeed(this.level);
+        const gravityRatio = Math.min(internalGravity / 5120, 1); // 0 to 1, 5120 is 20G
+
+        if (!this.levelBar) {
+            this.levelBar = this.add.graphics();
+        }
+        this.levelBar.clear();
+        // White background
+        this.levelBar.fillStyle(0xffffff);
+        this.levelBar.fillRect(barX, barY, barWidth, barHeight);
+        // Red fill from left
+        this.levelBar.fillStyle(0xff0000);
+        this.levelBar.fillRect(barX, barY, barWidth * gravityRatio, barHeight);
+
+        // Cap level - bottom row
+        const capY = levelBottomY - levelRowHeight;
+        const capText = sectionCap.toString();
+        if (!this.capLevelText) {
+            this.capLevelText = this.add.text(rightX, capY, capText, { fontSize: `${levelFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        } else {
+            this.capLevelText.setText(capText);
+        }
+    }
+
     draw() {
         // Clear previous game elements
         this.gameGroup.clear(true, true);
@@ -2334,15 +2604,21 @@ class GameScene extends Phaser.Scene {
         }
 
         // Update UI
-        this.scoreText.setText('Score: ' + this.score);
-        this.levelNumber.setText(this.level.toString());
+        this.scoreText.setText(this.score.toString());
         this.gradeText.setText(this.grade);
+
+        // Update next grade requirement
+        this.updateNextGradeText();
+
+        // Draw level bar
+        this.drawLevelBar();
 
         // Format and display time
         const minutes = Math.floor(this.currentTime / 60);
         const seconds = Math.floor(this.currentTime % 60);
         const centiseconds = Math.floor((this.currentTime % 1) * 100);
-        this.timeText.setText(`Time: ${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`);
+        this.timeText.setText(`${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`);
+
 
         // Draw NEXT label - positioned to the right of border
         const nextX = this.borderOffsetX + (this.cellSize * this.board.cols) + 50;
@@ -2428,45 +2704,19 @@ class GameScene extends Phaser.Scene {
         if (this.gameOver) {
             const overlay = this.add.rectangle(this.windowWidth / 2, this.windowHeight / 2, this.windowWidth, this.windowHeight, 0x000000, 0.8);
             const gameOverFontSize = Math.max(48, Math.min(72, Math.floor(this.cellSize * 2.4)));
-            const statsFontSize = Math.max(20, Math.min(36, Math.floor(this.cellSize * 1.2)));
-            const smallFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
-            
+
             const centerY = this.windowHeight / 2;
             const centerX = this.windowWidth / 2;
-            
-            const gameOverText = this.add.text(centerX, centerY - 100, 'GAME OVER', {
+
+            const gameOverText = this.add.text(centerX, centerY, 'GAME OVER', {
                 fontSize: `${gameOverFontSize}px`,
                 fill: '#ff0000',
                 stroke: '#000',
-                strokeThickness: 2
-            }).setOrigin(0.5);
-            const gradeText = this.add.text(centerX, centerY - 50, `Final Grade: ${this.grade}`, {
-                fontSize: `${statsFontSize}px`,
-                fill: '#fff'
-            }).setOrigin(0.5);
-            const scoreText = this.add.text(centerX, centerY - 20, `Final Score: ${this.score}`, {
-                fontSize: `${statsFontSize}px`,
-                fill: '#fff'
-            }).setOrigin(0.5);
-            const levelText = this.add.text(centerX, centerY + 10, `Final Level: ${this.level}`, {
-                fontSize: `${statsFontSize}px`,
-                fill: '#fff'
-            }).setOrigin(0.5);
-            const timeText = this.add.text(centerX, centerY + 40, `Time: ${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`, {
-                fontSize: `${statsFontSize}px`,
-                fill: '#fff'
-            }).setOrigin(0.5);
-            const restartText = this.add.text(centerX, centerY + 90, 'Press ENTER to restart', {
-                fontSize: `${smallFontSize}px`,
-                fill: '#ffff00'
+                strokeThickness: 2,
+                fontFamily: 'Courier New'
             }).setOrigin(0.5);
             this.gameGroup.add(overlay);
             this.gameGroup.add(gameOverText);
-            this.gameGroup.add(gradeText);
-            this.gameGroup.add(scoreText);
-            this.gameGroup.add(levelText);
-            this.gameGroup.add(timeText);
-            this.gameGroup.add(restartText);
         }
 
         // Draw credits screen (behind the game)
@@ -2474,10 +2724,6 @@ class GameScene extends Phaser.Scene {
             this.drawCreditsScreen();
         }
 
-        // Draw congratulations screen
-        if (this.congratulationsActive) {
-            this.drawCongratulationsScreen();
-        }
     }
 }
 
@@ -2487,7 +2733,7 @@ const config = {
     width: window.innerWidth,
     height: window.innerHeight,
     parent: 'game-container',
-    scene: [GameScene],
+    scene: [MenuScene, SettingsScene, GameScene],
     backgroundColor: '#000000',
     fps: 60,
     scale: {
@@ -2497,6 +2743,9 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+// Limit frame rate to 60fps
+game.loop.maxFps = 60;
 
 // Handle window resize
 window.addEventListener('resize', () => {
