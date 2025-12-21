@@ -496,7 +496,8 @@ class Board {
                             mino.x === c && mino.y === r && mino.color === this.grid[r][c]
                         );
                         if (minoIndex !== -1 && scene.placedMinos[minoIndex].faded) {
-                            color = 0x888888; // Grey color for faded minos
+                            // Skip drawing faded minos to make them invisible
+                            continue;
                         }
                     }
                     
@@ -529,7 +530,7 @@ class Piece {
 
     getRotatedShape() {
         const rotations = this.rotationSystem === 'ARS' ? SEGA_ROTATIONS[this.type].rotations : TETROMINOES[this.type].rotations;
-        return rotations[this.rotation];
+        return rotations[this.rotation] || rotations[0]; // Fallback to first rotation
     }
 
     rotate(board, direction, rotationSystem = 'SRS') {
@@ -625,6 +626,37 @@ class Piece {
         return false;
     }
     
+    playGroundSound(scene) {
+        if (scene && scene.sound) {
+            const groundSound = scene.sound.add('ground', { volume: 0.4 });
+            groundSound.play();
+        }
+    }
+    
+    isTouchingGround(board) {
+        // Check if piece is touching the ground (bottom of stack or matrix bottom)
+        // This checks if any part of the piece is at the bottom row or on top of existing blocks
+        for (let r = 0; r < this.shape.length; r++) {
+            for (let c = 0; c < this.shape[r].length; c++) {
+                if (this.shape[r][c]) {
+                    const boardX = this.x + c;
+                    const boardY = this.y + r;
+                    
+                    // Check if at bottom of matrix
+                    if (boardY >= board.rows - 1) {
+                        return true;
+                    }
+                    
+                    // Check if block below is occupied (touching stack)
+                    if (boardY + 1 >= 0 && board.grid[boardY + 1][boardX]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
     moveFractional(board, dx, dy) {
         // For fractional movements, we need to track sub-pixel positions
         if (!this.fractionalY) {
@@ -681,17 +713,18 @@ class Piece {
     }
 }
 
-// Get starting level from URL parameters for debugging
+// Get starting level from URL parameters
 function getStartingLevel() {
     const urlParams = new URLSearchParams(window.location.search);
     const levelParam = urlParams.get('level');
+    
     if (levelParam !== null) {
         const level = parseInt(levelParam);
         if (!isNaN(level) && level >= 0 && level <= 999) {
             return level;
         }
     }
-    return 0; // Default starting level
+    return 0;
 }
 
 class MenuScene extends Phaser.Scene {
@@ -711,7 +744,16 @@ class MenuScene extends Phaser.Scene {
         this.add.text(centerX, centerY - 200, 'MINO FREEFALL', {
             fontSize: '48px',
             fill: '#ffffff',
-            fontFamily: 'Courier New'
+            fontFamily: 'Courier New',
+            fontStyle: 'bold',
+            shadow: {
+                offsetX: 2,
+                offsetY: 2,
+                color: '#000000',
+                blur: 0,
+                stroke: true,
+                fill: false
+            }
         }).setOrigin(0.5);
 
         // Mode buttons (placeholders)
@@ -724,7 +766,7 @@ class MenuScene extends Phaser.Scene {
             }).setOrigin(0.5).setInteractive();
 
             button.on('pointerdown', () => {
-                this.scene.start('GameScene', { mode: mode });
+                this.scene.start('AssetLoaderScene', { mode: mode });
             });
         });
 
@@ -808,6 +850,115 @@ class SettingsScene extends Phaser.Scene {
     }
 }
 
+class AssetLoaderScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'AssetLoaderScene' });
+    }
+
+    preload() {
+        // Load all assets for the game
+        this.load.image('mino_srs', 'img/mino.png');
+        this.load.image('mino_ars', 'img/minoARS.png');
+        
+        // Load BGM files
+        this.load.audio('stage1', 'bgm/stage1.mp3');
+        this.load.audio('stage2', 'bgm/stage2.mp3');
+        this.load.audio('credits', 'bgm/credits.mp3');
+        
+        // Load all sound effects
+        this.load.audio('ready', 'sfx/ready.wav');
+        this.load.audio('go', 'sfx/go.wav');
+        this.load.audio('gradeup', 'sfx/gradeup.wav');
+        this.load.audio('complete', 'sfx/complete.wav');
+        this.load.audio('clear', 'sfx/clear.wav');
+        this.load.audio('fall', 'sfx/fall.wav');
+        this.load.audio('sectionchange', 'sfx/sectionchange.wav');
+        this.load.audio('IRS', 'sfx/IRS.wav');
+        this.load.audio('ground', 'sfx/ground.wav');
+        this.load.audio('lock', 'sfx/lock.wav');
+        
+        // Load tetromino sound effects
+        this.load.audio('sound_s', 'sfx/s.wav');
+        this.load.audio('sound_z', 'sfx/z.wav');
+        this.load.audio('sound_t', 'sfx/t.wav');
+        this.load.audio('sound_j', 'sfx/j.wav');
+        this.load.audio('sound_l', 'sfx/l.wav');
+        this.load.audio('sound_o', 'sfx/o.wav');
+        this.load.audio('sound_i', 'sfx/i.wav');
+    }
+
+    create() {
+        // All assets loaded, proceed to loading screen
+        this.scene.start('LoadingScreenScene', { mode: this.selectedMode });
+    }
+}
+
+class LoadingScreenScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'LoadingScreenScene' });
+    }
+
+    init(data) {
+        this.selectedMode = data.mode || 'Mode 1';
+    }
+
+    create() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+
+        // Add loading text
+        this.add.text(centerX, centerY, 'LOADING...', {
+            fontSize: '48px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        // Start the READY/GO sequence after 1 second
+        this.time.delayedCall(1000, () => {
+            this.showReadyGoSequence();
+        });
+    }
+
+    showReadyGoSequence() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+
+        // Show READY text with sound
+        const readyText = this.add.text(centerX, centerY, 'READY', {
+            fontSize: '64px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        // Play ready sound
+        const readySound = this.sound.add('ready', { volume: 0.7 });
+        readySound.play();
+
+        // Show GO text with sound after 1 second
+        this.time.delayedCall(1000, () => {
+            readyText.destroy();
+            
+            const goText = this.add.text(centerX, centerY, 'GO', {
+                fontSize: '64px',
+                fill: '#00ff00',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            }).setOrigin(0.5);
+
+            // Play go sound
+            const goSound = this.sound.add('go', { volume: 0.7 });
+            goSound.play();
+
+            // Start game after 1 more second
+            this.time.delayedCall(1000, () => {
+                this.scene.start('GameScene', { mode: this.selectedMode });
+            });
+        });
+    }
+}
+
 class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
@@ -820,6 +971,7 @@ class GameScene extends Phaser.Scene {
         this.lockDelay = 0;
         this.isGrounded = false;
         this.level = getStartingLevel(); // Set starting level from URL parameter
+        this.startingLevel = this.level; // Preserve the starting level for restarts
         this.piecesPlaced = 0; // Track pieces for level system
         this.score = 0;
         this.grade = '9';
@@ -827,7 +979,6 @@ class GameScene extends Phaser.Scene {
         this.levelDisplay = null;
         this.playfieldBorder = null;
         this.gameOver = false;
-        this.debugMode = false; // Turn off debug mode after testing
         this.visibleRows = 20; // Only show bottom 20 rows of the 22-row matrix
         // Calculate cell size and positioning for full screen
         this.calculateLayout();
@@ -929,9 +1080,13 @@ class GameScene extends Phaser.Scene {
         // Mino fading system
         this.minoFadeActive = false;
         this.minoFadeProgress = 0;
-        this.minoFadeDelay = 30; // frames between each mino fade
+        this.minoFadeDelay = 30; // frames between each row fade (will be calculated dynamically)
         this.minoFadeTimer = 0;
         this.placedMinos = []; // Track all placed minos for fading
+        this.placedMinoRows = []; // Track rows containing minos for row-by-row fading
+        this.gameOverTextDelay = 180; // frames until GAME OVER text appears (3 seconds at 60fps)
+        this.gameOverTextTimer = 0;
+        this.showGameOverText = false;
 
         // GM grade tracking
         this.gmConditions = {
@@ -952,12 +1107,16 @@ class GameScene extends Phaser.Scene {
 
         // Pause time tracking
         this.pauseStartTime = null;
+        this.totalPausedTime = 0;
 
         // Mode and best score tracking
         this.selectedMode = null;
 
         // Game over timer
         this.gameOverTimer = 0;
+        
+        // Soft drop ground sound tracking
+        this.wasGroundedDuringSoftDrop = false;
     }
 
     init(data) {
@@ -965,14 +1124,8 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // Load assets for both rotation systems
-        this.load.image('mino_srs', 'img/mino.png');
-        this.load.image('mino_ars', 'img/minoARS.png');
-        
-        // Load BGM files
-        this.load.audio('stage1', '/bgm/stage1.mp3');
-        this.load.audio('stage2', '/bgm/stage2.mp3');
-        this.load.audio('credits', '/bgm/credits.mp3');
+        // Assets are loaded in AssetLoaderScene
+        // This preload is intentionally empty to avoid duplicate loading
     }
     
     calculateLayout() {
@@ -980,22 +1133,26 @@ class GameScene extends Phaser.Scene {
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         
-        // Calculate optimal cell size to fit playfield nicely on screen
-        const maxCellWidth = Math.floor((windowWidth * 0.6) / this.board.cols); // Use 60% of width for playfield
-        const maxCellHeight = Math.floor((windowHeight * 0.8) / this.visibleRows); // Use 80% of height for playfield
-        this.cellSize = Math.min(maxCellWidth, maxCellHeight, 30); // Cap at 30 for reasonable size
+        // Calculate optimal cell size to utilize more of the screen space
+        // Use more aggressive sizing to fill the screen better
+        const maxCellWidth = Math.floor((windowWidth * 0.8) / this.board.cols); // Use 80% of width for playfield
+        const maxCellHeight = Math.floor((windowHeight * 0.9) / this.visibleRows); // Use 90% of height for playfield
+        this.cellSize = Math.min(maxCellWidth, maxCellHeight, 40); // Cap at 40 for better utilization
+        
+        // Ensure minimum cell size for readability
+        this.cellSize = Math.max(this.cellSize, 20);
         
         // Calculate playfield dimensions and store as instance properties
         this.playfieldWidth = this.cellSize * this.board.cols;
         this.playfieldHeight = this.cellSize * this.visibleRows;
         
-        // Center the border
+        // Center the border with better screen utilization
         this.borderOffsetX = Math.floor((windowWidth - this.playfieldWidth) / 2);
-        this.borderOffsetY = Math.floor((windowHeight - this.playfieldHeight) / 2) - 45; // Moved down 5px (from -50 to -45)
+        this.borderOffsetY = Math.floor((windowHeight - this.playfieldHeight) / 2) - 30; // Adjusted for better centering
         
         // Move the matrix to the right within the border
-        this.matrixOffsetX = this.borderOffsetX + 15; // Shift matrix 15px to the right (5px less than before)
-        this.matrixOffsetY = this.borderOffsetY + 15; // Shift matrix 15px lower (10px + 5px more)
+        this.matrixOffsetX = this.borderOffsetX + 19; // Slightly smaller offset for better space usage
+        this.matrixOffsetY = this.borderOffsetY + 20;
         
         // Store window dimensions for UI positioning
         this.windowWidth = windowWidth;
@@ -1018,42 +1175,72 @@ class GameScene extends Phaser.Scene {
         this.gradeDisplay = this.add.graphics();
         this.gradeDisplay.lineStyle(2, 0xffffff);
         this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
-        this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', { fontSize: `${xlargeFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(0.5);
+        this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', { 
+            fontSize: `${xlargeFontSize}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold',
+            align: 'center'
+        }).setOrigin(0.5);
         // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
-        const nextGradeWidth = gradeWidth * 1.5;
+        const nextGradeWidth = gradeWidth * 1.75;
         this.nextGradeText = this.add.text(gradeX + gradeWidth, gradeY + 90, 'Next: 400 pts', {
             fontSize: `${uiFontSize}px`,
             fill: '#ccc',
             fontFamily: 'Courier New',
             wordWrap: { width: nextGradeWidth },
-            align: 'right'
+            align: 'right',
+            fontStyle: 'normal'
         }).setOrigin(1, 0);
 
         // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
         const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
         const levelRowHeight = 20; // Decreased spacing
         const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
-        this.levelLabel = this.add.text(uiX + 120, levelBottomY - 3.5 * levelRowHeight, 'LEVEL', { fontSize: `${uiFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        this.levelLabel = this.add.text(uiX + 135, levelBottomY - 3.5 * levelRowHeight - 43, 'LEVEL', { 
+            fontSize: `${uiFontSize}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(1, 0);
         // Level bar and texts will be added in draw
 
         // Score display - next to matrix on left, right-aligned, moved 30px up and 20px right
         const scoreRowHeight = 25;
-        this.scoreLabel = this.add.text(uiX + 125, levelBottomY - 78, 'SCORE', { fontSize: `${uiFontSize - 4}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
-        this.scoreText = this.add.text(uiX + 145, levelBottomY, '0', { fontSize: `${xlargeFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+        this.scoreLabel = this.add.text(uiX + 135, levelBottomY, 'SCORE', { 
+            fontSize: `${uiFontSize - 4}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(1, 0);
+        this.scoreText = this.add.text(uiX + 140, levelBottomY + 15, '0', { 
+            fontSize: `${xlargeFontSize}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold',
+            align: 'right'
+        }).setOrigin(1, 0);
 
         // Time - centered below border, larger font, bold
-        this.timeText = this.add.text(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50, '0:00.00', {
-            fontSize: `${timeFontSize}px`,
-            fill: '#fff',
-            fontFamily: 'Courier New',
-            fontWeight: 'bold'
-        }).setOrigin(0.5, 0);
+        if (!this.timeText) {
+            this.timeText = this.add.text(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50, '0:00.00', {
+                fontSize: `${timeFontSize}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'center'
+            }).setOrigin(0.5, 0);
+        } else {
+            // Update position and style if text already exists
+            this.timeText.setPosition(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50);
+            this.timeText.setStyle({ fontSize: `${timeFontSize}px` });
+        }
 
         // Playfield border - adjusted to fit exactly 10x20 with smaller width and height
         this.playfieldBorder = this.add.graphics();
         this.playfieldBorder.lineStyle(3, 0xffffff);
-        this.playfieldBorder.strokeRect(this.borderOffsetX - 3, this.borderOffsetY - 3,
-            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px
+        this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
+            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
     }
 
     create() {
@@ -1089,9 +1276,13 @@ class GameScene extends Phaser.Scene {
         ]);
         this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
-        // Initialize time tracking
-        this.startTime = this.time.now;
+        // Initialize time tracking using Date.now() for reliability
+        this.startTime = Date.now();
+        this.gameStartTime = this.startTime;
         this.currentTime = 0;
+        this.totalPausedTime = 0;
+        this.isPaused = false;
+        this.pauseStartTime = null;
 
         // UI - positioned relative to screen size
         this.setupUI();
@@ -1112,34 +1303,29 @@ class GameScene extends Phaser.Scene {
         }
     }
     
+    updateTimer() {
+        if (this.startTime && !this.isPaused) {
+            this.currentTime = (Date.now() - this.startTime) / 1000;
+        }
+    }
+    
     updateBGM() {
-
-
         if (!this.bgmEnabled) return;
-        // Pause BGM after level 490
+        
         if (this.level >= 491 && this.level < 500) {
             if (this.currentBGM) {
-                console.log('Stopping BGM at level', this.level);
                 this.currentBGM.stop();
                 this.currentBGM = null;
             }
-        }
-        // Switch to stage 2 BGM at level 500
-        else if (this.level >= 500) {
+        } else if (this.level >= 500) {
             if (this.currentBGM !== this.stage2BGM) {
-                if (this.currentBGM) {
-                    this.currentBGM.stop();
-                }
+                if (this.currentBGM) this.currentBGM.stop();
                 this.stage2BGM.play();
                 this.currentBGM = this.stage2BGM;
             }
-        }
-        // Use stage 1 BGM for levels 0-490
-        else {
+        } else {
             if (this.currentBGM !== this.stage1BGM) {
-                if (this.currentBGM) {
-                    this.currentBGM.stop();
-                }
+                if (this.currentBGM) this.currentBGM.stop();
                 this.stage1BGM.play();
                 this.currentBGM = this.stage1BGM;
             }
@@ -1187,6 +1373,7 @@ class GameScene extends Phaser.Scene {
                     this.resetLockDelay();
                 } else if (this.currentPiece) {
                     this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+                    // Don't play ground sound on rotation failure
                 }
             } else if (!kKeyDown && this.kKeyPressed) {
                 this.kKeyPressed = false;
@@ -1289,6 +1476,7 @@ class GameScene extends Phaser.Scene {
                     this.resetLockDelay();
                 } else if (this.currentPiece) {
                     this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+                    // Don't play ground sound on rotation failure
                 }
             } else if (!kKeyDown && this.kKeyPressed) {
                 this.kKeyPressed = false;
@@ -1345,6 +1533,8 @@ class GameScene extends Phaser.Scene {
                         const moved = this.currentPiece.move(this.board, -1, 0);
                         if (moved) {
                             this.resetLockDelay();
+                        } else {
+                            // Piece tried to move left during DAS - no ground sound for movement failures
                         }
                         // Don't set grounded state here - let gravity/soft drop logic handle it
                     }
@@ -1357,6 +1547,8 @@ class GameScene extends Phaser.Scene {
                         const moved = this.currentPiece.move(this.board, -1, 0);
                         if (moved) {
                             this.resetLockDelay();
+                        } else {
+                            // Piece tried to move left during ARR - no ground sound for movement failures
                         }
                         // Don't set grounded state here - let gravity/soft drop logic handle it
                     }
@@ -1376,6 +1568,8 @@ class GameScene extends Phaser.Scene {
                         const moved = this.currentPiece.move(this.board, 1, 0);
                         if (moved) {
                             this.resetLockDelay();
+                        } else {
+                            // Piece tried to move right during DAS - no ground sound for movement failures
                         }
                         // Don't set grounded state here - let gravity/soft drop logic handle it
                     }
@@ -1388,6 +1582,8 @@ class GameScene extends Phaser.Scene {
                         const moved = this.currentPiece.move(this.board, 1, 0);
                         if (moved) {
                             this.resetLockDelay();
+                        } else {
+                            // Piece tried to move right during ARR - no ground sound for movement failures
                         }
                         // Don't set grounded state here - let gravity/soft drop logic handle it
                     }
@@ -1444,10 +1640,53 @@ class GameScene extends Phaser.Scene {
             this.irsActivated = false;
         }
         
+        // Update mino fading system (runs even when game is over)
+        if (this.minoFadeActive) {
+            this.minoFadeTimer++;
+            this.gameOverTextTimer++;
+            
+            // Show GAME OVER text after 3 seconds
+            if (this.gameOverTextTimer >= this.gameOverTextDelay) {
+                this.showGameOverText = true;
+            }
+            
+            if (this.minoFadeTimer >= this.minoFadeDelay) {
+                this.minoFadeTimer = 0;
+                this.minoFadeProgress++;
+
+                // Mark all minos in the next row as faded (if we have that row)
+                if (this.minoFadeProgress <= this.placedMinoRows.length) {
+                    const rowToFade = this.placedMinoRows[this.minoFadeProgress - 1];
+                    for (let mino of this.placedMinos) {
+                        if (mino.y === rowToFade) {
+                            mino.faded = true;
+                        }
+                    }
+                }
+
+                // Check if all rows are faded
+                if (this.minoFadeProgress >= this.placedMinoRows.length) {
+                    this.minoFadeActive = false;
+                }
+            }
+        }
+
         // Pause/unpause with ESC - handle BEFORE early return
         if (Phaser.Input.Keyboard.JustDown(this.keys.pause) && !this.gameOver) {
             this.togglePause();
         }
+        
+        // Update game over timer (runs even when game is over)
+        if (this.gameOver) {
+            this.gameOverTimer++;
+            if (this.gameOverTimer >= 600) { // 10 seconds at 60fps
+                this.saveBestScore();
+                this.scene.start('MenuScene');
+            }
+        }
+
+        // Update time tracking using Date.now() for reliability
+        this.updateTimer();
         
         // Skip ALL game logic if paused or game over
         if (this.isPaused || this.gameOver) {
@@ -1463,15 +1702,27 @@ class GameScene extends Phaser.Scene {
                 if (this.currentPiece.move(this.board, 0, 1)) {
                     this.resetLockDelay();
                     this.softDropRows += 1; // Track soft drop rows for scoring
+                    this.wasGroundedDuringSoftDrop = false; // Reset flag when piece can move
                 } else if (!this.isGrounded) {
-                    // Only start lock delay if piece wasn't already grounded
+                    // Piece just became grounded - start lock delay and play ground sound once
                     this.isGrounded = true;
                     this.lockDelay++;
                     if (this.lockDelay >= 30) {
                         this.lockPiece();
                     }
+                    // Play ground sound only once when piece first touches ground during soft drop
+                    if (!this.wasGroundedDuringSoftDrop && this.currentPiece.isTouchingGround(this.board)) {
+                        this.currentPiece.playGroundSound(this);
+                        this.wasGroundedDuringSoftDrop = true;
+                    }
+                } else {
+                    // Piece is already grounded - don't play ground sound again during soft drop
+                    // This prevents the annoying repetitive ground sound when holding soft drop
                 }
                 // If piece was already grounded, don't increment lock delay
+            } else {
+                // Reset flag when soft drop key is not held
+                this.wasGroundedDuringSoftDrop = false;
             }
 
             // Single press actions (keep JustDown for these)
@@ -1484,6 +1735,11 @@ class GameScene extends Phaser.Scene {
                     this.lockDelay++;
                     if (this.lockDelay >= 30) {
                         this.lockPiece();
+                    }
+                } else {
+                    // Piece is already grounded but tried to move down - play ground sound only if touching ground
+                    if (this.currentPiece.isTouchingGround(this.board)) {
+                        this.currentPiece.playGroundSound(this);
                     }
                 }
                 // If piece was already grounded, don't increment lock delay
@@ -1529,6 +1785,8 @@ class GameScene extends Phaser.Scene {
                             // Piece just became grounded - start lock delay immediately
                             this.isGrounded = true;
                             this.lockDelay = 1; // Start counting from 1 (this frame counts)
+                            // Play ground sound
+                            this.currentPiece.playGroundSound(this);
                         }
                         break;
                     }
@@ -1554,6 +1812,8 @@ class GameScene extends Phaser.Scene {
                             // Piece just became grounded - start lock delay immediately
                             this.isGrounded = true;
                             this.lockDelay = 1; // Start counting from 1 (this frame counts)
+                            // Play ground sound
+                            this.currentPiece.playGroundSound(this);
                         }
                     }
                     this.gravityTimer = 0; // Reset timer for next drop
@@ -1577,6 +1837,10 @@ class GameScene extends Phaser.Scene {
                     // Line clear ARE completed, now actually clear the lines
                     this.clearStoredLines();
                     
+                    // Play fall sound
+                    const fallSound = this.sound.add('fall', { volume: 0.7 });
+                    fallSound.play();
+                    
                     // Start normal ARE phase (30 frames)
                     this.areDelay = 30;
                     this.areTimer = 0;
@@ -1590,10 +1854,7 @@ class GameScene extends Phaser.Scene {
             }
         }
         
-        // Update time tracking
-        if (this.startTime) {
-            this.currentTime = (this.time.now - this.startTime) / 1000; // Convert to seconds
-        }
+
 
         // Update piece active time for scoring
         if (this.currentPiece && this.pieceSpawnTime > 0) {
@@ -1622,35 +1883,12 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Update mino fading system
-        if (this.minoFadeActive) {
-            this.minoFadeTimer++;
-            if (this.minoFadeTimer >= this.minoFadeDelay) {
-                this.minoFadeTimer = 0;
-                this.minoFadeProgress++;
 
-                // Mark next mino as faded
-                if (this.minoFadeProgress <= this.placedMinos.length) {
-                    this.placedMinos[this.minoFadeProgress - 1].faded = true;
-                }
-
-                // Check if all minos are faded
-                if (this.minoFadeProgress >= this.placedMinos.length) {
-                    this.minoFadeActive = false;
-                }
-            }
-        }
-
-        // Update game over timer
-        if (this.gameOver) {
-            this.gameOverTimer++;
-            if (this.gameOverTimer >= 600) { // 10 seconds at 60fps
-                this.saveBestScore();
-                this.scene.start('MenuScene');
-            }
-        }
 
         // Draw
+        
+
+        
         this.draw();
     }
 
@@ -1669,6 +1907,29 @@ class GameScene extends Phaser.Scene {
         }
 
         this.currentPiece = new Piece(type, this.rotationSystem, initialRotation);
+        
+        // Play IRS sound if piece is prerotated
+        if (initialRotation !== 0) {
+            const irsSound = this.sound.add('IRS', { volume: 0.5 });
+            irsSound.play();
+        }
+        
+        // Play next mino sound for the piece that will spawn NEXT (not current piece)
+        if (this.nextPieces.length > 0) {
+            const nextPieceType = this.nextPieces[0];
+            const nextPieceSoundKey = `sound_${nextPieceType.toLowerCase()}`;
+            if (this.sound && this.sound.get(nextPieceSoundKey)) {
+                const pieceSound = this.sound.add(nextPieceSoundKey, { volume: 0.4 });
+                pieceSound.play();
+            } else if (this.sound) {
+                try {
+                    const pieceSound = this.sound.add(nextPieceSoundKey, { volume: 0.4 });
+                    pieceSound.play();
+                } catch (error) {
+                    // Sound file not found, continue silently
+                }
+            }
+        }
 
         if (!this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y)) {
             // If prerotated piece can't spawn, try shifting up to give player a chance
@@ -1753,7 +2014,10 @@ class GameScene extends Phaser.Scene {
 
         // Update level on piece spawn
         if (this.isFirstSpawn) {
-            this.level = 0;
+            // Only set level to 0 if no starting level was specified via URL
+            if (!this.startingLevel || this.startingLevel === 0) {
+                this.level = 0;
+            }
             this.isFirstSpawn = false;
         } else {
             this.updateLevel('piece');
@@ -1827,6 +2091,13 @@ class GameScene extends Phaser.Scene {
     }
 
     lockPiece() {
+        // Play lock sound
+        const lockSound = this.sound.add('lock', { volume: 0.6 });
+        lockSound.play();
+        
+        // Start lock flash effect
+        this.startLockFlash();
+        
         // Track placed minos before placing the piece
         for (let r = 0; r < this.currentPiece.shape.length; r++) {
             for (let c = 0; c < this.currentPiece.shape[r].length; c++) {
@@ -1868,6 +2139,10 @@ class GameScene extends Phaser.Scene {
             this.areActive = true;
             this.lineClearPhase = true;
             this.isClearingLines = true;
+            
+            // Play clear sound
+            const clearSound = this.sound.add('clear', { volume: 0.7 });
+            clearSound.play();
             
         } else {
             // Start normal ARE (30 frames)
@@ -1958,6 +2233,7 @@ class GameScene extends Phaser.Scene {
     resetLockDelay() {
         this.lockDelay = 0;
         this.isGrounded = false;
+        this.wasGroundedDuringSoftDrop = false; // Reset soft drop ground sound tracking
     }
 
     updateScore(lines, pieceType = null, isTSpin = false) {
@@ -2064,6 +2340,10 @@ class GameScene extends Phaser.Scene {
     
     handleSectionTransition(section) {
         this.sectionTransition = true;
+
+        // Play section change sound
+        const sectionChangeSound = this.sound.add('sectionchange', { volume: 0.6 });
+        sectionChangeSound.play();
 
         // Section completion messages removed - uncomment if needed for other modes
         /*
@@ -2236,6 +2516,10 @@ class GameScene extends Phaser.Scene {
     }
 
     animateGradeUpgrade() {
+        // Play grade up sound
+        const gradeUpSound = this.sound.add('gradeup', { volume: 0.6 });
+        gradeUpSound.play();
+        
         // Simple flash animation
         this.gradeText.setTint(0xffff00);
         this.time.delayedCall(200, () => {
@@ -2271,7 +2555,7 @@ class GameScene extends Phaser.Scene {
         this.gravityTimer = 0.0;
         this.lockDelay = 0;
         this.isGrounded = false;
-        this.level = 0;
+        this.level = this.startingLevel || 0; // Use preserved starting level or default to 0
         this.piecesPlaced = 0; // Reset piece counter
         this.score = 0;
         this.grade = '9';
@@ -2307,13 +2591,22 @@ class GameScene extends Phaser.Scene {
         this.lKeyPressed = false;
         this.xKeyPressed = false;
         
+        // Reset mino fading system
+        this.placedMinos = [];
+        this.placedMinoRows = [];
+        this.minoFadeActive = false;
+        this.showGameOverText = false;
+        
         // Validate piece history to ensure it's correct after reset
         this.validatePieceHistory();
 
-        // Reset time tracking
-        this.startTime = this.time.now;
+        // Reset time tracking using Date.now()
+        this.startTime = Date.now();
+        this.gameStartTime = this.startTime;
         this.currentTime = 0;
         this.pauseStartTime = null;
+        this.totalPausedTime = 0;
+
 
         // Clear game elements
         this.gameGroup.clear(true, true);
@@ -2325,10 +2618,10 @@ class GameScene extends Phaser.Scene {
         }
 
         // Reset UI
-        this.scoreText.setText('Score: 0');
+        this.scoreText.setText('0');
         this.levelNumber.setText('0');
         this.gradeText.setText('9');
-        this.timeText.setText('Time: 0:00');
+        this.timeText.setText('0:00.00');
 
         // Restart game
         this.generateNextPieces();
@@ -2341,15 +2634,16 @@ class GameScene extends Phaser.Scene {
     togglePause() {
         this.isPaused = !this.isPaused;
 
-        // Handle time tracking during pause
+        // Handle time tracking during pause using Date.now()
         if (this.isPaused) {
             // Pausing: record the pause start time
-            this.pauseStartTime = this.time.now;
+            this.pauseStartTime = Date.now();
         } else {
-            // Resuming: adjust startTime to account for paused duration
+            // Resuming: adjust startTime to exclude paused time
             if (this.pauseStartTime && this.startTime) {
-                const pausedDuration = this.time.now - this.pauseStartTime;
-                this.startTime += pausedDuration;
+                const now = Date.now();
+                const pausedDuration = now - this.pauseStartTime;
+                this.startTime += pausedDuration; // Push startTime forward by paused duration
                 this.pauseStartTime = null;
             }
         }
@@ -2369,6 +2663,12 @@ class GameScene extends Phaser.Scene {
         this.creditsActive = true;
         this.creditsTimer = 0;
         
+        // Play completion sound if GM grade achieved
+        if (this.grade === 'GM') {
+            const completeSound = this.sound.add('complete', { volume: 0.8 });
+            completeSound.play();
+        }
+        
         // Load credits BGM if available
         this.creditsBGM = this.sound.add('credits', { loop: true, volume: 0.3 });
         if (this.creditsBGM && this.bgmEnabled) {
@@ -2385,12 +2685,59 @@ class GameScene extends Phaser.Scene {
     trackPlacedMino(x, y, color) {
         // Add mino to tracking list for fading
         this.placedMinos.push({ x, y, color, faded: false });
+        
+        // Track rows that contain minos for row-by-row fading
+        if (!this.placedMinoRows.includes(y)) {
+            this.placedMinoRows.push(y);
+        }
     }
     
     startMinoFading() {
         this.minoFadeActive = true;
         this.minoFadeProgress = 0;
         this.minoFadeTimer = 0;
+        this.gameOverTextTimer = 0;
+        this.showGameOverText = false;
+        
+        // Stop BGM immediately when game over and fading starts
+        if (this.currentBGM) {
+            this.currentBGM.stop();
+            this.currentBGM = null;
+        }
+        
+        // Sort rows from bottom to top for proper fading order
+        this.placedMinoRows.sort((a, b) => b - a); // Descending order
+        
+        // Calculate fade delay to complete all rows in 3 seconds
+        if (this.placedMinoRows.length > 0) {
+            this.minoFadeDelay = Math.floor(180 / this.placedMinoRows.length); // 180 frames = 3 seconds
+        } else {
+            this.minoFadeDelay = 180; // fallback if no minos
+        }
+    }
+    
+    startLockFlash() {
+        // Store the locked piece's color and position for the flash effect
+        const flashColor = this.currentPiece ? this.currentPiece.color : 0xFFFFFF;
+        
+        // Create a temporary flash overlay
+        const flashOverlay = this.add.graphics();
+        flashOverlay.fillStyle(0xFFFFFF, 0.8);
+        flashOverlay.fillRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
+            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5);
+        
+        // Add flash overlay to game group
+        this.gameGroup.add(flashOverlay);
+        
+        // Fade out the flash over 15 frames (0.25 seconds)
+        this.tweens.add({
+            targets: flashOverlay,
+            alpha: 0,
+            duration: 250, // 0.25 seconds
+            onComplete: () => {
+                flashOverlay.destroy();
+            }
+        });
     }
     
     saveBestScore() {
@@ -2479,7 +2826,8 @@ class GameScene extends Phaser.Scene {
                     fill: fillColor,
                     stroke: '#000000',
                     strokeThickness: 2,
-                    fontFamily: 'Courier New'
+                    fontFamily: 'Courier New',
+                    fontStyle: fontSize === 48 ? 'bold' : 'normal'
                 }).setOrigin(0.5);
                 this.gameGroup.add(text);
             }
@@ -2502,7 +2850,13 @@ class GameScene extends Phaser.Scene {
         const currentY = levelBottomY - 3 * levelRowHeight;
         const currentLevelText = this.level.toString();
         if (!this.currentLevelText) {
-            this.currentLevelText = this.add.text(rightX, currentY, currentLevelText, { fontSize: `${levelFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+            this.currentLevelText = this.add.text(rightX + 17, currentY - 30, currentLevelText, { 
+                fontSize: `${levelFontSize}px`, 
+                fill: '#fff', 
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'right'
+            }).setOrigin(1, 0);
         } else {
             this.currentLevelText.setText(currentLevelText);
         }
@@ -2521,16 +2875,22 @@ class GameScene extends Phaser.Scene {
         this.levelBar.clear();
         // White background
         this.levelBar.fillStyle(0xffffff);
-        this.levelBar.fillRect(barX, barY, barWidth, barHeight);
+        this.levelBar.fillRect(barX + 14, barY - 15, barWidth, barHeight);
         // Red fill from left
         this.levelBar.fillStyle(0xff0000);
-        this.levelBar.fillRect(barX, barY, barWidth * gravityRatio, barHeight);
+        this.levelBar.fillRect(barX + 14, barY - 15, barWidth * gravityRatio, barHeight);
 
         // Cap level - bottom row
         const capY = levelBottomY - levelRowHeight;
         const capText = sectionCap.toString();
         if (!this.capLevelText) {
-            this.capLevelText = this.add.text(rightX, capY, capText, { fontSize: `${levelFontSize}px`, fill: '#fff', fontFamily: 'Courier New' }).setOrigin(1, 0);
+            this.capLevelText = this.add.text(rightX + 17, capY - 25, capText, { 
+                fontSize: `${levelFontSize}px`, 
+                fill: '#fff', 
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'right'
+            }).setOrigin(1, 0);
         } else {
             this.capLevelText.setText(capText);
         }
@@ -2542,22 +2902,10 @@ class GameScene extends Phaser.Scene {
         // Border adjusted to fit exactly 10x20 with smaller width and height
         this.playfieldBorder = this.add.graphics();
         this.playfieldBorder.lineStyle(3, 0xffffff);
-        this.playfieldBorder.strokeRect(this.borderOffsetX - 3, this.borderOffsetY - 3,
-            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px
+        this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
+            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
 
-        // Draw debug matrix if enabled - fills all cells for border testing
-        if (this.debugMode) {
-            for (let r = 2; r < 2 + this.visibleRows; r++) {
-                for (let c = 0; c < this.board.cols; c++) {
-                    const textureKey = this.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs';
-                    const sprite = this.add.sprite(this.matrixOffsetX + c * this.cellSize, this.matrixOffsetY + (r - 2) * this.cellSize, textureKey);
-                    sprite.setDisplaySize(this.cellSize, this.cellSize);
-                    sprite.setTint(0x444444); // Gray color for debug
-                    sprite.setAlpha(0.7);
-                    this.gameGroup.add(sprite);
-                }
-            }
-        }
+
 
         // Draw game elements using matrix offset
         this.board.draw(this, this.matrixOffsetX, this.matrixOffsetY, this.cellSize);
@@ -2617,7 +2965,15 @@ class GameScene extends Phaser.Scene {
         const minutes = Math.floor(this.currentTime / 60);
         const seconds = Math.floor(this.currentTime % 60);
         const centiseconds = Math.floor((this.currentTime % 1) * 100);
-        this.timeText.setText(`${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`);
+        const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+        
+
+        
+        if (this.timeText) {
+            this.timeText.setText(timeString);
+        } else {
+
+        }
 
 
         // Draw NEXT label - positioned to the right of border
@@ -2627,7 +2983,9 @@ class GameScene extends Phaser.Scene {
         
         const nextLabel = this.add.text(nextX, nextY, 'NEXT', {
             fontSize: `${nextFontSize}px`,
-            fill: '#fff'
+            fill: '#fff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
         });
         this.gameGroup.add(nextLabel);
 
@@ -2688,21 +3046,24 @@ class GameScene extends Phaser.Scene {
                 fontSize: `${pauseFontSize}px`,
                 fill: '#ffff00',
                 stroke: '#000',
-                strokeThickness: 2
+                strokeThickness: 2,
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
             }).setOrigin(0.5);
             const resumeFontSize = Math.max(16, Math.min(28, Math.floor(this.cellSize * 0.9)));
             const resumeText = this.add.text(this.windowWidth / 2, this.windowHeight / 2 + 50, 'Press ESC to resume', {
                 fontSize: `${resumeFontSize}px`,
-                fill: '#fff'
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'normal'
             }).setOrigin(0.5);
             this.gameGroup.add(overlay);
             this.gameGroup.add(pauseText);
             this.gameGroup.add(resumeText);
         }
 
-        // Draw game over overlay - centered on screen
-        if (this.gameOver) {
-            const overlay = this.add.rectangle(this.windowWidth / 2, this.windowHeight / 2, this.windowWidth, this.windowHeight, 0x000000, 0.8);
+        // Draw game over text - centered on screen (only after 3 seconds)
+        if (this.showGameOverText) {
             const gameOverFontSize = Math.max(48, Math.min(72, Math.floor(this.cellSize * 2.4)));
 
             const centerY = this.windowHeight / 2;
@@ -2713,9 +3074,9 @@ class GameScene extends Phaser.Scene {
                 fill: '#ff0000',
                 stroke: '#000',
                 strokeThickness: 2,
-                fontFamily: 'Courier New'
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
             }).setOrigin(0.5);
-            this.gameGroup.add(overlay);
             this.gameGroup.add(gameOverText);
         }
 
@@ -2733,9 +3094,17 @@ const config = {
     width: window.innerWidth,
     height: window.innerHeight,
     parent: 'game-container',
-    scene: [MenuScene, SettingsScene, GameScene],
+    scene: [MenuScene, SettingsScene, AssetLoaderScene, LoadingScreenScene, GameScene],
     backgroundColor: '#000000',
     fps: 60,
+    render: {
+        antialias: true,
+        pixelArt: false,
+        roundPixels: false,
+        powerPreference: 'high-performance',
+        desynchronized: false,
+        clearBeforeRender: true
+    },
     scale: {
         mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH
