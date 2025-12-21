@@ -2867,7 +2867,7 @@ class GameScene extends Phaser.Scene {
         const barHeight = 4;
         const barX = rightX - barWidth;
         const internalGravity = this.getTGMGravitySpeed(this.level);
-        const gravityRatio = Math.min(internalGravity / 5120, 1); // 0 to 1, 5120 is 20G
+        const gravityRatio = Math.min(internalGravity / 2560, 1); // 0 to 1, 5120 is 20G
 
         if (!this.levelBar) {
             this.levelBar = this.add.graphics();
