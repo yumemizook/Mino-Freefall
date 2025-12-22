@@ -987,8 +987,8 @@ class GameScene extends Phaser.Scene {
         this.calculateLayout();
 
         // DAS (Delayed Auto Shift) variables
-        this.dasDelay = 16; // frames until auto-repeat starts
-        this.arrDelay = 1; // frames between repeats
+        this.dasDelay = 16/60; // seconds until auto-repeat starts
+        this.arrDelay = 1/60; // seconds between repeats
         this.leftKeyPressed = false;
         this.rightKeyPressed = false;
         this.leftTimer = 0;
@@ -1003,7 +1003,7 @@ class GameScene extends Phaser.Scene {
         this.xKeyPressed = false;
 
         // ARE (Appearance Delay)
-        this.areDelay = 30; // frames until next piece appears
+        this.areDelay = 30/60; // seconds until next piece appears
         this.areTimer = 0;
         this.areActive = false;
 
@@ -1041,6 +1041,13 @@ class GameScene extends Phaser.Scene {
         this.bestTime = null;
         this.gradeHistory = [];
         this.sectionTimes = {}; // Track time for each 100-level section
+
+        // Piece per second tracking
+        this.totalPiecesPlaced = 0; // Total pieces that have entered the playfield
+        this.activeTime = 0; // Time spent not in ARE (piece movement time)
+        this.areTime = 0; // Time spent in ARE phases
+        this.conventionalPPS = 0; // PPS including ARE time
+        this.rawPPS = 0; // PPS excluding ARE time
 
         // Sections and level caps
         this.sectionCap = 99; // Start at first section cap
@@ -1080,11 +1087,11 @@ class GameScene extends Phaser.Scene {
         // Mino fading system
         this.minoFadeActive = false;
         this.minoFadeProgress = 0;
-        this.minoFadeDelay = 30; // frames between each row fade (will be calculated dynamically)
+        this.minoFadeDelay = 30/60; // seconds between each row fade (will be calculated dynamically)
         this.minoFadeTimer = 0;
         this.placedMinos = []; // Track all placed minos for fading
         this.placedMinoRows = []; // Track rows containing minos for row-by-row fading
-        this.gameOverTextDelay = 180; // frames until GAME OVER text appears (3 seconds at 60fps)
+        this.gameOverTextDelay = 3; // seconds until GAME OVER text appears
         this.gameOverTextTimer = 0;
         this.showGameOverText = false;
 
@@ -1104,6 +1111,7 @@ class GameScene extends Phaser.Scene {
 
         // FPS limiter
         this.lastUpdateTime = 0;
+        this.deltaTime = 1/60; // Default delta time
 
         // Pause time tracking
         this.pauseStartTime = null;
@@ -1216,6 +1224,34 @@ class GameScene extends Phaser.Scene {
         this.scoreText = this.add.text(uiX + 140, levelBottomY + 15, '0', { 
             fontSize: `${xlargeFontSize}px`, 
             fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold',
+            align: 'right'
+        }).setOrigin(1, 0);
+
+        // Piece per second displays
+        this.ppsLabel = this.add.text(uiX + 140, levelBottomY + 55, 'PPS', { 
+            fontSize: `${uiFontSize - 4}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(1, 0);
+        this.ppsText = this.add.text(uiX + 140, levelBottomY + 70, '0.00', { 
+            fontSize: `${largeFontSize}px`, 
+            fill: '#fff', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold',
+            align: 'right'
+        }).setOrigin(1, 0);
+        this.rawPpsLabel = this.add.text(uiX + 140, levelBottomY + 95, 'RAW PPS', { 
+            fontSize: `${uiFontSize - 6}px`, 
+            fill: '#ccc', 
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(1, 0);
+        this.rawPpsText = this.add.text(uiX + 140, levelBottomY + 110, '0.00', { 
+            fontSize: `${largeFontSize - 4}px`, 
+            fill: '#ccc', 
             fontFamily: 'Courier New',
             fontStyle: 'bold',
             align: 'right'
@@ -1340,6 +1376,10 @@ class GameScene extends Phaser.Scene {
             if (delta < 1000 / 60) {
                 return; // Skip this update
             }
+            // Store delta time in seconds for timing calculations
+            this.deltaTime = delta / 1000;
+        } else {
+            this.deltaTime = 1/60; // Default to 60fps if first frame
         }
         this.lastUpdateTime = now;
 
@@ -1523,7 +1563,7 @@ class GameScene extends Phaser.Scene {
         
         // Handle DAS for left key (cursors.left or z key)
         if ((this.leftKeyPressed && (leftDown || zKeyDown))) {
-            this.leftTimer++;
+            this.leftTimer += this.deltaTime;
             if (!this.leftInRepeat) {
                 // Wait for DAS delay
                 if (this.leftTimer >= this.dasDelay) {
@@ -1558,7 +1598,7 @@ class GameScene extends Phaser.Scene {
         
         // Handle DAS for right key (cursors.right or c key)
         if ((this.rightKeyPressed && (rightDown || cKeyDown))) {
-            this.rightTimer++;
+            this.rightTimer += this.deltaTime;
             if (!this.rightInRepeat) {
                 // Wait for DAS delay
                 if (this.rightTimer >= this.dasDelay) {
@@ -1642,8 +1682,8 @@ class GameScene extends Phaser.Scene {
         
         // Update mino fading system (runs even when game is over)
         if (this.minoFadeActive) {
-            this.minoFadeTimer++;
-            this.gameOverTextTimer++;
+            this.minoFadeTimer += this.deltaTime;
+            this.gameOverTextTimer += this.deltaTime;
             
             // Show GAME OVER text after 3 seconds
             if (this.gameOverTextTimer >= this.gameOverTextDelay) {
@@ -1678,8 +1718,8 @@ class GameScene extends Phaser.Scene {
         
         // Update game over timer (runs even when game is over)
         if (this.gameOver) {
-            this.gameOverTimer++;
-            if (this.gameOverTimer >= 600) { // 10 seconds at 60fps
+            this.gameOverTimer += this.deltaTime;
+            if (this.gameOverTimer >= 10) { // 10 seconds
                 this.saveBestScore();
                 this.scene.start('MenuScene');
             }
@@ -1687,6 +1727,13 @@ class GameScene extends Phaser.Scene {
 
         // Update time tracking using Date.now() for reliability
         this.updateTimer();
+        
+        // Track active time and ARE time for PPS calculations
+        if (!this.areActive) {
+            this.activeTime += this.deltaTime;
+        } else {
+            this.areTime += this.deltaTime;
+        }
         
         // Skip ALL game logic if paused or game over
         if (this.isPaused || this.gameOver) {
@@ -1706,8 +1753,8 @@ class GameScene extends Phaser.Scene {
                 } else if (!this.isGrounded) {
                     // Piece just became grounded - start lock delay and play ground sound once
                     this.isGrounded = true;
-                    this.lockDelay++;
-                    if (this.lockDelay >= 30) {
+                    this.lockDelay += this.deltaTime;
+                    if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
                         this.lockPiece();
                     }
                     // Play ground sound only once when piece first touches ground during soft drop
@@ -1732,8 +1779,8 @@ class GameScene extends Phaser.Scene {
                 } else if (!this.isGrounded) {
                     // Only start lock delay if piece wasn't already grounded
                     this.isGrounded = true;
-                    this.lockDelay++;
-                    if (this.lockDelay >= 30) {
+                    this.lockDelay += this.deltaTime;
+                    if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
                         this.lockPiece();
                     }
                 } else {
@@ -1784,7 +1831,7 @@ class GameScene extends Phaser.Scene {
                         if (!this.isGrounded) {
                             // Piece just became grounded - start lock delay immediately
                             this.isGrounded = true;
-                            this.lockDelay = 1; // Start counting from 1 (this frame counts)
+                            this.lockDelay = this.deltaTime; // Start counting from current delta time
                             // Play ground sound
                             this.currentPiece.playGroundSound(this);
                         }
@@ -1811,7 +1858,7 @@ class GameScene extends Phaser.Scene {
                         if (!this.isGrounded) {
                             // Piece just became grounded - start lock delay immediately
                             this.isGrounded = true;
-                            this.lockDelay = 1; // Start counting from 1 (this frame counts)
+                            this.lockDelay = this.deltaTime; // Start counting from current delta time
                             // Play ground sound
                             this.currentPiece.playGroundSound(this);
                         }
@@ -1823,15 +1870,15 @@ class GameScene extends Phaser.Scene {
 
         // Count lock delay continuously when grounded (increment after initial frame)
         if (this.isGrounded && this.currentPiece && !this.areActive && this.lockDelay > 0) {
-            this.lockDelay++;
-            if (this.lockDelay >= 30) {
+            this.lockDelay += this.deltaTime;
+            if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
                 this.lockPiece();
             }
         }
         
         // ARE (Appearance Delay) handling
         if (this.areActive) {
-            this.areTimer++;
+            this.areTimer += this.deltaTime;
             if (this.areTimer >= this.areDelay) {
                 if (this.lineClearPhase) {
                     // Line clear ARE completed, now actually clear the lines
@@ -1841,8 +1888,8 @@ class GameScene extends Phaser.Scene {
                     const fallSound = this.sound.add('fall', { volume: 0.7 });
                     fallSound.play();
                     
-                    // Start normal ARE phase (30 frames)
-                    this.areDelay = 30;
+                    // Start normal ARE phase (0.5 seconds)
+                    this.areDelay = 30/60;
                     this.areTimer = 0;
                     this.lineClearPhase = false;
                     this.isClearingLines = false;
@@ -1863,6 +1910,9 @@ class GameScene extends Phaser.Scene {
         
         // Update grade based on performance
         this.updateGrade();
+        
+        // Calculate piece per second rates
+        this.updatePPS();
         
         // Update section message
         if (this.sectionMessage) {
@@ -1976,7 +2026,7 @@ class GameScene extends Phaser.Scene {
             this.currentPiece.hardDrop(this.board);
             // Set grounded state since piece is now on the ground/stack
             this.isGrounded = true;
-            this.lockDelay = 1; // Start lock delay countdown
+            this.lockDelay = this.deltaTime; // Start lock delay countdown
             // Do NOT call lockPiece() - let normal gameplay continue
         } else {
             // Normal spawning behavior for non-20G levels
@@ -1987,6 +2037,9 @@ class GameScene extends Phaser.Scene {
         // Track piece spawn time for scoring
         this.pieceSpawnTime = this.time.now;
         this.pieceActiveTime = 0;
+
+        // Track pieces placed for PPS calculation
+        this.totalPiecesPlaced++;
 
         // Reset ARE rotation tracking
         this.areRotationDirection = 0;
@@ -2133,8 +2186,8 @@ class GameScene extends Phaser.Scene {
         this.currentPiece = null;
 
         if (linesToClear.length > 0) {
-            // Start line clear ARE phase (41 frames) with animation
-            this.areDelay = 41;
+            // Start line clear ARE phase (0.683 seconds) with animation
+            this.areDelay = 41/60;
             this.areTimer = 0;
             this.areActive = true;
             this.lineClearPhase = true;
@@ -2145,8 +2198,8 @@ class GameScene extends Phaser.Scene {
             clearSound.play();
             
         } else {
-            // Start normal ARE (30 frames)
-            this.areDelay = 30;
+            // Start normal ARE (0.5 seconds)
+            this.areDelay = 30/60;
             this.areTimer = 0;
             this.areActive = true;
             this.lineClearPhase = false;
@@ -2234,6 +2287,15 @@ class GameScene extends Phaser.Scene {
         this.lockDelay = 0;
         this.isGrounded = false;
         this.wasGroundedDuringSoftDrop = false; // Reset soft drop ground sound tracking
+    }
+
+    updatePPS() {
+        // Calculate conventional PPS (including ARE time)
+        const totalTime = this.activeTime + this.areTime;
+        this.conventionalPPS = totalTime > 0 ? this.totalPiecesPlaced / totalTime : 0;
+        
+        // Calculate raw PPS (excluding ARE time)
+        this.rawPPS = this.activeTime > 0 ? this.totalPiecesPlaced / this.activeTime : 0;
     }
 
     updateScore(lines, pieceType = null, isTSpin = false) {
@@ -2579,6 +2641,13 @@ class GameScene extends Phaser.Scene {
         this.softDropRows = 0;
         this.hardDropRows = 0;
 
+        // Reset piece per second tracking
+        this.totalPiecesPlaced = 0;
+        this.activeTime = 0;
+        this.areTime = 0;
+        this.conventionalPPS = 0;
+        this.rawPPS = 0;
+
         // Reset TGM1 randomizer
         this.pieceHistory = ['Z', 'Z', 'S', 'S']; // Reset to initial state
         this.pieceHistoryIndex = 0;
@@ -2622,6 +2691,8 @@ class GameScene extends Phaser.Scene {
         this.levelNumber.setText('0');
         this.gradeText.setText('9');
         this.timeText.setText('0:00.00');
+        this.ppsText.setText('0.00');
+        this.rawPpsText.setText('0.00');
 
         // Restart game
         this.generateNextPieces();
@@ -2710,9 +2781,9 @@ class GameScene extends Phaser.Scene {
         
         // Calculate fade delay to complete all rows in 3 seconds
         if (this.placedMinoRows.length > 0) {
-            this.minoFadeDelay = Math.floor(180 / this.placedMinoRows.length); // 180 frames = 3 seconds
+            this.minoFadeDelay = 3 / this.placedMinoRows.length; // 3 seconds total / number of rows
         } else {
-            this.minoFadeDelay = 180; // fallback if no minos
+            this.minoFadeDelay = 3; // fallback if no minos
         }
     }
     
@@ -2945,7 +3016,7 @@ class GameScene extends Phaser.Scene {
             // Calculate alpha for lock delay fade effect
             let pieceAlpha = 1;
             if (this.isGrounded && this.lockDelay > 0) {
-                pieceAlpha = 1 - (this.lockDelay / 30) * 0.5; // Fade from 1 to 0.5
+                pieceAlpha = 1 - (this.lockDelay / 0.5) * 0.5; // Fade from 1 to 0.5 over 0.5 seconds
             }
 
             this.currentPiece.draw(this, this.matrixOffsetX, this.matrixOffsetY, this.cellSize, false, pieceAlpha);
@@ -2957,6 +3028,10 @@ class GameScene extends Phaser.Scene {
 
         // Update next grade requirement
         this.updateNextGradeText();
+
+        // Update piece per second displays
+        this.ppsText.setText(this.conventionalPPS.toFixed(2));
+        this.rawPpsText.setText(this.rawPPS.toFixed(2));
 
         // Draw level bar
         this.drawLevelBar();
