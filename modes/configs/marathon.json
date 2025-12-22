@@ -1,0 +1,56 @@
+{
+  "id": "marathon",
+  "name": "Marathon",
+  "description": "Standard marathon mode with progressive difficulty",
+  "timing": {
+    "das": { "type": "static", "value": 0.2666666667 },
+    "arr": { "type": "static", "value": 0.0166666667 },
+    "are": { "type": "static", "value": 0.5 },
+    "lockDelay": { "type": "static", "value": 0.5 }
+  },
+  "pieces": {
+    "nextCount": 5,
+    "holdEnabled": true,
+    "randomizer": "7bag"
+  },
+  "gravity": {
+    "type": "curve",
+    "values": [
+      { "level": 0, "value": 4 },
+      { "level": 100, "value": 256 },
+      { "level": 200, "value": 512 },
+      { "level": 300, "value": 1024 },
+      { "level": 999, "value": 5120 }
+    ]
+  },
+  "scoring": {
+    "type": "standard",
+    "gradeSystem": false
+  },
+  "completion": {
+    "type": "lines",
+    "target": 150
+  },
+  "rules": {
+    "sectionStop": false,
+    "levelCap": 999
+  },
+  "audio": {
+    "enabled": true,
+    "bgm": {
+      "sections": [
+        {
+          "name": "Marathon Theme",
+          "startLevel": 0,
+          "endLevel": 999,
+          "track": "stage1"
+        }
+      ],
+      "volume": 0.5
+    },
+    "sfx": {
+      "enabled": true,
+      "volume": 0.7
+    }
+  }
+}

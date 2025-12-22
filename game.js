@@ -730,10 +730,86 @@ function getStartingLevel() {
 class MenuScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MenuScene' });
-    }
-
-    preload() {
-        // Load assets if needed
+        
+        // Mode categories and their modes
+        this.modeTypes = [
+            {
+                name: 'EASY',
+                modes: [
+                    { id: 'easy_normal', name: 'Normal', description: 'Score as many points as you can within 300 levels!' },
+                    { id: 'easy_easy', name: 'Easy', description: 'Clear lines, light fireworks. Have fun!' }
+                ]
+            },
+            {
+                name: 'STANDARD',
+                modes: [
+                    { id: 'sprint_40', name: 'Sprint 40L', description: 'Clear 40 lines as fast as possible' },
+                    { id: 'sprint_100', name: 'Sprint 100L', description: 'Clear 100 lines as fast as possible' },
+                    { id: 'ultra', name: 'Ultra', description: '2-minute score attack' },
+                    { id: 'marathon', name: 'Marathon', description: 'Clear 150 lines' },
+                    { id: 'zen', name: 'Zen', description: 'Endless relaxed play' }
+                ]
+            },
+            {
+                name: 'MASTER',
+                modes: [
+                    { id: 'tgm1', name: 'TGM1', description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!' },
+                    { id: 'tgm2', name: 'TGM2', description: 'Brand new mechanics, brand new challenges! Do you have what it takes?' },
+                    { id: 'tgm3', name: 'TGM3', description: 'Try to be COOL!!, or you will REGRET!! it' },
+                    { id: 'tgm4', name: 'TGM4', description: 'Patience is key...' }
+                ]
+            },
+            {
+                name: '20G',
+                modes: [
+                    { id: '20g', name: '20G', description: 'Maximum gravity speed from the start! Good luck!' },
+                    { id: 'tadeath', name: 'T.A.Death', description: 'Difficult 20G challenge mode. Speed is key!' },
+                    { id: 'shirase', name: 'Shirase', description: 'Lightning-fast speeds. Do you have what it takes?' },
+                    { id: 'master20g', name: 'Master', description: 'Brand new, unique game mechanics. Can you handle them?' }
+                ]
+            },
+            {
+                name: 'RACE',
+                modes: [
+                    { id: 'asuka_easy', name: 'Asuka Easy', description: '20G Tetris stacking introduction' },
+                    { id: 'asuka_normal', name: 'Asuka', description: 'Race mode. Finish 1300 levels in 7 minutes.' },
+                    { id: 'asuka_hard', name: 'Asuka Hard', description: 'The true test of skill and speed!' }
+                ]
+            },
+            {
+                name: 'ALL CLEAR',
+                modes: [
+                    { id: 'konoha_easy', name: 'Konoha Easy', description: 'Easy all-clear challenge with 5 pieces!' },
+                    { id: 'konoha_hard', name: 'Konoha Hard', description: 'Hard all-clear challenge with all 7 pieces!' }
+                ]
+            },
+            {
+                name: 'PUZZLE',
+                modes: [
+                    { id: 'tgm3_sakura', name: 'TGM3-Sakura', description: 'Puzzle mode from TGM3' },
+                    { id: 'flashpoint', name: 'Flashpoint', description: 'From Flashpoint.' }
+                ]
+            }
+        ];
+        
+        this.currentModeTypeIndex = 0;
+        this.currentSubmodeIndex = 0;
+        
+        // UI elements
+        this.modeTypeTitle = null;
+        this.leftModeTypeArrow = null;
+        this.rightModeTypeArrow = null;
+        this.upSubmodeArrow = null;
+        this.downSubmodeArrow = null;
+        this.modeTypeListContainer = null;
+        this.submodeTitle = null;
+        this.submodeDescription = null;
+        this.leaderboardContainer = null;
+        this.leaderboardTitle = null;
+        this.leaderboardEntries = [];
+        this.startButton = null;
+        this.settingsButton = null;
+        this.settingsBorder = null;
     }
 
     create() {
@@ -741,7 +817,7 @@ class MenuScene extends Phaser.Scene {
         const centerY = this.cameras.main.height / 2;
 
         // Title
-        this.add.text(centerX, centerY - 200, 'MINO FREEFALL', {
+        this.add.text(centerX, centerY - 220, 'MINO FREEFALL', {
             fontSize: '48px',
             fill: '#ffffff',
             fontFamily: 'Courier New',
@@ -756,54 +832,378 @@ class MenuScene extends Phaser.Scene {
             }
         }).setOrigin(0.5);
 
-        // Mode buttons (placeholders)
-        const modes = ['Mode 1', 'Mode 2', 'Mode 3'];
-        modes.forEach((mode, index) => {
-            const button = this.add.text(centerX, centerY - 100 + index * 60, mode, {
-                fontSize: '24px',
-                fill: '#ffffff',
-                fontFamily: 'Courier New'
-            }).setOrigin(0.5).setInteractive();
+        this.createMenuUI();
+        this.updateMenuDisplay();
+        this.setupKeyboardControls();
+    }
 
-            button.on('pointerdown', () => {
-                this.scene.start('AssetLoaderScene', { mode: mode });
-            });
-        });
+    createMenuUI() {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
 
-        // Settings button
-        const settingsButton = this.add.text(centerX, centerY + 50, 'Settings', {
+        // Mode type list container (left side)
+        this.modeTypeListContainer = this.add.container(centerX - 350, centerY - 50);
+
+        // Submode navigation arrows (center)
+        this.upSubmodeArrow = this.add.text(centerX - 100, centerY + 20, '◀', {
             fontSize: '24px',
-            fill: '#ffffff',
+            fill: '#888888',
             fontFamily: 'Courier New'
         }).setOrigin(0.5).setInteractive();
 
-        settingsButton.on('pointerdown', () => {
+        this.downSubmodeArrow = this.add.text(centerX + 100, centerY + 20, '▶', {
+            fontSize: '24px',
+            fill: '#888888',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        // Submode title and description (center)
+        this.submodeTitle = this.add.text(centerX, centerY + 20, '', {
+            fontSize: '24px',
+            fill: '#00ffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        this.submodeDescription = this.add.text(centerX, centerY + 60, '', {
+            fontSize: '14px',
+            fill: '#cccccc',
+            fontFamily: 'Courier New',
+            wordWrap: { width: 300 },
+            align: 'center'
+        }).setOrigin(0.5);
+
+        // Best scores leaderboard (right side)
+        this.leaderboardContainer = this.add.container(centerX + 220, centerY - 50);
+        
+        // Leaderboard title - create as separate text object
+        this.leaderboardTitle = this.add.text(centerX + 220, centerY - 70, 'BEST SCORES', {
+            fontSize: '20px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        // Leaderboard entries will be created dynamically
+        this.leaderboardEntries = [];
+
+        // Start button (bottom center)
+        this.startButton = this.add.text(centerX, centerY + 120, 'START GAME', {
+            fontSize: '24px',
+            fill: '#00ff00',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setInteractive();
+
+        this.startButton.on('pointerdown', () => {
+            this.startSelectedMode();
+        });
+
+        this.startButton.on('pointerover', () => {
+            this.startButton.setStyle({ fill: '#ffffff' });
+        });
+
+        this.startButton.on('pointerout', () => {
+            this.startButton.setStyle({ fill: '#00ff00' });
+        });
+
+        // Settings button (bottom with border)
+        const buttonWidth = 120;
+        const buttonHeight = 40;
+        const buttonX = centerX + 200;
+        const buttonY = this.cameras.main.height - 60;
+        
+        // Create border rectangle
+        this.settingsBorder = this.add.graphics();
+        this.settingsBorder.lineStyle(2, 0xffffff);
+        this.settingsBorder.strokeRect(buttonX - buttonWidth/2, buttonY - buttonHeight/2, buttonWidth, buttonHeight);
+        
+        // Create button text
+        this.settingsButton = this.add.text(buttonX, buttonY, 'Settings', {
+            fontSize: '18px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setInteractive();
+        
+        this.settingsButton.on('pointerdown', () => {
+            // Settings functionality to be implemented
+            console.log('Settings button clicked');
+        });
+        
+        this.settingsButton.on('pointerover', () => {
+            this.settingsButton.setStyle({ fill: '#ffff00' });
+        });
+        
+        this.settingsButton.on('pointerout', () => {
+            this.settingsButton.setStyle({ fill: '#ffffff' });
+        });
+
+        this.settingsButton.on('pointerdown', () => {
             this.scene.start('SettingsScene');
         });
 
-        // Best scores display
-        this.displayBestScores(centerX, centerY + 120);
+        // Arrow click handlers
+        this.upSubmodeArrow.on('pointerdown', () => {
+            this.navigateSubmode(-1);
+        });
+
+        this.downSubmodeArrow.on('pointerdown', () => {
+            this.navigateSubmode(1);
+        });
+
+        // Create initial mode type list display
+        this.createModeTypeListDisplay();
+    }
+    
+    updateMenuLayout() {
+        const centerX = this.cameras.main.centerX;
+        const centerY = this.cameras.main.centerY;
+        
+        // Update submode arrows (center)
+        if (this.upSubmodeArrow) {
+            this.upSubmodeArrow.setPosition(centerX - 100, centerY + 20);
+        }
+        if (this.downSubmodeArrow) {
+            this.downSubmodeArrow.setPosition(centerX + 100, centerY + 20);
+        }
+        
+        // Update submode title and description (center)
+        if (this.submodeTitle) {
+            this.submodeTitle.setPosition(centerX, centerY + 20);
+        }
+        if (this.submodeDescription) {
+            this.submodeDescription.setPosition(centerX, centerY + 60);
+        }
+        
+        // Update mode type list container (left side)
+        if (this.modeTypeListContainer) {
+            this.modeTypeListContainer.setPosition(centerX - 350, centerY - 50);
+        }
+        
+        // Update leaderboard container (right side)
+        if (this.leaderboardContainer) {
+            this.leaderboardContainer.setPosition(centerX + 220, centerY - 50);
+        }
+        if (this.leaderboardTitle) {
+            this.leaderboardTitle.setPosition(centerX + 220, centerY - 70);
+        }
+        
+        // Update start button (bottom center)
+        if (this.startButton) {
+            this.startButton.setPosition(centerX, centerY + 120);
+        }
+        
+        // Update settings button (bottom with border)
+        if (this.settingsButton && this.settingsBorder) {
+            const buttonWidth = 120;
+            const buttonHeight = 40;
+            const buttonX = centerX + 200;
+            const buttonY = this.cameras.main.height - 60;
+            
+            this.settingsButton.setPosition(buttonX, buttonY);
+            
+            // Update border
+            this.settingsBorder.clear();
+            this.settingsBorder.lineStyle(2, 0xffffff);
+            this.settingsBorder.strokeRect(buttonX - buttonWidth/2, buttonY - buttonHeight/2, buttonWidth, buttonHeight);
+        }
     }
 
-    displayBestScores(centerX, startY) {
-        const modes = ['Mode 1', 'Mode 2', 'Mode 3'];
-        modes.forEach((mode, index) => {
-            const bestScore = this.getBestScore(mode);
-            this.add.text(centerX, startY + index * 40, `${mode} Best: ${bestScore.score} pts, Lvl ${bestScore.level}, ${bestScore.grade}, ${bestScore.time}`, {
-                fontSize: '16px',
-                fill: '#cccccc',
-                fontFamily: 'Courier New'
-            }).setOrigin(0.5);
+    setupKeyboardControls() {
+        // Left/Right for submode navigation within selected mode type
+        this.input.keyboard.on('keydown-LEFT', () => {
+            this.navigateSubmode(-1);
         });
+
+        this.input.keyboard.on('keydown-RIGHT', () => {
+            this.navigateSubmode(1);
+        });
+
+        // Up/Down for mode type selection (all displayed vertically)
+        this.input.keyboard.on('keydown-UP', () => {
+            this.navigateModeType(-1);
+        });
+
+        this.input.keyboard.on('keydown-DOWN', () => {
+            this.navigateModeType(1);
+        });
+
+        // Enter to start game
+        this.input.keyboard.on('keydown-ENTER', () => {
+            this.startSelectedMode();
+        });
+
+        // Escape for settings
+        this.input.keyboard.on('keydown-ESC', () => {
+            this.scene.start('SettingsScene');
+        });
+    }
+
+    navigateModeType(direction) {
+        const numModeTypes = this.modeTypes.length;
+        this.currentModeTypeIndex = (this.currentModeTypeIndex + direction + numModeTypes) % numModeTypes;
+        this.currentSubmodeIndex = 0; // Reset to first submode in new mode type
+        this.updateMenuDisplay();
+    }
+
+    navigateSubmode(direction) {
+        const currentModeType = this.modeTypes[this.currentModeTypeIndex];
+        const numSubmodes = currentModeType.modes.length;
+        this.currentSubmodeIndex = (this.currentSubmodeIndex + direction + numSubmodes) % numSubmodes;
+        this.updateMenuDisplay();
+    }
+
+    createModeTypeListDisplay() {
+        // Clear existing mode type list
+        if (this.modeTypeListContainer && this.modeTypeListContainer.removeAll) {
+            this.modeTypeListContainer.removeAll(true);
+        }
+        
+        const modeTypes = this.modeTypes;
+        
+        // Create mode type list entries
+        modeTypes.forEach((modeType, index) => {
+            const modeTypeY = index * 50; // Increased spacing between mode types
+            
+            // Mode type name text positioned relative to container
+            const modeTypeText = this.add.text(0, modeTypeY, modeType.name, {
+                fontSize: '18px',
+                fill: index === this.currentModeTypeIndex ? '#ffff00' : '#666666',
+                fontFamily: 'Courier New',
+                fontStyle: index === this.currentModeTypeIndex ? 'bold' : 'normal'
+            }).setOrigin(0, 0.5);
+            
+            // Make selected mode type interactive
+            if (index === this.currentModeTypeIndex) {
+                modeTypeText.setInteractive();
+                modeTypeText.on('pointerdown', () => {
+                    this.currentModeTypeIndex = index;
+                    this.currentSubmodeIndex = 0; // Reset to first submode
+                    this.updateMenuDisplay();
+                });
+            }
+            
+            // Add to container
+            if (this.modeTypeListContainer && this.modeTypeListContainer.add) {
+                this.modeTypeListContainer.add(modeTypeText);
+            }
+        });
+    }
+
+    updateLeaderboardDisplay() {
+        // Clear existing leaderboard entries by destroying old text objects
+        if (this.leaderboardEntries && this.leaderboardEntries.length > 0) {
+            this.leaderboardEntries.forEach(entry => {
+                if (entry.gradeText) entry.gradeText.destroy();
+                if (entry.levelText) entry.levelText.destroy();
+                if (entry.timeText) entry.timeText.destroy();
+            });
+        }
+        this.leaderboardEntries = [];
+        
+        // Only show the best score for the currently selected submode
+        const currentModeType = this.modeTypes[this.currentModeTypeIndex];
+        const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+        
+        const bestScore = this.getBestScore(currentSubmode.id);
+        
+        // Create single leaderboard entry for the selected submode
+        // Grade text (large, left-aligned)
+        const gradeText = this.add.text(this.leaderboardContainer.x - 60, this.leaderboardContainer.y, bestScore.grade || '9', {
+            fontSize: '32px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(1, 0.5);
+        
+        // Level (top-right)
+        const levelText = this.add.text(this.leaderboardContainer.x + 60, this.leaderboardContainer.y - 12, `L${bestScore.level || 0}`, {
+            fontSize: '16px',
+            fill: '#00ffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        
+        // Time (bottom-right)
+        const timeText = this.add.text(this.leaderboardContainer.x + 60, this.leaderboardContainer.y + 12, bestScore.time || '0:00.00', {
+            fontSize: '16px',
+            fill: '#cccccc',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        
+        // Store references for cleanup
+        this.leaderboardEntries.push({
+            gradeText: gradeText,
+            levelText: levelText,
+            timeText: timeText
+        });
+    }
+
+    updateMenuDisplay() {
+        const currentModeType = this.modeTypes[this.currentModeTypeIndex];
+        const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+
+        // Update submode display
+        this.submodeTitle.setText(currentSubmode.name);
+        this.submodeDescription.setText(currentSubmode.description);
+        
+        // Update submode arrows (vertical navigation)
+        const numSubmodes = currentModeType.modes.length;
+        this.upSubmodeArrow.setStyle({ fill: this.currentSubmodeIndex > 0 ? '#ffffff' : '#444444' });
+        this.downSubmodeArrow.setStyle({ fill: this.currentSubmodeIndex < numSubmodes - 1 ? '#ffffff' : '#444444' });
+
+        // Recreate mode type list with updated selection highlighting
+        this.createModeTypeListDisplay();
+        
+        // Update leaderboard
+        this.updateLeaderboardDisplay();
+    }
+
+
+
+    startSelectedMode() {
+        const currentModeType = this.modeTypes[this.currentModeTypeIndex];
+        const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+        
+        console.log(`Starting mode: ${currentSubmode.id}`);
+        
+        // For now, start with AssetLoaderScene using the mode ID
+        // In a full implementation, this would use the new multi-mode system
+        this.scene.start('AssetLoaderScene', { mode: currentSubmode.id });
     }
 
     getBestScore(mode) {
         const key = `bestScore_${mode}`;
         const stored = localStorage.getItem(key);
         if (stored) {
-            return JSON.parse(stored);
+            try {
+                const parsed = JSON.parse(stored);
+                // Ensure all required properties exist with fallbacks
+                return {
+                    score: parsed.score || 0,
+                    level: parsed.level || 0,
+                    grade: parsed.grade || '9',
+                    time: parsed.time || '0:00.00'
+                };
+            } catch (error) {
+                console.warn(`Failed to parse stored score for mode ${mode}:`, error);
+            }
         }
         return { score: 0, level: 0, grade: '9', time: '0:00.00' };
+    }
+    
+    update() {
+        // Check for window resize and update layout if needed
+        const currentWindowWidth = window.innerWidth;
+        const currentWindowHeight = window.innerHeight;
+        
+        if (this.windowWidth !== currentWindowWidth || this.windowHeight !== currentWindowHeight) {
+            this.windowWidth = currentWindowWidth;
+            this.windowHeight = currentWindowHeight;
+            this.updateMenuLayout();
+        }
     }
 }
 
@@ -860,23 +1260,23 @@ class AssetLoaderScene extends Phaser.Scene {
         this.load.image('mino_srs', 'img/mino.png');
         this.load.image('mino_ars', 'img/minoARS.png');
         
-        // Load BGM files - using try-catch to handle format issues
+        // Load BGM files from the correct directory paths
         try {
-            // Try MP3 files first (Phaser compatible)
-            this.load.audio('stage1', 'converted_audio/tm1_1.mp3');
-            this.load.audio('stage2', 'converted_audio/tm1_2.mp3');
-            this.load.audio('credits', 'converted_audio/tm1_endroll.mp3');
+            // Load MP3 files from bgm directory (Phaser compatible)
+            this.load.audio('stage1', 'bgm/tm1_1.mp3');
+            this.load.audio('stage2', 'bgm/tm1_2.mp3');
+            this.load.audio('credits', 'bgm/tm1_endroll.mp3');
         } catch (error) {
-            console.warn('BGM files could not be loaded, continuing without background music:', error);
+            console.warn('BGM files could not be loaded from bgm directory, trying converted_audio directory:', error);
             
-            // Try original FLAC files as fallback (will likely fail but shows intent)
+            // Try converted_audio directory as fallback
             try {
-                console.log('Attempting to load original FLAC files as fallback...');
-                this.load.audio('stage1', 'bgm/tm1_1.flac');
-                this.load.audio('stage2', 'bgm/tm1_2.flac');
-                this.load.audio('credits', 'bgm/tm1_endroll.flac');
+                console.log('Attempting to load BGM files from converted_audio directory...');
+                this.load.audio('stage1', 'converted_audio/tm1_1.mp3');
+                this.load.audio('stage2', 'converted_audio/tm1_2.mp3');
+                this.load.audio('credits', 'converted_audio/tm1_endroll.mp3');
             } catch (fallbackError) {
-                console.warn('Both MP3 and FLAC files failed to load:', fallbackError);
+                console.warn('BGM files could not be loaded from either directory:', fallbackError);
             }
         }
         
