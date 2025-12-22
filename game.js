@@ -860,10 +860,25 @@ class AssetLoaderScene extends Phaser.Scene {
         this.load.image('mino_srs', 'img/mino.png');
         this.load.image('mino_ars', 'img/minoARS.png');
         
-        // Load BGM files
-        this.load.audio('stage1', 'bgm/stage1.mp3');
-        this.load.audio('stage2', 'bgm/stage2.mp3');
-        this.load.audio('credits', 'bgm/credits.mp3');
+        // Load BGM files - using try-catch to handle format issues
+        try {
+            // Try MP3 files first (Phaser compatible)
+            this.load.audio('stage1', 'converted_audio/tm1_1.mp3');
+            this.load.audio('stage2', 'converted_audio/tm1_2.mp3');
+            this.load.audio('credits', 'converted_audio/tm1_endroll.mp3');
+        } catch (error) {
+            console.warn('BGM files could not be loaded, continuing without background music:', error);
+            
+            // Try original FLAC files as fallback (will likely fail but shows intent)
+            try {
+                console.log('Attempting to load original FLAC files as fallback...');
+                this.load.audio('stage1', 'bgm/tm1_1.flac');
+                this.load.audio('stage2', 'bgm/tm1_2.flac');
+                this.load.audio('credits', 'bgm/tm1_endroll.flac');
+            } catch (fallbackError) {
+                console.warn('Both MP3 and FLAC files failed to load:', fallbackError);
+            }
+        }
         
         // Load all sound effects
         this.load.audio('ready', 'sfx/ready.wav');
@@ -1083,6 +1098,7 @@ class GameScene extends Phaser.Scene {
         this.creditsAlpha = 1;
         this.congratulationsActive = false;
         this.gameComplete = false;
+        this.level999Reached = false; // Track when level 999 is reached for TGM behavior
 
         // Mino fading system
         this.minoFadeActive = false;
@@ -1328,44 +1344,54 @@ class GameScene extends Phaser.Scene {
     }
     
     initializeBGM() {
-        // Initialize audio objects
-        this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
-        this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
-        
-        // Start with stage 1 BGM
-        if (this.bgmEnabled) {
-            this.stage1BGM.play();
-            this.currentBGM = this.stage1BGM;
+        // Initialize audio objects with error handling
+        try {
+            this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
+            this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
+            
+            // Start with stage 1 BGM
+            if (this.bgmEnabled) {
+                this.stage1BGM.play();
+                this.currentBGM = this.stage1BGM;
+            }
+        } catch (error) {
+            console.warn('BGM initialization failed, disabling background music:', error);
+            this.bgmEnabled = false;
+            this.stage1BGM = null;
+            this.stage2BGM = null;
+            this.currentBGM = null;
         }
     }
     
     updateTimer() {
-        if (this.startTime && !this.isPaused) {
+        if (this.startTime && !this.isPaused && !this.level999Reached) {
             this.currentTime = (Date.now() - this.startTime) / 1000;
         }
     }
     
     updateBGM() {
-        if (!this.bgmEnabled) return;
+        if (!this.bgmEnabled || !this.stage1BGM || !this.stage2BGM) return;
         
         if (this.level >= 491 && this.level < 500) {
             if (this.currentBGM) {
                 this.currentBGM.stop();
                 this.currentBGM = null;
             }
-        } else if (this.level >= 500) {
+        } else if (this.level >= 500 && this.level < 999) {
             if (this.currentBGM !== this.stage2BGM) {
                 if (this.currentBGM) this.currentBGM.stop();
                 this.stage2BGM.play();
                 this.currentBGM = this.stage2BGM;
             }
-        } else {
+        } else if (this.level < 491) {
             if (this.currentBGM !== this.stage1BGM) {
                 if (this.currentBGM) this.currentBGM.stop();
                 this.stage1BGM.play();
                 this.currentBGM = this.stage1BGM;
             }
         }
+        // At level 999, stop all stage BGM - only credits BGM should play
+        // This is handled in startCredits() method
     }
 
     update() {
@@ -1729,9 +1755,9 @@ class GameScene extends Phaser.Scene {
         this.updateTimer();
         
         // Track active time and ARE time for PPS calculations
-        if (!this.areActive) {
+        if (!this.areActive && !this.level999Reached) {
             this.activeTime += this.deltaTime;
-        } else {
+        } else if (this.areActive && !this.level999Reached) {
             this.areTime += this.deltaTime;
         }
         
@@ -2038,9 +2064,6 @@ class GameScene extends Phaser.Scene {
         this.pieceSpawnTime = this.time.now;
         this.pieceActiveTime = 0;
 
-        // Track pieces placed for PPS calculation
-        this.totalPiecesPlaced++;
-
         // Reset ARE rotation tracking
         this.areRotationDirection = 0;
 
@@ -2147,6 +2170,9 @@ class GameScene extends Phaser.Scene {
         // Play lock sound
         const lockSound = this.sound.add('lock', { volume: 0.6 });
         lockSound.play();
+        
+        // Track pieces placed for PPS calculation
+        this.totalPiecesPlaced++;
         
         // Start lock flash effect
         this.startLockFlash();
@@ -2365,18 +2391,33 @@ class GameScene extends Phaser.Scene {
             this.piecesPlaced++;
 
             // Check if CURRENT level is a stop level BEFORE incrementing
-            // This allows reaching stop levels but prevents advancing from them
-            const currentIsStopLevel = (this.level % 100 === 99) || (this.level === 999);
-            if (!currentIsStopLevel) {
-                this.level += 1; // Advance only if current level is NOT a stop level
+            // Stop levels: 99, 199, 299, 399, 499, 599, 699, 799, 899, 998, 999
+            const currentIsStopLevel = (this.level % 100 === 99) || 
+                                     (this.level === 998) || // 998 requires line clear
+                                     (this.level === 999);   // 999 is final level
+            if (!currentIsStopLevel && this.level < 999) {
+                this.level += 1; // Advance only if current level is NOT a stop level and below 999
             }
             // If current level IS a stop level, stay at current level (require line clear)
             
         } else if (type === 'lines') {
             // TGM1: Level increases by number of lines cleared (1,2,3,4 for Tetris)
-            // Line clears can bypass stop levels
+            // Line clears can bypass stop levels, BUT 998->999 requires a line clear
             newLevel += amount; // amount is the number of lines cleared
-            this.level = newLevel;
+            
+            // Special handling for level 998 -> 999 transition (requires line clear)
+            if (oldLevel === 998 && amount > 0) {
+                this.level = 999;
+            } else if (newLevel > 999) {
+                this.level = 999; // Cap at 999
+            } else {
+                this.level = newLevel;
+            }
+        }
+
+        // Ensure level never exceeds 999
+        if (this.level > 999) {
+            this.level = 999;
         }
 
         // Check for section transitions
@@ -2392,6 +2433,7 @@ class GameScene extends Phaser.Scene {
             this.level !== oldLevel) {
             if (this.level === 999) {
                 // Keep the Grand Master message for credits trigger
+                this.level999Reached = true; // Set flag for TGM behavior
                 this.startCredits(); // Start credits when reaching level 999
             }
         }
@@ -2675,6 +2717,7 @@ class GameScene extends Phaser.Scene {
         this.currentTime = 0;
         this.pauseStartTime = null;
         this.totalPausedTime = 0;
+        this.level999Reached = false; // Reset level 999 flag
 
 
         // Clear game elements
@@ -2741,9 +2784,13 @@ class GameScene extends Phaser.Scene {
         }
         
         // Load credits BGM if available
-        this.creditsBGM = this.sound.add('credits', { loop: true, volume: 0.3 });
-        if (this.creditsBGM && this.bgmEnabled) {
-            this.creditsBGM.play();
+        try {
+            this.creditsBGM = this.sound.add('credits', { loop: true, volume: 0.3 });
+            if (this.creditsBGM && this.bgmEnabled) {
+                this.creditsBGM.play();
+            }
+        } catch (error) {
+            console.warn('Credits BGM could not be loaded:', error);
         }
         
         // Stop current BGM
@@ -2848,7 +2895,7 @@ class GameScene extends Phaser.Scene {
     }
     
     drawCreditsScreen() {
-        // Create scrolling credits text behind the tetrominos
+        // Create scrolling credits text behind the tetrominos (under the matrix)
         const creditsText = [
             'CREDITS',
             '',
@@ -2884,21 +2931,41 @@ class GameScene extends Phaser.Scene {
             'Continue striving for perfection!'
         ];
 
-        const scrollY = (this.creditsTimer * this.creditsScrollSpeed * 60) % (creditsText.length * 40);
-        const centerX = this.windowWidth / 2;
+        // Calculate scroll speed so credits end exactly when last line moves to top
+        // The visible matrix area is 20 rows high, credits should scroll through this area in 61.60 seconds
+        const visibleMatrixHeight = this.cellSize * this.visibleRows; // Height of visible matrix area
+        const creditsHeight = creditsText.length * 30; // Total height of credits text (smaller font)
+        const totalScrollDistance = visibleMatrixHeight + creditsHeight; // Distance to scroll from bottom to top
+        this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
+
+        const scrollY = (this.creditsTimer * this.creditsScrollSpeed * 60) % totalScrollDistance;
+        
+        // Position credits to scroll through the matrix area from bottom to top
+        const matrixBottomY = this.borderOffsetY + this.playfieldHeight;
+        const matrixTopY = this.borderOffsetY;
+        
+        // Start from below the matrix and scroll upward through it
+        const creditsStartY = matrixBottomY + 20; // Start below the matrix
+        const centerX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2; // Center horizontally over matrix
 
         for (let i = 0; i < creditsText.length; i++) {
-            const y = this.windowHeight - scrollY + (i * 40);
-            if (y > -50 && y < this.windowHeight + 50) {
-                const fontSize = creditsText[i] === 'CREDITS' ? 48 : 24;
+            const y = creditsStartY + scrollY - (i * 30); // Scroll upward through matrix
+            
+            // Only draw if within or near the matrix area
+            if (y > matrixTopY - 50 && y < matrixBottomY + 100) {
+                const fontSize = creditsText[i] === 'CREDITS' ? 20 : 14;
                 const fillColor = creditsText[i] === 'CREDITS' ? '#ffff00' : '#ffffff';
+                
+                // Wrap text to matrix width
                 const text = this.add.text(centerX, y, creditsText[i], {
                     fontSize: `${fontSize}px`,
                     fill: fillColor,
                     stroke: '#000000',
-                    strokeThickness: 2,
+                    strokeThickness: 1,
                     fontFamily: 'Courier New',
-                    fontStyle: fontSize === 48 ? 'bold' : 'normal'
+                    fontStyle: fontSize === 20 ? 'bold' : 'normal',
+                    wordWrap: { width: this.cellSize * this.board.cols - 20 }, // Wrap to matrix width
+                    align: 'center'
                 }).setOrigin(0.5);
                 this.gameGroup.add(text);
             }
