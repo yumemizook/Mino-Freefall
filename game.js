@@ -441,19 +441,32 @@ class Board {
     }
 
     isValidPosition(piece, x, y) {
-        for (let r = 0; r < piece.shape.length; r++) {
-            for (let c = 0; c < piece.shape[r].length; c++) {
-                if (piece.shape[r][c]) {
-                    const newX = x + c;
-                    const newY = y + r;
-                    // Allow pieces in hidden rows (negative Y) but prevent going beyond matrix bounds
-                    if (newX < 0 || newX >= this.cols || newY >= this.rows || (newY >= 0 && this.grid[newY][newX])) {
-                        return false;
+        // Safety checks
+        if (!piece || !piece.shape || !this.grid) {
+            console.warn('isValidPosition: Invalid piece or board');
+            return false;
+        }
+        
+        try {
+            for (let r = 0; r < piece.shape.length; r++) {
+                if (!piece.shape[r]) continue;
+                
+                for (let c = 0; c < piece.shape[r].length; c++) {
+                    if (piece.shape[r][c]) {
+                        const newX = x + c;
+                        const newY = y + r;
+                        // Allow pieces in hidden rows (negative Y) but prevent going beyond matrix bounds
+                        if (newX < 0 || newX >= this.cols || newY >= this.rows || (newY >= 0 && this.grid[newY] && this.grid[newY][newX])) {
+                            return false;
+                        }
                     }
                 }
             }
+            return true;
+        } catch (error) {
+            console.warn('isValidPosition: Error checking position:', error);
+            return false;
         }
-        return true;
     }
 
     placePiece(piece, x, y) {
@@ -615,14 +628,31 @@ class Piece {
     }
 
     move(board, dx, dy) {
+        // Safety checks
+        if (!board || !board.isValidPosition) {
+            console.warn('Move: Invalid board');
+            return false;
+        }
+        
+        if (!this.shape || this.x === undefined || this.y === undefined) {
+            console.warn('Move: Invalid piece state');
+            return false;
+        }
+        
         const newX = this.x + dx;
         const newY = this.y + dy;
-        if (board.isValidPosition(this, newX, newY)) {
-            this.x = newX;
-            this.y = newY;
-            this.fractionalY = this.y; // Reset fractional tracking
-            return true;
+        
+        try {
+            if (board.isValidPosition(this, newX, newY)) {
+                this.x = newX;
+                this.y = newY;
+                this.fractionalY = this.y; // Reset fractional tracking
+                return true;
+            }
+        } catch (error) {
+            console.warn('Move: Error during movement:', error);
         }
+        
         return false;
     }
     
@@ -681,7 +711,24 @@ class Piece {
     }
 
     hardDrop(board) {
-        while (this.move(board, 0, 1)) {}
+        // Safety check for null board
+        if (!board || !board.grid) {
+            console.warn('HardDrop: Invalid board');
+            return;
+        }
+        
+        // Safety check for piece validity
+        if (!this.shape || !this.type) {
+            console.warn('HardDrop: Invalid piece');
+            return;
+        }
+        
+        let moves = 0;
+        const maxMoves = board.rows * 2; // Safety limit
+        
+        while (this.move(board, 0, 1) && moves < maxMoves) {
+            moves++;
+        }
     }
 
     draw(scene, offsetX, offsetY, cellSize, ghost = false, alpha = 1) {
@@ -705,11 +752,27 @@ class Piece {
     }
 
     getGhostPosition(board) {
-        const ghost = new Piece(this.type, this.rotationSystem, this.rotation);
-        ghost.x = this.x;
-        ghost.y = this.y;
-        ghost.hardDrop(board);
-        return ghost;
+        // Safety checks
+        if (!this.type || !this.rotationSystem || this.rotation === undefined) {
+            console.warn('getGhostPosition: Invalid piece data');
+            return null;
+        }
+        
+        if (!board || !board.grid) {
+            console.warn('getGhostPosition: Invalid board');
+            return null;
+        }
+        
+        try {
+            const ghost = new Piece(this.type, this.rotationSystem, this.rotation);
+            ghost.x = this.x;
+            ghost.y = this.y;
+            ghost.hardDrop(board);
+            return ghost;
+        } catch (error) {
+            console.warn('getGhostPosition: Error creating ghost piece:', error);
+            return null;
+        }
     }
 }
 
@@ -1041,6 +1104,7 @@ class GameScene extends Phaser.Scene {
         this.bestTime = null;
         this.gradeHistory = [];
         this.sectionTimes = {}; // Track time for each 100-level section
+        this.gameTimerStopped = false; // Stop timer at level 999 or game over
 
         // Piece per second tracking
         this.totalPiecesPlaced = 0; // Total pieces that have entered the playfield
@@ -1048,6 +1112,12 @@ class GameScene extends Phaser.Scene {
         this.areTime = 0; // Time spent in ARE phases
         this.conventionalPPS = 0; // PPS including ARE time
         this.rawPPS = 0; // PPS excluding ARE time
+        
+        // PPS display objects (initialized in setupUI)
+        this.ppsLabel = null;
+        this.ppsText = null;
+        this.rawPpsLabel = null;
+        this.rawPpsText = null;
 
         // Sections and level caps
         this.sectionCap = 99; // Start at first section cap
@@ -1183,6 +1253,16 @@ class GameScene extends Phaser.Scene {
         this.gradeDisplay = this.add.graphics();
         this.gradeDisplay.lineStyle(2, 0xffffff);
         this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+        
+        // Add colored background for grade
+        this.gradeBackground = this.add.graphics();
+        this.gradeBackground.fillStyle(0x444444, 0.8); // Default dark gray
+        this.gradeBackground.fillRect(gradeX + 2, gradeY + 2, gradeWidth - 4, 76);
+        
+        // Add to game group for proper rendering
+        this.gameGroup.add(this.gradeBackground);
+        this.gameGroup.add(this.gradeDisplay);
+        
         this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', { 
             fontSize: `${xlargeFontSize}px`, 
             fill: '#fff', 
@@ -1229,33 +1309,44 @@ class GameScene extends Phaser.Scene {
             align: 'right'
         }).setOrigin(1, 0);
 
-        // Piece per second displays
-        this.ppsLabel = this.add.text(uiX + 140, levelBottomY + 55, 'PPS', { 
-            fontSize: `${uiFontSize - 4}px`, 
-            fill: '#fff', 
+        // PPS displays on the right side (initialized but positioned later in draw)
+        const rightSideX = this.borderOffsetX + (this.cellSize * this.board.cols) + 50;
+        const ppsY = this.borderOffsetY + 120;
+        const ppsFontSize = Math.max(14, Math.min(20, Math.floor(this.cellSize * 0.7)));
+        const largePpsFontSize = Math.max(18, Math.min(24, Math.floor(this.cellSize * 0.9)));
+        
+        this.ppsLabel = this.add.text(rightSideX, ppsY, 'PPS', {
+            fontSize: `${ppsFontSize}px`,
+            fill: '#fff',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
-        }).setOrigin(1, 0);
-        this.ppsText = this.add.text(uiX + 140, levelBottomY + 70, '0.00', { 
-            fontSize: `${largeFontSize}px`, 
-            fill: '#fff', 
-            fontFamily: 'Courier New',
-            fontStyle: 'bold',
-            align: 'right'
-        }).setOrigin(1, 0);
-        this.rawPpsLabel = this.add.text(uiX + 140, levelBottomY + 95, 'RAW PPS', { 
-            fontSize: `${uiFontSize - 6}px`, 
-            fill: '#ccc', 
+        });
+        this.ppsText = this.add.text(rightSideX, ppsY + 20, '0.00', {
+            fontSize: `${largePpsFontSize}px`,
+            fill: '#fff',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
-        }).setOrigin(1, 0);
-        this.rawPpsText = this.add.text(uiX + 140, levelBottomY + 110, '0.00', { 
-            fontSize: `${largeFontSize - 4}px`, 
-            fill: '#ccc', 
+        });
+        
+        this.rawPpsLabel = this.add.text(rightSideX, ppsY + 50, 'RAW PPS', {
+            fontSize: `${ppsFontSize - 2}px`,
+            fill: '#ccc',
             fontFamily: 'Courier New',
-            fontStyle: 'bold',
-            align: 'right'
-        }).setOrigin(1, 0);
+            fontStyle: 'bold'
+        });
+        this.rawPpsText = this.add.text(rightSideX, ppsY + 70, '0.00', {
+            fontSize: `${largePpsFontSize - 2}px`,
+            fill: '#ccc',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        });
+        
+        // Add to game group
+        this.gameGroup.add(this.ppsLabel);
+        this.gameGroup.add(this.ppsText);
+        this.gameGroup.add(this.rawPpsLabel);
+        this.gameGroup.add(this.rawPpsText);
+
 
         // Time - centered below border, larger font, bold
         if (!this.timeText) {
@@ -1325,22 +1416,210 @@ class GameScene extends Phaser.Scene {
         
         // Initialize BGM system
         this.initializeBGM();
+        
+        // Ensure audio context can be resumed on first user interaction
+        this.input.on('pointerdown', () => {
+            if (this.sound.context.state === 'suspended') {
+                this.sound.context.resume();
+            }
+        });
+        
+        // Also handle keyboard input
+        this.input.keyboard.on('keydown', () => {
+            if (this.sound.context.state === 'suspended') {
+                this.sound.context.resume();
+            }
+        });
+
+        // Test audio system
+        this.testAudioSystem();
+    }
+    
+    testAudioSystem() {
+        // Test a simple sound effect to verify audio works
+        setTimeout(() => {
+            try {
+                const testSound = this.sound.add('ready', { volume: 0.1 });
+                if (testSound) {
+                    testSound.play();
+                    setTimeout(() => testSound.destroy(), 500);
+                }
+            } catch (error) {
+                console.warn('Audio test failed:', error);
+            }
+        }, 2000);
     }
     
     initializeBGM() {
-        // Initialize audio objects
-        this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
-        this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
+        // Check if audio files are available
+        const audioContext = this.sound.context;
+        const stage1Data = this.cache.audio.get('stage1');
+        const stage2Data = this.cache.audio.get('stage2');
         
-        // Start with stage 1 BGM
-        if (this.bgmEnabled) {
-            this.stage1BGM.play();
-            this.currentBGM = this.stage1BGM;
+        if (!audioContext || audioContext.state !== 'running') {
+            console.warn('Audio context not ready, state:', audioContext ? audioContext.state : 'no context');
+            return;
+        }
+        
+        // Try creating seamless loops first, fallback to Phaser audio if that fails
+        if (stage1Data) {
+            this.stage1BGM = this.createSeamlessLoop('stage1', 56.862, 113.708, 0.5);
+            if (!this.stage1BGM) {
+                this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
+            }
+        } else {
+            this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
+        }
+        
+        if (stage2Data) {
+            this.stage2BGM = this.createSeamlessLoop('stage2', 97.622, 203.217, 0.5);
+            if (!this.stage2BGM) {
+                this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
+            }
+        } else {
+            this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
+        }
+        
+        // Start with stage 1 BGM after ensuring audio context is running
+        if (this.bgmEnabled && this.stage1BGM) {
+            this.time.delayedCall(1500, () => {
+                try {
+                    // Ensure audio context is running
+                    if (audioContext.state !== 'running') {
+                        audioContext.resume();
+                    }
+                    
+                    // Handle both Phaser audio and Web Audio API sources
+                    if (typeof this.stage1BGM.play === 'function') {
+                        this.stage1BGM.play();
+                    } else if (typeof this.stage1BGM.start === 'function') {
+                        this.stage1BGM.start();
+                    } else {
+                        throw new Error('Unknown audio object type');
+                    }
+                    
+                    this.currentBGM = this.stage1BGM;
+                    
+                } catch (error) {
+                    console.error('Failed to start Stage 1 BGM:', error);
+                }
+            });
+        }
+    }
+    
+    createSeamlessLoop(audioKey, loopStartTime, loopEndTime, volume = 0.5) {
+        // Create a seamless audio loop with custom loop points using Web Audio API
+        try {
+            const audioContext = this.sound.context;
+            const audioData = this.cache.audio.get(audioKey);
+            
+            if (!audioData || !audioContext) {
+                console.warn('Audio context or data not available for:', audioKey);
+                return null;
+            }
+            
+            const audioBuffer = audioData.data;
+            
+            if (!audioBuffer) {
+                console.error('Audio buffer is undefined for:', audioKey);
+                return null;
+            }
+            
+            // Validate loop points
+            if (loopStartTime >= audioBuffer.duration || loopEndTime > audioBuffer.duration || loopStartTime >= loopEndTime) {
+                console.warn('Invalid loop points for:', audioKey);
+                return null;
+            }
+            
+            // Create buffer source for precise control
+            const source = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            
+            source.buffer = audioBuffer;
+            source.loop = true;
+            
+            // Set custom loop points
+            source.loopStart = loopStartTime;
+            source.loopEnd = loopEndTime;
+            
+            // Set volume
+            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+            
+            // Connect audio graph: source -> gain -> destination
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Store reference for later control
+            source.gainNode = gainNode;
+            source.audioKey = audioKey;
+            source.loopStartTime = loopStartTime;
+            source.loopEndTime = loopEndTime;
+            source.originalVolume = volume;
+            source.isPaused = false;
+            source.startTime = 0;
+            
+            // Add pause/resume methods
+            source.pause = () => {
+                source.isPaused = true;
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            };
+            
+            source.resume = () => {
+                if (source.isPaused) {
+                    source.isPaused = false;
+                    gainNode.gain.setValueAtTime(source.originalVolume, audioContext.currentTime);
+                }
+            };
+            
+            // Add error handling
+            source.onended = () => {
+                console.log('Audio ended:', audioKey);
+            };
+            
+            source.onerror = (error) => {
+                console.error('Audio playback error for', audioKey, ':', error);
+            };
+            
+
+            return source;
+            
+        } catch (error) {
+            console.error('Error creating seamless loop for', audioKey, ':', error);
+            return null;
+        }
+    }
+    
+    stopSeamlessLoop(audioSource) {
+        if (audioSource) {
+            try {
+                // Check if it's a Phaser audio object (has play method but not start method)
+                if (typeof audioSource.play === 'function' && typeof audioSource.start !== 'function') {
+                    // Phaser audio
+                    if (audioSource.stop) {
+                        audioSource.stop();
+                    }
+                    if (audioSource.destroy) {
+                        audioSource.destroy();
+                    }
+                } else if (typeof audioSource.start === 'function') {
+                    // Web Audio API source
+                    audioSource.stop();
+                }
+            } catch (error) {
+                console.warn('Error stopping audio:', error);
+            }
+        }
+    }
+    
+    setLoopVolume(audioSource, volume) {
+        if (audioSource && audioSource.gainNode) {
+            const audioContext = this.sound.context;
+            audioSource.gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
         }
     }
     
     updateTimer() {
-        if (this.startTime && !this.isPaused) {
+        if (this.startTime && !this.isPaused && !this.gameTimerStopped) {
             this.currentTime = (Date.now() - this.startTime) / 1000;
         }
     }
@@ -1349,21 +1628,78 @@ class GameScene extends Phaser.Scene {
         if (!this.bgmEnabled) return;
         
         if (this.level >= 491 && this.level < 500) {
+            // Level 491-499: No BGM
             if (this.currentBGM) {
-                this.currentBGM.stop();
+                this.stopSeamlessLoop(this.currentBGM);
                 this.currentBGM = null;
             }
         } else if (this.level >= 500) {
+            // Level 500+: Stage 2 BGM with custom loop points (97.622s to 203.217s)
             if (this.currentBGM !== this.stage2BGM) {
-                if (this.currentBGM) this.currentBGM.stop();
-                this.stage2BGM.play();
-                this.currentBGM = this.stage2BGM;
+                if (this.currentBGM) {
+                    this.stopSeamlessLoop(this.currentBGM);
+                }
+                if (this.stage2BGM) {
+                    try {
+                        // Handle both Phaser audio and Web Audio API sources
+                        if (typeof this.stage2BGM.play === 'function') {
+                            this.stage2BGM.play();
+                        } else if (typeof this.stage2BGM.start === 'function') {
+                            this.stage2BGM.start();
+                        }
+                        this.currentBGM = this.stage2BGM;
+                    } catch (error) {
+                        console.warn('Failed to start Stage 2 BGM:', error);
+                        // Recreate if start fails
+                        this.stage2BGM = this.createSeamlessLoop('stage2', 97.622, 203.217, 0.5);
+                        if (this.stage2BGM) {
+                            try {
+                                if (typeof this.stage2BGM.play === 'function') {
+                                    this.stage2BGM.play();
+                                } else if (typeof this.stage2BGM.start === 'function') {
+                                    this.stage2BGM.start();
+                                }
+                                this.currentBGM = this.stage2BGM;
+                            } catch (retryError) {
+                                console.warn('Failed to retry Stage 2 BGM:', retryError);
+                            }
+                        }
+                    }
+                }
             }
         } else {
+            // Level 0-490: Stage 1 BGM with custom loop points (56.862s to 113.708s)
             if (this.currentBGM !== this.stage1BGM) {
-                if (this.currentBGM) this.currentBGM.stop();
-                this.stage1BGM.play();
-                this.currentBGM = this.stage1BGM;
+                if (this.currentBGM) {
+                    this.stopSeamlessLoop(this.currentBGM);
+                }
+                if (this.stage1BGM) {
+                    try {
+                        // Handle both Phaser audio and Web Audio API sources
+                        if (typeof this.stage1BGM.play === 'function') {
+                            this.stage1BGM.play();
+                        } else if (typeof this.stage1BGM.start === 'function') {
+                            this.stage1BGM.start();
+                        }
+                        this.currentBGM = this.stage1BGM;
+                    } catch (error) {
+                        console.warn('Failed to start Stage 1 BGM:', error);
+                        // Recreate if start fails
+                        this.stage1BGM = this.createSeamlessLoop('stage1', 56.862, 113.708, 0.5);
+                        if (this.stage1BGM) {
+                            try {
+                                if (typeof this.stage1BGM.play === 'function') {
+                                    this.stage1BGM.play();
+                                } else if (typeof this.stage1BGM.start === 'function') {
+                                    this.stage1BGM.start();
+                                }
+                                this.currentBGM = this.stage1BGM;
+                            } catch (retryError) {
+                                console.warn('Failed to retry Stage 1 BGM:', retryError);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1447,11 +1783,23 @@ class GameScene extends Phaser.Scene {
             if (xKeyDown && !this.xKeyPressed) {
                 this.xKeyPressed = true;
                 if (this.currentPiece) {
-                    // Calculate hard drop rows before dropping
-                    const ghost = this.currentPiece.getGhostPosition(this.board);
-                    this.hardDropRows = ghost.y - this.currentPiece.y;
-                    this.currentPiece.hardDrop(this.board);
-                    this.lockPiece();
+                    try {
+                        // Calculate hard drop rows before dropping
+                        const ghost = this.currentPiece.getGhostPosition(this.board);
+                        if (ghost) {
+                            this.hardDropRows = ghost.y - this.currentPiece.y;
+                        } else {
+                            this.hardDropRows = 0;
+                        }
+                        this.currentPiece.hardDrop(this.board);
+                        this.lockPiece();
+                    } catch (error) {
+                        console.warn('Hard drop error:', error);
+                        // Fallback: just try to lock the piece
+                        if (this.currentPiece) {
+                            this.lockPiece();
+                        }
+                    }
                 }
             } else if (!xKeyDown && this.xKeyPressed) {
                 this.xKeyPressed = false;
@@ -1550,11 +1898,23 @@ class GameScene extends Phaser.Scene {
             if (xKeyDown && !this.xKeyPressed) {
                 this.xKeyPressed = true;
                 if (this.currentPiece) {
-                    // Calculate hard drop rows before dropping
-                    const ghost = this.currentPiece.getGhostPosition(this.board);
-                    this.hardDropRows = ghost.y - this.currentPiece.y;
-                    this.currentPiece.hardDrop(this.board);
-                    this.lockPiece();
+                    try {
+                        // Calculate hard drop rows before dropping
+                        const ghost = this.currentPiece.getGhostPosition(this.board);
+                        if (ghost) {
+                            this.hardDropRows = ghost.y - this.currentPiece.y;
+                        } else {
+                            this.hardDropRows = 0;
+                        }
+                        this.currentPiece.hardDrop(this.board);
+                        this.lockPiece();
+                    } catch (error) {
+                        console.warn('Hard drop error:', error);
+                        // Fallback: just try to lock the piece
+                        if (this.currentPiece) {
+                            this.lockPiece();
+                        }
+                    }
                 }
             } else if (!xKeyDown && this.xKeyPressed) {
                 this.xKeyPressed = false;
@@ -1728,11 +2088,13 @@ class GameScene extends Phaser.Scene {
         // Update time tracking using Date.now() for reliability
         this.updateTimer();
         
-        // Track active time and ARE time for PPS calculations
-        if (!this.areActive) {
-            this.activeTime += this.deltaTime;
-        } else {
-            this.areTime += this.deltaTime;
+        // Track active time and ARE time for PPS calculations (exclude paused time)
+        if (!this.isPaused) {
+            if (!this.areActive) {
+                this.activeTime += this.deltaTime;
+            } else {
+                this.areTime += this.deltaTime;
+            }
         }
         
         // Skip ALL game logic if paused or game over
@@ -1996,7 +2358,7 @@ class GameScene extends Phaser.Scene {
                     // Still can't spawn after shifting - game over
                     // Stop BGM on game over
                     if (this.currentBGM) {
-                        this.currentBGM.stop();
+                        this.stopSeamlessLoop(this.currentBGM);
                         this.currentBGM = null;
                     }
     
@@ -2008,7 +2370,7 @@ class GameScene extends Phaser.Scene {
                 // Game over - piece can't spawn (reached top of visible area)
                 // Stop BGM on game over
                 if (this.currentBGM) {
-                    this.currentBGM.stop();
+                    this.stopSeamlessLoop(this.currentBGM);
                     this.currentBGM = null;
                 }
 
@@ -2038,8 +2400,7 @@ class GameScene extends Phaser.Scene {
         this.pieceSpawnTime = this.time.now;
         this.pieceActiveTime = 0;
 
-        // Track pieces placed for PPS calculation
-        this.totalPiecesPlaced++;
+
 
         // Reset ARE rotation tracking
         this.areRotationDirection = 0;
@@ -2163,6 +2524,9 @@ class GameScene extends Phaser.Scene {
         }
         
         this.board.placePiece(this.currentPiece, this.currentPiece.x, this.currentPiece.y);
+
+        // Track pieces placed for PPS calculation (count when piece locks)
+        this.totalPiecesPlaced++;
 
         // Check for T-spin before clearing lines
         const isTSpin = this.detectTSpin(this.currentPiece, this.board);
@@ -2298,6 +2662,55 @@ class GameScene extends Phaser.Scene {
         this.rawPPS = this.activeTime > 0 ? this.totalPiecesPlaced / this.activeTime : 0;
     }
 
+    updateGradeBackground() {
+        // Define colors for different grade ranges
+        let bgColor, alpha;
+        
+        switch (this.grade) {
+            case '9': case '8': case '7': case '6': case '5':
+                // Low grades - dark red
+                bgColor = 0x661111; alpha = 0.8;
+                break;
+            case '4': case '3': case '2': case '1':
+                // Mid grades - orange
+                bgColor = 0x664400; alpha = 0.8;
+                break;
+            case 'S1': case 'S2': case 'S3':
+                // Low S grades - yellow
+                bgColor = 0x666600; alpha = 0.8;
+                break;
+            case 'S4': case 'S5': case 'S6':
+                // Mid S grades - light green
+                bgColor = 0x116611; alpha = 0.8;
+                break;
+            case 'S7': case 'S8': case 'S9':
+                // High S grades - bright green
+                bgColor = 0x00AA00; alpha = 0.8;
+                break;
+            case 'M':
+                // Master grade - blue
+                bgColor = 0x0000AA; alpha = 0.8;
+                break;
+            case 'GM':
+                // Grand Master grade - gold
+                bgColor = 0xDDAA00; alpha = 0.9;
+                break;
+            default:
+                // Default fallback
+                bgColor = 0x444444; alpha = 0.8;
+                break;
+        }
+        
+        // Update the background
+        this.gradeBackground.clear();
+        this.gradeBackground.fillStyle(bgColor, alpha);
+        
+        const gradeX = this.gradeText.x - 40; // Recalculate position
+        const gradeY = this.borderOffsetY;
+        const gradeWidth = 80;
+        this.gradeBackground.fillRect(gradeX + 2, gradeY + 2, gradeWidth - 4, 76);
+    }
+
     updateScore(lines, pieceType = null, isTSpin = false) {
         // Official TGM1 scoring formula:
         // Score = ceil([level + cleared lines]/4 + soft dropped rows + (2 * hard dropped rows))
@@ -2391,6 +2804,8 @@ class GameScene extends Phaser.Scene {
         if ((this.level === 100 || this.level === 200 || this.level === 300 || this.level === 500 || this.level === 999) &&
             this.level !== oldLevel) {
             if (this.level === 999) {
+                // Stop timer when reaching level 999
+                this.gameTimerStopped = true;
                 // Keep the Grand Master message for credits trigger
                 this.startCredits(); // Start credits when reaching level 999
             }
@@ -2545,6 +2960,7 @@ class GameScene extends Phaser.Scene {
         if (this.getGradeValue(newGrade) > this.getGradeValue(this.grade)) {
             this.grade = newGrade;
             this.animateGradeUpgrade();
+            this.updateGradeBackground(); // Update background color
             this.gradeHistory.push({
                 grade: newGrade,
                 level: this.level,
@@ -2582,7 +2998,30 @@ class GameScene extends Phaser.Scene {
         const gradeUpSound = this.sound.add('gradeup', { volume: 0.6 });
         gradeUpSound.play();
         
-        // Simple flash animation
+        // Create background flash effect only in the grade container area
+        const gradeX = this.gradeText.x - 40; // Recalculate grade container position
+        const gradeY = this.borderOffsetY;
+        const gradeWidth = 80;
+        const gradeHeight = 80;
+        
+        const flashOverlay = this.add.graphics();
+        flashOverlay.fillStyle(0xFFFFFF, 0.6);
+        flashOverlay.fillRect(gradeX, gradeY, gradeWidth, gradeHeight);
+        
+        // Add flash overlay to game group for proper rendering order
+        this.gameGroup.add(flashOverlay);
+        
+        // Fade out the flash over 300ms
+        this.tweens.add({
+            targets: flashOverlay,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => {
+                flashOverlay.destroy();
+            }
+        });
+        
+        // Simple flash animation for grade text
         this.gradeText.setTint(0xffff00);
         this.time.delayedCall(200, () => {
             this.gradeText.setTint(0xffffff);
@@ -2647,6 +3086,15 @@ class GameScene extends Phaser.Scene {
         this.areTime = 0;
         this.conventionalPPS = 0;
         this.rawPPS = 0;
+        
+        // Reset PPS display objects
+        this.ppsLabel = null;
+        this.ppsText = null;
+        this.rawPpsLabel = null;
+        this.rawPpsText = null;
+
+        // Reset timer stop flag
+        this.gameTimerStopped = false;
 
         // Reset TGM1 randomizer
         this.pieceHistory = ['Z', 'Z', 'S', 'S']; // Reset to initial state
@@ -2682,13 +3130,24 @@ class GameScene extends Phaser.Scene {
         
         // Stop current BGM
         if (this.currentBGM) {
-            this.currentBGM.stop();
+            this.stopSeamlessLoop(this.currentBGM);
             this.currentBGM = null;
+        }
+
+        // Stop credits BGM
+        if (this.creditsBGM) {
+            this.creditsBGM.stop();
+            this.creditsBGM = null;
         }
 
         // Reset UI
         this.scoreText.setText('0');
-        this.levelNumber.setText('0');
+        if (this.levelNumber) {
+            this.levelNumber.setText('0');
+        }
+        if (this.currentLevelText) {
+            this.currentLevelText.setText('0');
+        }
         this.gradeText.setText('9');
         this.timeText.setText('0:00.00');
         this.ppsText.setText('0.00');
@@ -2698,8 +3157,44 @@ class GameScene extends Phaser.Scene {
         this.generateNextPieces();
         this.spawnPiece();
         
-        // Restart BGM
-        this.updateBGM();
+        // Restart BGM with custom seamless loops
+        if (this.bgmEnabled) {
+            // Stop current BGM
+            if (this.currentBGM) {
+                this.stopSeamlessLoop(this.currentBGM);
+                this.currentBGM = null;
+            }
+            
+            // Clean up old BGM references
+            if (this.stage1BGM) {
+                this.stopSeamlessLoop(this.stage1BGM);
+            }
+            if (this.stage2BGM) {
+                this.stopSeamlessLoop(this.stage2BGM);
+            }
+            
+            this.stage1BGM = null;
+            this.stage2BGM = null;
+            
+            // Create fresh seamless loops with custom loop points
+            this.stage1BGM = this.createSeamlessLoop('stage1', 56.862, 113.708, 0.5);
+            this.stage2BGM = this.createSeamlessLoop('stage2', 97.622, 203.217, 0.5);
+            
+            // Start fresh stage1 BGM
+            if (this.stage1BGM) {
+                try {
+                    // Handle both Phaser audio and Web Audio API sources
+                    if (typeof this.stage1BGM.play === 'function') {
+                        this.stage1BGM.play();
+                    } else if (typeof this.stage1BGM.start === 'function') {
+                        this.stage1BGM.start();
+                    }
+                    this.currentBGM = this.stage1BGM;
+                } catch (error) {
+                    console.warn('Failed to restart BGM:', error);
+                }
+            }
+        }
     }
     
     togglePause() {
@@ -2722,9 +3217,28 @@ class GameScene extends Phaser.Scene {
         // Pause/resume BGM
         if (this.currentBGM) {
             if (this.isPaused) {
-                this.currentBGM.pause();
+                if (this.currentBGM.pause) {
+                    this.currentBGM.pause();
+                } else {
+                    // Fallback for seamless loops
+                    this.setLoopVolume(this.currentBGM, 0);
+                }
             } else {
-                this.currentBGM.resume();
+                if (this.currentBGM.resume) {
+                    this.currentBGM.resume();
+                } else {
+                    // Fallback for seamless loops
+                    this.setLoopVolume(this.currentBGM, this.currentBGM.originalVolume || 0.5);
+                }
+            }
+        }
+        
+        // Pause/resume credits BGM
+        if (this.creditsBGM) {
+            if (this.isPaused) {
+                this.creditsBGM.pause();
+            } else {
+                this.creditsBGM.resume();
             }
         }
     }
@@ -2748,7 +3262,7 @@ class GameScene extends Phaser.Scene {
         
         // Stop current BGM
         if (this.currentBGM) {
-            this.currentBGM.stop();
+            this.stopSeamlessLoop(this.currentBGM);
             this.currentBGM = null;
         }
     }
@@ -2772,7 +3286,7 @@ class GameScene extends Phaser.Scene {
         
         // Stop BGM immediately when game over and fading starts
         if (this.currentBGM) {
-            this.currentBGM.stop();
+            this.stopSeamlessLoop(this.currentBGM);
             this.currentBGM = null;
         }
         
@@ -2841,6 +3355,7 @@ class GameScene extends Phaser.Scene {
 
     showGameOverScreen() {
         this.gameOver = true;
+        this.gameTimerStopped = true; // Stop timer on game over (top out)
         this.gameOverTimer = 0; // Start timer for 10 seconds
 
         // Start mino fading immediately
@@ -2928,8 +3443,14 @@ class GameScene extends Phaser.Scene {
                 fontStyle: 'bold',
                 align: 'right'
             }).setOrigin(1, 0);
+            this.gameGroup.add(this.currentLevelText);
         } else {
             this.currentLevelText.setText(currentLevelText);
+        }
+        
+        // Also update levelNumber for backwards compatibility
+        if (!this.levelNumber) {
+            this.levelNumber = this.currentLevelText;
         }
 
         // Bar - middle row, white background with red fill
@@ -2940,16 +3461,21 @@ class GameScene extends Phaser.Scene {
         const internalGravity = this.getTGMGravitySpeed(this.level);
         const gravityRatio = Math.min(internalGravity / 2560, 1); // 0 to 1, 5120 is 20G
 
-        if (!this.levelBar) {
-            this.levelBar = this.add.graphics();
+        // Create or recreate level bar graphics
+        if (this.levelBar) {
+            this.levelBar.destroy();
         }
-        this.levelBar.clear();
+        this.levelBar = this.add.graphics();
+        
         // White background
         this.levelBar.fillStyle(0xffffff);
         this.levelBar.fillRect(barX + 14, barY - 15, barWidth, barHeight);
         // Red fill from left
         this.levelBar.fillStyle(0xff0000);
         this.levelBar.fillRect(barX + 14, barY - 15, barWidth * gravityRatio, barHeight);
+        
+        // Add to game group
+        this.gameGroup.add(this.levelBar);
 
         // Cap level - bottom row
         const capY = levelBottomY - levelRowHeight;
@@ -2962,6 +3488,7 @@ class GameScene extends Phaser.Scene {
                 fontStyle: 'bold',
                 align: 'right'
             }).setOrigin(1, 0);
+            this.gameGroup.add(this.capLevelText);
         } else {
             this.capLevelText.setText(capText);
         }
@@ -2970,11 +3497,53 @@ class GameScene extends Phaser.Scene {
     draw() {
         // Clear previous game elements
         this.gameGroup.clear(true, true);
-        // Border adjusted to fit exactly 10x20 with smaller width and height
+        
+        // Recreate border
         this.playfieldBorder = this.add.graphics();
         this.playfieldBorder.lineStyle(3, 0xffffff);
         this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
-            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
+            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5);
+        
+        // Recreate grade background and display
+        this.gradeBackground = this.add.graphics();
+        this.gradeDisplay = this.add.graphics();
+        
+        // Add to game group immediately after creation
+        this.gameGroup.add(this.playfieldBorder);
+        this.gameGroup.add(this.gradeBackground);
+        this.gameGroup.add(this.gradeDisplay);
+        
+        // Recreate UI elements that need to be redrawn
+        const gradeX = Math.max(20, this.borderOffsetX - 200) + 50 + 25;
+        const gradeY = this.borderOffsetY;
+        const gradeWidth = 80;
+        
+        this.gradeDisplay.lineStyle(2, 0xffffff);
+        this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+        
+        // Set grade background based on current grade
+        let bgColor, alpha;
+        switch (this.grade) {
+            case '9': case '8': case '7': case '6': case '5':
+                bgColor = 0x661111; alpha = 0.8; break;
+            case '4': case '3': case '2': case '1':
+                bgColor = 0x664400; alpha = 0.8; break;
+            case 'S1': case 'S2': case 'S3':
+                bgColor = 0x666600; alpha = 0.8; break;
+            case 'S4': case 'S5': case 'S6':
+                bgColor = 0x116611; alpha = 0.8; break;
+            case 'S7': case 'S8': case 'S9':
+                bgColor = 0x00AA00; alpha = 0.8; break;
+            case 'M':
+                bgColor = 0x0000AA; alpha = 0.8; break;
+            case 'GM':
+                bgColor = 0xDDAA00; alpha = 0.9; break;
+            default:
+                bgColor = 0x444444; alpha = 0.8; break;
+        }
+        
+        this.gradeBackground.fillStyle(bgColor, alpha);
+        this.gradeBackground.fillRect(gradeX + 2, gradeY + 2, gradeWidth - 4, 76);
 
 
 
@@ -3030,8 +3599,15 @@ class GameScene extends Phaser.Scene {
         this.updateNextGradeText();
 
         // Update piece per second displays
-        this.ppsText.setText(this.conventionalPPS.toFixed(2));
-        this.rawPpsText.setText(this.rawPPS.toFixed(2));
+        if (this.ppsText) {
+            this.ppsText.setText(this.conventionalPPS.toFixed(2));
+        }
+        if (this.rawPpsText) {
+            this.rawPpsText.setText(this.rawPPS.toFixed(2));
+        }
+        
+        // Update grade background color
+        this.updateGradeBackground();
 
         // Draw level bar
         this.drawLevelBar();
@@ -3044,14 +3620,22 @@ class GameScene extends Phaser.Scene {
         
 
         
-        if (this.timeText) {
-            this.timeText.setText(timeString);
+        // Create or update time text
+        if (!this.timeText) {
+            this.timeText = this.add.text(this.borderOffsetX + this.playfieldWidth/2, this.borderOffsetY + this.playfieldHeight + 50, timeString, {
+                fontSize: `${Math.max(24, Math.min(40, Math.floor(this.cellSize * 1.5)))}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'center'
+            }).setOrigin(0.5, 0);
+            this.gameGroup.add(this.timeText);
         } else {
-
+            this.timeText.setText(timeString);
         }
 
 
-        // Draw NEXT label - positioned to the right of border
+        // Draw NEXT label and PPS displays - positioned to the right of border
         const nextX = this.borderOffsetX + (this.cellSize * this.board.cols) + 50;
         const nextY = this.borderOffsetY;
         const nextFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
@@ -3063,6 +3647,8 @@ class GameScene extends Phaser.Scene {
             fontStyle: 'bold'
         });
         this.gameGroup.add(nextLabel);
+
+        // PPS displays are already created in setupUI(), no need to recreate them here
 
         // TGM1: Only show 1 next piece
         if (this.nextPieces.length > 0) {
@@ -3110,8 +3696,7 @@ class GameScene extends Phaser.Scene {
         }
         */
 
-        // Add playfield border to game group (already created above)
-        this.gameGroup.add(this.playfieldBorder);
+        // Playfield border already added to game group above
 
         // Draw pause overlay - centered on screen
         if (this.isPaused) {
