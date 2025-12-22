@@ -2131,8 +2131,10 @@ class GameScene extends Phaser.Scene {
         // Update grade based on performance
         this.updateGrade();
         
-        // Calculate piece per second rates
-        this.updatePPS();
+        // Calculate piece per second rates (skip during credits)
+        if (!this.creditsActive) {
+            this.updatePPS();
+        }
         
         // Update section message
         if (this.sectionMessage) {
@@ -2149,6 +2151,13 @@ class GameScene extends Phaser.Scene {
             // End credits after duration
             if (this.creditsTimer >= this.creditsDuration) {
                 this.creditsActive = false;
+                
+                // Stop credits BGM when credits end
+                if (this.creditsBGM) {
+                    this.creditsBGM.stop();
+                    this.creditsBGM = null;
+                }
+                
                 this.showGameOverScreen();
             }
         }
@@ -3119,80 +3128,133 @@ class GameScene extends Phaser.Scene {
         this.gameOver = true;
         this.gameOverTimer = 0; // Start timer for 10 seconds
 
+        // Stop any playing BGM (stage BGM or credits BGM)
+        if (this.currentBGM) {
+            this.currentBGM.stop();
+            this.currentBGM = null;
+        }
+        if (this.creditsBGM) {
+            this.creditsBGM.stop();
+            this.creditsBGM = null;
+        }
+
         // Start mino fading immediately
         this.startMinoFading();
     }
     
     drawCreditsScreen() {
+        // Don't draw credits if game is paused
+        if (this.isPaused) {
+            return;
+        }
+
         // Create scrolling credits text behind the tetrominos (under the matrix)
         const creditsText = [
-            'CREDITS',
-            '',
-            'Game Developer',
-            'Tetris Grand Master Implementation',
-            '',
-            'Special Thanks',
-            'To all Tetris players who strive for perfection',
-            'The Tetris Company for creating this amazing game',
-            '',
-            'Music & Sound',
-            'Original TGM Soundtrack',
-            '',
-            'Inspired by',
-            'Tetris: The Grand Master Series',
-            '',
-            'Technical Implementation',
-            'Phaser 3 Game Framework',
-            'SRS (Super Rotation System)',
-            'TGM1 Mechanics',
-            '',
-            'Level System',
-            'Internal Gravity Curves',
-            'TGM-Style Grading',
-            '',
-            'Piece Randomizer',
-            'TGM1 4-Piece History System',
-            '',
-            'Achievement System',
-            'Grand Master Grade Requirements',
-            '',
-            'Thank you for playing!',
-            'Continue striving for perfection!'
+            { text: 'CREDITS', type: 'title' },
+            { text: '', type: 'empty' },
+            { text: 'Game Developer', type: 'section' },
+            { text: 'Tetris Grand Master Implementation', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Special Thanks', type: 'section' },
+            { text: 'To all Tetris players who strive for perfection', type: 'content' },
+            { text: 'The Tetris Company for creating this amazing game', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Music & Sound', type: 'section' },
+            { text: 'Original TGM Soundtrack', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Inspired by', type: 'section' },
+            { text: 'Tetris: The Grand Master Series', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Technical Implementation', type: 'section' },
+            { text: 'Phaser 3 Game Framework', type: 'content' },
+            { text: 'SRS (Super Rotation System)', type: 'content' },
+            { text: 'TGM1 Mechanics', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Level System', type: 'section' },
+            { text: 'Internal Gravity Curves', type: 'content' },
+            { text: 'TGM-Style Grading', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Piece Randomizer', type: 'section' },
+            { text: 'TGM1 4-Piece History System', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Achievement System', type: 'section' },
+            { text: 'Grand Master Grade Requirements', type: 'content' },
+            { text: '', type: 'empty' },
+            { text: 'Thank you for playing!', type: 'closing' },
+            { text: 'Continue striving for perfection!', type: 'closing' }
         ];
 
         // Calculate scroll speed so credits end exactly when last line moves to top
         // The visible matrix area is 20 rows high, credits should scroll through this area in 61.60 seconds
         const visibleMatrixHeight = this.cellSize * this.visibleRows; // Height of visible matrix area
-        const creditsHeight = creditsText.length * 35; // Total height of credits text (larger font)
+        
+        // Count only non-empty lines for height calculation
+        const nonEmptyLines = creditsText.filter(line => line.type !== 'empty').length;
+        const creditsHeight = nonEmptyLines * 45; // Total height of credits text (increased spacing for larger fonts)
         const totalScrollDistance = visibleMatrixHeight + creditsHeight; // Distance to scroll from bottom to top
         this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
 
-        const scrollY = (this.creditsTimer * this.creditsScrollSpeed * 60) % totalScrollDistance;
+        // Calculate scroll progress - start with 0 and increase over time
+        const scrollProgress = (this.creditsTimer * this.creditsScrollSpeed * 60) % totalScrollDistance;
         
         // Position credits to scroll through the matrix area from bottom to top
         const matrixBottomY = this.borderOffsetY + this.playfieldHeight;
         const matrixTopY = this.borderOffsetY;
         
         // Start from below the matrix and scroll upward through it
-        const creditsStartY = matrixBottomY + 30; // Start below the matrix
-        const centerX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2; // Center horizontally over matrix
+        // First line (CREDITS) should appear first at the bottom
+        const creditsStartY = matrixBottomY + creditsHeight; // Start from below matrix by the full credits height
+        const centerX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2 - 5; // Center horizontally over matrix, shifted 5px left
 
-        for (let i = 0; i < creditsText.length; i++) {
-            const y = creditsStartY + scrollY - (i * 35); // Scroll upward through matrix with larger spacing
+        for (let i = 0, visibleLineIndex = 0; i < creditsText.length; i++) {
+            const line = creditsText[i];
+            
+            // Skip empty lines in positioning but count them for display
+            if (line.type === 'empty') {
+                continue;
+            }
+            
+            // Calculate the position of this line relative to the scroll progress
+            // First visible line (CREDITS) should appear at bottom first
+            const lineStartY = creditsStartY - (visibleLineIndex * 45);
+            const y = lineStartY - scrollProgress;
+            visibleLineIndex++;
             
             // Only draw if within the matrix area (strict bounds checking)
             if (y > matrixTopY && y < matrixBottomY) {
-                const fontSize = creditsText[i] === 'CREDITS' ? 28 : 18; // Larger font sizes
-                const fillColor = creditsText[i] === 'CREDITS' ? '#ffff00' : '#ffffff';
+                let fontSize, fillColor;
+                
+                // Assign colors and font sizes based on text type
+                switch (line.type) {
+                    case 'title':
+                        fontSize = 36; // Increased from 28
+                        fillColor = '#ffff00'; // Yellow
+                        break;
+                    case 'section':
+                        fontSize = 24; // Increased from 18
+                        fillColor = '#00ffff'; // Cyan
+                        break;
+                    case 'content':
+                        fontSize = 20; // Increased from 18
+                        fillColor = '#ffffff'; // White
+                        break;
+                    case 'closing':
+                        fontSize = 22; // Increased from 18
+                        fillColor = '#ff00ff'; // Magenta
+                        break;
+                    default:
+                        fontSize = 20;
+                        fillColor = '#ffffff';
+                }
                 
                 // Wrap text to matrix width with proper margin
-                const text = this.add.text(centerX, y, creditsText[i], {
+                const text = this.add.text(centerX, y, line.text, {
                     fontSize: `${fontSize}px`,
                     fill: fillColor,
                     stroke: '#000000',
-                    strokeThickness: 1,
+                    strokeThickness: 2,
                     fontFamily: 'Courier New',
-                    fontStyle: fontSize === 28 ? 'bold' : 'normal',
+                    fontStyle: 'bold', // All text is now bold
                     wordWrap: { width: this.cellSize * this.board.cols - 30 }, // Wrap to matrix width with margin
                     align: 'center'
                 }).setOrigin(0.5);
@@ -3266,13 +3328,17 @@ class GameScene extends Phaser.Scene {
     draw() {
         // Clear previous game elements
         this.gameGroup.clear(true, true);
+        
+        // Draw credits screen first (behind everything)
+        if (this.creditsActive) {
+            this.drawCreditsScreen();
+        }
+        
         // Border adjusted to fit exactly 10x20 with smaller width and height
         this.playfieldBorder = this.add.graphics();
         this.playfieldBorder.lineStyle(3, 0xffffff);
         this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
             this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
-
-
 
         // Draw game elements using matrix offset
         this.board.draw(this, this.matrixOffsetX, this.matrixOffsetY, this.cellSize);
@@ -3449,11 +3515,6 @@ class GameScene extends Phaser.Scene {
                 fontStyle: 'bold'
             }).setOrigin(0.5);
             this.gameGroup.add(gameOverText);
-        }
-
-        // Draw credits screen (behind the game)
-        if (this.creditsActive) {
-            this.drawCreditsScreen();
         }
 
     }
