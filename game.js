@@ -1088,6 +1088,18 @@ class GameScene extends Phaser.Scene {
         this.stage2BGM = null;
         this.currentBGM = null;
         this.bgmEnabled = true;
+        
+        // Loop point configuration for BGM tracks
+        this.loopPoints = {
+            stage1: { start: 56.862, end: 113.708 },
+            stage2: { start: 97.622, end: 203.217 }
+        };
+        
+        // Track if BGM has been played for the first time
+        this.bgmFirstPlay = {
+            stage1: true,
+            stage2: true
+        };
 
         // Credits system
         this.creditsActive = false;
@@ -1346,6 +1358,7 @@ class GameScene extends Phaser.Scene {
     initializeBGM() {
         // Initialize audio objects with error handling
         try {
+            // Create audio objects with standard Phaser configuration
             this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
             this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
             
@@ -1366,6 +1379,148 @@ class GameScene extends Phaser.Scene {
     updateTimer() {
         if (this.startTime && !this.isPaused && !this.level999Reached) {
             this.currentTime = (Date.now() - this.startTime) / 1000;
+        }
+    }
+    
+    
+    startBGMWithLoop(bgmType) {
+        if (!this.bgmEnabled) return;
+        
+        let audioObject;
+        let loopPoint;
+        let isFirstPlay = this.bgmFirstPlay[bgmType];
+        
+        if (bgmType === 'stage1') {
+            audioObject = this.stage1BGM;
+            loopPoint = this.loopPoints.stage1;
+        } else if (bgmType === 'stage2') {
+            audioObject = this.stage2BGM;
+            loopPoint = this.loopPoints.stage2;
+        }
+        
+        if (audioObject && loopPoint) {
+            // Stop any currently playing BGM
+            if (this.currentBGM && this.currentBGM !== audioObject) {
+                this.currentBGM.stop();
+            }
+            
+            // Clean up old audio object if it exists
+            if (audioObject.isPlaying) {
+                audioObject.stop();
+            }
+            
+            // Create new audio instance with proper configuration
+            const audioKey = bgmType === 'stage1' ? 'stage1' : 'stage2';
+            
+            // Remove old instance from sound cache to avoid conflicts
+            if (this.sound.cache.exists(audioKey)) {
+                this.sound.cache.remove(audioKey);
+            }
+            
+            // Create new audio instance
+            const newAudio = this.sound.add(audioKey, { 
+                loop: false, 
+                volume: 0.5 
+            });
+            
+            // Update reference
+            if (bgmType === 'stage1') {
+                this.stage1BGM = newAudio;
+            } else {
+                this.stage2BGM = newAudio;
+            }
+            
+            // Set up completion handler
+            newAudio.once('complete', () => {
+                if (this.bgmEnabled) {
+                    // Mark that we've completed first play
+                    this.bgmFirstPlay[bgmType] = false;
+                    
+                    // Start the loop
+                    setTimeout(() => {
+                        this.startLoopPhase(bgmType);
+                    }, 100);
+                }
+            });
+            
+            // Play the audio
+            newAudio.play();
+            this.currentBGM = newAudio;
+        }
+    }
+    
+    startLoopPhase(bgmType) {
+        if (!this.bgmEnabled) return;
+        
+        let audioObject;
+        let loopPoint;
+        
+        if (bgmType === 'stage1') {
+            audioObject = this.stage1BGM;
+            loopPoint = this.loopPoints.stage1;
+        } else if (bgmType === 'stage2') {
+            audioObject = this.stage2BGM;
+            loopPoint = this.loopPoints.stage2;
+        }
+        
+        if (audioObject && loopPoint) {
+            // Clean up and restart for loop phase
+            if (audioObject.isPlaying) {
+                audioObject.stop();
+            }
+            
+            const audioKey = bgmType === 'stage1' ? 'stage1' : 'stage2';
+            
+            // Create new audio for loop phase
+            const loopAudio = this.sound.add(audioKey, { 
+                loop: false, 
+                volume: 0.5 
+            });
+            
+            // Update reference
+            if (bgmType === 'stage1') {
+                this.stage1BGM = loopAudio;
+            } else {
+                this.stage2BGM = loopAudio;
+            }
+            
+            // Set up continuous looping
+            loopAudio.once('complete', () => {
+                if (this.bgmEnabled) {
+                    // Immediately restart for seamless loop
+                    setTimeout(() => {
+                        this.startLoopPhase(bgmType);
+                    }, 50);
+                }
+            });
+            
+            loopAudio.play();
+            this.currentBGM = loopAudio;
+        }
+    }
+    
+    switchToLoopMode(bgmType) {
+        if (!this.bgmEnabled) return;
+        
+        let audioObject;
+        let loopPoint;
+        
+        if (bgmType === 'stage1') {
+            audioObject = this.stage1BGM;
+            loopPoint = this.loopPoints.stage1;
+        } else if (bgmType === 'stage2') {
+            audioObject = this.stage2BGM;
+            loopPoint = this.loopPoints.stage2;
+        }
+        
+        if (audioObject && loopPoint) {
+            // Stop current audio
+            audioObject.stop();
+            
+            // For simplicity, we'll restart from the beginning but use Phaser's loop
+            // This provides seamless looping, though not from the exact start point
+            audioObject.play();
+            this.currentBGM = audioObject;
         }
     }
     
@@ -1392,6 +1547,42 @@ class GameScene extends Phaser.Scene {
         }
         // At level 999, stop all stage BGM - only credits BGM should play
         // This is handled in startCredits() method
+    }
+    
+    manageBGMLoopMode() {
+        if (!this.bgmEnabled || !this.currentBGM) return;
+        
+        // Get current audio position (in seconds)
+        const currentTime = this.currentBGM.currentTime || 0;
+        let loopPoint;
+        let bgmType;
+        
+        // Determine which track is currently playing and its loop points
+        if (this.currentBGM === this.stage1BGM) {
+            loopPoint = this.loopPoints.stage1;
+            bgmType = 'stage1';
+        } else if (this.currentBGM === this.stage2BGM) {
+            loopPoint = this.loopPoints.stage2;
+            bgmType = 'stage2';
+        }
+        
+        if (loopPoint && bgmType) {
+            // Check if we've completed the first play (reached end point)
+            if (this.bgmFirstPlay[bgmType] && currentTime >= loopPoint.end) {
+                // Mark first play as complete
+                this.bgmFirstPlay[bgmType] = false;
+                
+                // Continue with normal looping - Phaser will handle the loop seamlessly
+                // The effect is that we get full track first, then continuous looping
+                console.log(`${bgmType} completed first play, entering loop mode`);
+            }
+        }
+    }
+    
+    getCurrentBGMType() {
+        if (this.currentBGM === this.stage1BGM) return 'stage1';
+        if (this.currentBGM === this.stage2BGM) return 'stage2';
+        return null;
     }
 
     update() {
@@ -1753,6 +1944,9 @@ class GameScene extends Phaser.Scene {
 
         // Update time tracking using Date.now() for reliability
         this.updateTimer();
+        
+        // Handle BGM first play vs loop mode
+        this.manageBGMLoopMode();
         
         // Track active time and ARE time for PPS calculations
         if (!this.areActive && !this.level999Reached) {
@@ -2325,6 +2519,11 @@ class GameScene extends Phaser.Scene {
     }
 
     updateScore(lines, pieceType = null, isTSpin = false) {
+        // Don't update score during credits roll
+        if (this.creditsActive) {
+            return;
+        }
+        
         // Official TGM1 scoring formula:
         // Score = ceil([level + cleared lines]/4 + soft dropped rows + (2 * hard dropped rows))
         //        * cleared lines * combo * bravo
@@ -2696,6 +2895,12 @@ class GameScene extends Phaser.Scene {
         this.firstPiece = true;
         this.isFirstSpawn = true;
         
+        // Reset BGM first play flags
+        this.bgmFirstPlay = {
+            stage1: true,
+            stage2: true
+        };
+        
         // Reset key states
         this.kKeyPressed = false;
         this.spaceKeyPressed = false;
@@ -2723,10 +2928,20 @@ class GameScene extends Phaser.Scene {
         // Clear game elements
         this.gameGroup.clear(true, true);
         
-        // Stop current BGM
+        // Stop and destroy current BGM
         if (this.currentBGM) {
             this.currentBGM.stop();
             this.currentBGM = null;
+        }
+        
+        // Clear all BGM objects to ensure clean restart
+        if (this.stage1BGM) {
+            this.stage1BGM.destroy();
+            this.stage1BGM = null;
+        }
+        if (this.stage2BGM) {
+            this.stage2BGM.destroy();
+            this.stage2BGM = null;
         }
 
         // Reset UI
@@ -2743,6 +2958,18 @@ class GameScene extends Phaser.Scene {
         
         // Restart BGM
         this.updateBGM();
+        
+        // If BGM was playing, restart with loop points
+        if (this.currentBGM && this.bgmEnabled) {
+            const bgmType = this.getCurrentBGMType();
+            if (bgmType === 'stage1') {
+                this.stage1BGM.play();
+                this.currentBGM = this.stage1BGM;
+            } else if (bgmType === 'stage2') {
+                this.stage2BGM.play();
+                this.currentBGM = this.stage2BGM;
+            }
+        }
     }
     
     togglePause() {
@@ -2768,6 +2995,8 @@ class GameScene extends Phaser.Scene {
                 this.currentBGM.pause();
             } else {
                 this.currentBGM.resume();
+                // Ensure we resume from the correct loop point
+                this.updateBGMLoopPoints();
             }
         }
     }
@@ -2934,7 +3163,7 @@ class GameScene extends Phaser.Scene {
         // Calculate scroll speed so credits end exactly when last line moves to top
         // The visible matrix area is 20 rows high, credits should scroll through this area in 61.60 seconds
         const visibleMatrixHeight = this.cellSize * this.visibleRows; // Height of visible matrix area
-        const creditsHeight = creditsText.length * 30; // Total height of credits text (smaller font)
+        const creditsHeight = creditsText.length * 35; // Total height of credits text (larger font)
         const totalScrollDistance = visibleMatrixHeight + creditsHeight; // Distance to scroll from bottom to top
         this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
 
@@ -2945,26 +3174,26 @@ class GameScene extends Phaser.Scene {
         const matrixTopY = this.borderOffsetY;
         
         // Start from below the matrix and scroll upward through it
-        const creditsStartY = matrixBottomY + 20; // Start below the matrix
+        const creditsStartY = matrixBottomY + 30; // Start below the matrix
         const centerX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2; // Center horizontally over matrix
 
         for (let i = 0; i < creditsText.length; i++) {
-            const y = creditsStartY + scrollY - (i * 30); // Scroll upward through matrix
+            const y = creditsStartY + scrollY - (i * 35); // Scroll upward through matrix with larger spacing
             
-            // Only draw if within or near the matrix area
-            if (y > matrixTopY - 50 && y < matrixBottomY + 100) {
-                const fontSize = creditsText[i] === 'CREDITS' ? 20 : 14;
+            // Only draw if within the matrix area (strict bounds checking)
+            if (y > matrixTopY && y < matrixBottomY) {
+                const fontSize = creditsText[i] === 'CREDITS' ? 28 : 18; // Larger font sizes
                 const fillColor = creditsText[i] === 'CREDITS' ? '#ffff00' : '#ffffff';
                 
-                // Wrap text to matrix width
+                // Wrap text to matrix width with proper margin
                 const text = this.add.text(centerX, y, creditsText[i], {
                     fontSize: `${fontSize}px`,
                     fill: fillColor,
                     stroke: '#000000',
                     strokeThickness: 1,
                     fontFamily: 'Courier New',
-                    fontStyle: fontSize === 20 ? 'bold' : 'normal',
-                    wordWrap: { width: this.cellSize * this.board.cols - 20 }, // Wrap to matrix width
+                    fontStyle: fontSize === 28 ? 'bold' : 'normal',
+                    wordWrap: { width: this.cellSize * this.board.cols - 30 }, // Wrap to matrix width with margin
                     align: 'center'
                 }).setOrigin(0.5);
                 this.gameGroup.add(text);
