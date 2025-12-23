@@ -7,33 +7,8 @@ class TGM2NormalMode extends BaseMode {
         this.modeName = 'TGM2 Normal';
         this.modeId = 'tgm2_normal';
         
-        // Normal mode configuration
-        this.config = {
-            gravity: { type: 'tgm2_normal' }, // Use TGM2 Normal gravity curve
-            das: 16/60,                    // Standard TGM2 Normal DAS
-            arr: 2/60,                     // Standard TGM2 Normal ARR  
-            are: 27/60,                    // TGM2 Normal ARE timing
-            lineAre: 27/60,                // Line clear ARE
-            lockDelay: 30/60,              // TGM2 Normal lock delay
-            lineClearDelay: 40/60,         // Line clear delay
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM2 supports hold
-            ghostEnabled: true,            // Ghost piece enabled
-            levelUpType: 'piece',          // Level up per piece
-            lineClearBonus: 1,
-            gravityLevelCap: 300,          // Cap at level 300
-            specialMechanics: {
-                itemBlocks: true,          // Enable item block system
-                tgm2Grading: true,         // Use TGM2 grading system
-                creditRoll: true,          // Credit roll at end
-                slowCreditRoll: true       // Slow 20G credit roll
-            }
-        };
         
-        // TGM2 grade display
-        this.displayedGrade = '9';
-        
-        // TGM2 scoring
+        // TGM2 scoring (no grading)
         this.tgm2Score = 0;
         
         // Item block system
@@ -43,14 +18,13 @@ class TGM2NormalMode extends BaseMode {
         };
         this.itemBlockActive = null; // Currently active item block
         this.itemBlockQueue = [];    // Queue of item blocks to spawn
+        this.itemAnimationActive = false; // Flag for active item animation
         
         // Game progression tracking
         this.creditsStarted = false;
         this.creditsTimer = 0;
         this.creditsDuration = 61.60; // Same as other TGM2 modes
         
-        // Initialize TGM2 grading system
-        this.tgm2Grading = new TGM2GradingSystem();
     }
     
     // Get mode configuration
@@ -137,15 +111,27 @@ class TGM2NormalMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-        
-        // Initialize TGM2 grading system level
-        this.tgm2Grading.setLevel(gameScene.level);
-        
+
         console.log('TGM2 Normal Mode initialized with item block system');
     }
     
     // Handle level progression and item block spawning
     onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'piece') {
+            // TGM2 Normal: Level increases by 1 for every piece, but no stops at 99 and 199
+            // Stops at 299, 399, etc. but since cap is 300, effectively stops at 299
+            const currentIsStopLevel = (level % 100 === 99 && level !== 99 && level !== 199) ||
+                                      (level === 299) || // Stop at 299 for 300 cap
+                                      (level >= 300);   // Cap at 300
+            if (!currentIsStopLevel && level < 300) {
+                return level + 1;
+            }
+            return level; // Stay at stop level
+        } else if (updateType === 'lines') {
+            // Line clears can bypass stops
+            return Math.min(level + amount, 300);
+        }
+
         // Check for item block spawning
         if (!this.itemBlockSpawned.free_fall && level >= 100) {
             this.queueItemBlock('free_fall');
@@ -156,7 +142,7 @@ class TGM2NormalMode extends BaseMode {
             this.queueItemBlock('del_even');
             this.itemBlockSpawned.del_even = true;
         }
-        
+
         return level;
     }
     
@@ -199,62 +185,28 @@ class TGM2NormalMode extends BaseMode {
         return piece;
     }
     
-    // Handle line clear with TGM2 grading and item block effects
+    // Handle line clear with item block effects
     handleLineClear(gameScene, linesCleared, pieceType = null) {
         // Check if the cleared piece was an item block
         if (gameScene.currentPiece && gameScene.currentPiece.isItemBlock) {
             this.activateItemBlock(gameScene.currentPiece.itemType, gameScene);
         }
-        
-        // Handle TGM2 grading system
-        if (this.config.specialMechanics.tgm2Grading) {
-            // Update level in grading system
-            this.tgm2Grading.setLevel(gameScene.level);
-            
-            // Calculate combo size for TGM2
-            const comboSize = this.calculateTGM2ComboSize(gameScene);
-            
-            // Check if this was a Tetris
-            const isTetris = linesCleared === 4;
-            
-            // Award grade points
-            const gradePoints = this.tgm2Grading.awardPoints(linesCleared, comboSize, gameScene.level, isTetris);
-            
-            // Update displayed grade
-            this.displayedGrade = this.tgm2Grading.getDisplayedGrade();
-            
-            // Update grade display in game
-            if (gameScene.gradeText) {
-                gameScene.gradeText.setText(this.displayedGrade);
-            }
-            
-            // Trigger grade up animation if needed
-            if (this.tgm2Grading.getGradeUpAnimationState()) {
-                this.triggerGradeUpAnimation(gameScene);
-            }
-        }
-        
+
         // Handle TGM2 scoring
         this.updateTGM2Score(gameScene, linesCleared, pieceType);
-        
+
         // Check for credit roll start
         this.checkCreditRoll(gameScene);
     }
     
-    // Calculate TGM2 combo size
-    calculateTGM2ComboSize(gameScene) {
-        if (gameScene.comboCount === -1) {
-            return 1; // No combo active
-        }
-        
-        // TGM2 combo is based on consecutive non-single clears
-        return Math.max(1, gameScene.comboCount + 1);
-    }
     
     // Activate item block effect
     activateItemBlock(itemType, gameScene) {
         console.log(`TGM2 Normal: Activated ${itemType} item block`);
-        
+
+        // Set animation active flag
+        this.itemAnimationActive = true;
+
         switch (itemType) {
             case 'free_fall':
                 this.activateFreeFall(gameScene);
@@ -263,65 +215,220 @@ class TGM2NormalMode extends BaseMode {
                 this.activateDelEven(gameScene);
                 break;
         }
-        
+
         // Play item activation sound
         if (gameScene.sound) {
             const itemSound = gameScene.sound.add('gradeup', { volume: 0.8 });
             itemSound.play();
         }
-        
-        // Show item activation message
+
+        // Show item activation message (2 seconds)
         this.showItemMessage(gameScene, itemType);
     }
     
-    // Free Fall: Eliminates all holes
+    // Free Fall: Eliminates all holes with animation
     activateFreeFall(gameScene) {
         console.log('TGM2 Normal: Free Fall activated - eliminating holes');
-        
-        // Apply gravity to all columns to eliminate holes
+
+        // First, shake the matrix up and down twice
+        this.shakeMatrix(gameScene, () => {
+            // After shake, apply gravity animation
+            this.animateFreeFall(gameScene);
+        });
+    }
+
+    // Shake the matrix up and down twice
+    shakeMatrix(gameScene, callback) {
+        const shakeAmount = 10;
+        const shakeDuration = 100; // ms per shake
+
+        // First shake down
+        gameScene.tweens.add({
+            targets: gameScene.gameGroup,
+            y: shakeAmount,
+            duration: shakeDuration,
+            ease: 'Power2',
+            yoyo: true,
+            onComplete: () => {
+                // Second shake down
+                gameScene.tweens.add({
+                    targets: gameScene.gameGroup,
+                    y: shakeAmount,
+                    duration: shakeDuration,
+                    ease: 'Power2',
+                    yoyo: true,
+                    onComplete: callback
+                });
+            }
+        });
+    }
+
+    // Animate the free fall effect
+    animateFreeFall(gameScene) {
         const rows = gameScene.board.rows;
         const cols = gameScene.board.cols;
-        
+
+        // Create a copy of the current board state
+        const originalGrid = gameScene.board.grid.map(row => [...row]);
+
+        // Calculate new positions for each mino
+        const animations = [];
+
         for (let col = 0; col < cols; col++) {
             // Extract column
             const column = [];
             for (let row = 0; row < rows; row++) {
-                column.push(gameScene.board.grid[row][col]);
+                column.push(originalGrid[row][col]);
             }
-            
+
             // Remove empty spaces (gravity)
             const compactedColumn = column.filter(cell => cell !== 0);
-            
-            // Fill column from bottom
+
+            // Track which minos need to move and how far
+            let compactedIndex = 0;
+            for (let row = rows - 1; row >= 0; row--) {
+                if (originalGrid[row][col] !== 0) {
+                    const newRow = rows - 1 - compactedIndex;
+                    const distance = row - newRow;
+
+                    if (distance > 0) {
+                        // This mino needs to fall
+                        animations.push({
+                            col: col,
+                            fromRow: row,
+                            toRow: newRow,
+                            color: originalGrid[row][col]
+                        });
+                    }
+                    compactedIndex++;
+                }
+            }
+        }
+
+        // Apply gravity to board immediately
+        for (let col = 0; col < cols; col++) {
+            const column = [];
+            for (let row = 0; row < rows; row++) {
+                column.push(originalGrid[row][col]);
+            }
+
+            const compactedColumn = column.filter(cell => cell !== 0);
             const newColumn = Array(rows).fill(0);
             for (let i = 0; i < compactedColumn.length; i++) {
                 newColumn[rows - 1 - i] = compactedColumn[compactedColumn.length - 1 - i];
             }
-            
-            // Put column back
+
             for (let row = 0; row < rows; row++) {
                 gameScene.board.grid[row][col] = newColumn[row];
             }
         }
+
+        // Animate the falling minos
+        if (animations.length > 0) {
+            const fallDuration = 500; // 0.5 seconds
+            const cellSize = gameScene.cellSize;
+            const matrixOffsetX = gameScene.matrixOffsetX;
+            const matrixOffsetY = gameScene.matrixOffsetY;
+
+            animations.forEach(anim => {
+                const sprite = gameScene.add.sprite(
+                    matrixOffsetX + anim.col * cellSize,
+                    matrixOffsetY + (anim.fromRow - 2) * cellSize,
+                    gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs'
+                );
+                sprite.setDisplaySize(cellSize, cellSize);
+                sprite.setTint(anim.color);
+
+                gameScene.tweens.add({
+                    targets: sprite,
+                    y: matrixOffsetY + (anim.toRow - 2) * cellSize,
+                    duration: fallDuration,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        sprite.destroy();
+                    }
+                });
+            });
+        }
     }
     
-    // Del Even: Clears every other row
+    // Del Even: Clears every other row with animation
     activateDelEven(gameScene) {
         console.log('TGM2 Normal: Del Even activated - clearing every other row');
-        
+
         const rowsToDelete = [];
         const rows = gameScene.board.rows;
-        
-        // Delete every other row (even-numbered rows)
+
+        // Identify every other row (even-numbered rows)
         for (let r = 0; r < rows; r++) {
             if (r % 2 === 0) { // Delete even rows
                 rowsToDelete.push(r);
             }
         }
-        
+
         if (rowsToDelete.length > 0) {
-            this.deleteRows(gameScene, rowsToDelete);
+            this.animateDelEven(gameScene, rowsToDelete);
         }
+    }
+
+    // Animate DEL EVEN effect - fade rows one by one
+    animateDelEven(gameScene, rowsToDelete) {
+        const cellSize = gameScene.cellSize;
+        const matrixOffsetX = gameScene.matrixOffsetX;
+        const matrixOffsetY = gameScene.matrixOffsetY;
+        const fadeDuration = 300; // ms per row
+        const delayBetweenRows = 100; // ms delay between starting each row's fade
+
+        let currentIndex = 0;
+
+        const fadeNextRow = () => {
+            if (currentIndex >= rowsToDelete.length) {
+                // All rows faded, now delete them
+                this.deleteRows(gameScene, rowsToDelete);
+                return;
+            }
+
+            const row = rowsToDelete[currentIndex];
+            const sprites = [];
+
+            // Create sprites for all minos in this row
+            for (let col = 0; col < gameScene.board.cols; col++) {
+                if (gameScene.board.grid[row][col] !== 0) {
+                    const sprite = gameScene.add.sprite(
+                        matrixOffsetX + col * cellSize,
+                        matrixOffsetY + (row - 2) * cellSize,
+                        gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs'
+                    );
+                    sprite.setDisplaySize(cellSize, cellSize);
+                    sprite.setTint(gameScene.board.grid[row][col]);
+                    sprites.push(sprite);
+                }
+            }
+
+            // Fade all sprites in this row
+            if (sprites.length > 0) {
+                gameScene.tweens.add({
+                    targets: sprites,
+                    alpha: 0,
+                    duration: fadeDuration,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        // Destroy sprites after fade
+                        sprites.forEach(sprite => sprite.destroy());
+                        currentIndex++;
+                        // Schedule next row after delay
+                        gameScene.time.delayedCall(delayBetweenRows, fadeNextRow);
+                    }
+                });
+            } else {
+                // No sprites in this row, move to next
+                currentIndex++;
+                gameScene.time.delayedCall(delayBetweenRows, fadeNextRow);
+            }
+        };
+
+        // Start fading the first row
+        fadeNextRow();
     }
     
     // Delete specific rows
@@ -370,9 +477,10 @@ class TGM2NormalMode extends BaseMode {
             
             gameScene.gameGroup.add(itemText);
             
-            // Fade out after 2 seconds
+            // Fade out after 2 seconds and end animation
             gameScene.time.delayedCall(2000, () => {
                 itemText.destroy();
+                this.itemAnimationActive = false;
             });
         }
     }
@@ -447,41 +555,13 @@ class TGM2NormalMode extends BaseMode {
         }
     }
     
-    // Trigger grade up animation
-    triggerGradeUpAnimation(gameScene) {
-        if (gameScene.sound) {
-            const gradeUpSound = gameScene.sound.add('gradeup', { volume: 0.6 });
-            gradeUpSound.play();
-        }
-        
-        // Flash grade text
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setTint(0xffff00);
-            gameScene.time.delayedCall(200, () => {
-                gameScene.gradeText.setTint(0xffffff);
-            });
-        }
-    }
     
-    // Update TGM2 grading system decay (called every frame)
+    // Update method (called every frame)
     update(gameScene, deltaTime) {
-        if (this.config.specialMechanics.tgm2Grading) {
-            // Update TGM2 grading system decay
-            this.tgm2Grading.update(deltaTime);
-            
-            // Update game state for decay control
-            const hasControl = !gameScene.areActive;
-            const hasActiveCombo = gameScene.comboCount >= 1 && gameScene.lastClearType !== 'single';
-            this.tgm2Grading.setGameState(hasControl, hasActiveCombo);
-            
-            // Update level in grading system
-            this.tgm2Grading.setLevel(gameScene.level);
-        }
-        
         // Handle credit roll
         if (this.creditsStarted) {
             this.creditsTimer += deltaTime;
-            
+
             if (this.creditsTimer >= this.creditsDuration) {
                 this.creditsStarted = false;
                 gameScene.showGameOverScreen();
@@ -489,10 +569,6 @@ class TGM2NormalMode extends BaseMode {
         }
     }
     
-    // Get current displayed grade
-    getDisplayedGrade() {
-        return this.displayedGrade;
-    }
     
     // Handle game over
     onGameOver(gameScene) {
@@ -518,12 +594,9 @@ class TGM2NormalMode extends BaseMode {
         const newScore = {
             score: this.tgm2Score,
             level: gameScene.level,
-            grade: this.displayedGrade,
-            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
-            gradePoints: this.tgm2Grading.totalGradePoints,
-            internalGrade: this.tgm2Grading.internalGrade
+            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`
         };
-        
+
         // Update if better score
         if (newScore.score > currentBest.score) {
             localStorage.setItem(key, JSON.stringify(newScore));
@@ -537,31 +610,26 @@ class TGM2NormalMode extends BaseMode {
         if (stored) {
             return JSON.parse(stored);
         }
-        return { 
-            score: 0, 
-            level: 0, 
-            grade: '9', 
-            time: '0:00.00',
-            gradePoints: 0,
-            internalGrade: 0
+        return {
+            score: 0,
+            level: 0,
+            time: '0:00.00'
         };
     }
     
     // Reset mode state for new game
     reset() {
         super.reset();
-        
-        // Reset TGM2 grading system
-        this.tgm2Grading.reset();
-        this.displayedGrade = '9';
+
         this.tgm2Score = 0;
-        
+
         // Reset item block system
         this.itemBlockSpawned.free_fall = false;
         this.itemBlockSpawned.del_even = false;
         this.itemBlockActive = null;
         this.itemBlockQueue = [];
-        
+        this.itemAnimationActive = false;
+
         // Reset credit roll
         this.creditsStarted = false;
         this.creditsTimer = 0;

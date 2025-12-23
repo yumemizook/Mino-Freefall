@@ -10,13 +10,7 @@ class TADeathMode extends BaseMode {
         // T.A. Death mode configuration (20G gravity, complex timing)
         this.config = {
             gravity: { type: 'fixed_20g' },     // Fixed 20G gravity throughout
-            das: 16/60,                     // Base T.A. Death DAS (changes with timing phases)
-            arr: 2/60,                      // Standard T.A. Death ARR  
-            are: 27/60,                     // Base T.A. Death ARE timing (changes with timing phases)
-            lineAre: 27/60,                 // Base line clear ARE (changes with timing phases)
-            lockDelay: 30/60,               // Base T.A. Death lock delay (changes with timing phases)
-            lineClearDelay: 40/60,          // Base line clear delay (changes with timing phases)
-            nextPieces: 4,                  // Standard next queue
+            nextPieces: 1,                  // Standard next queue
             holdEnabled: true,              // T.A. Death supports hold
             ghostEnabled: true,             // Ghost piece enabled
             levelUpType: 'piece',           // Level up per piece
@@ -87,25 +81,31 @@ class TADeathMode extends BaseMode {
     
     // Get timing values (dynamic based on current timing phase)
     getDAS() {
-        return this.getCurrentTimingPhase().das;
+        const das = this.getCurrentTimingPhase().das;
+        console.log(`T.A.Death DAS: ${das} (phase ${this.currentTimingPhase})`);
+        return das;
     }
-    
+
     getARR() {
         return this.config.arr;
     }
-    
+
     getARE() {
-        return this.getCurrentTimingPhase().are;
+        const are = this.getCurrentTimingPhase().are;
+        console.log(`T.A.Death ARE: ${are} (phase ${this.currentTimingPhase})`);
+        return are;
     }
-    
+
     getLineARE() {
         return this.getCurrentTimingPhase().lineAre;
     }
-    
+
     getLockDelay() {
-        return this.getCurrentTimingPhase().lock;
+        const lock = this.getCurrentTimingPhase().lock;
+        console.log(`T.A.Death Lock Delay: ${lock} (phase ${this.currentTimingPhase})`);
+        return lock;
     }
-    
+
     getLineClearDelay() {
         return this.getCurrentTimingPhase().lineClear;
     }
@@ -157,13 +157,20 @@ class TADeathMode extends BaseMode {
     onLevelUpdate(level, oldLevel, updateType, amount) {
         // Update timing phase
         this.updateTimingPhase(level);
-        
+
         // Check for torikan start (level 500)
         if (level >= 500 && !this.startedAtLevel500) {
             this.startedAtLevel500 = true;
             this.onTorikanStart();
         }
-        
+
+        // T.A. Death levels up per piece, like other TGM modes
+        if (updateType === 'piece') {
+            return level + 1;
+        } else if (updateType === 'lines') {
+            return level + amount;
+        }
+
         return level;
     }
     

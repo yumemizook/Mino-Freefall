@@ -12,10 +12,39 @@ class ModeManager {
             'easy': '#00ff00',      // green
             'standard': '#0088ff',  // blue
             'master': '#888888',    // grey
-            '20g': '#ffff00',       // yellow
+            '20g': '#ff0000',       // red
             'race': '#ff8800',      // orange
             'all clear': '#ff69b4', // pink
             'puzzle': '#8800ff'     // purple
+        };
+
+        // Specific colors for individual modes (hex numbers for Phaser)
+        this.modeColors = {
+            'tgm1': 0x888888,      // grey
+            'tgm2': 0x888888,      // grey
+            'tgm3': 0x888888,      // grey
+            'tgm4': 0x888888,      // grey
+            '20g': 0xff0000,       // red
+            'tadeath': 0xff0000,   // red
+            'shirase': 0xff0000,   // red
+            'master20g': 0xff0000, // red
+            'marathon': 0x0088ff,  // blue
+            'ultra': 0x0088ff,     // blue
+            'zen': 0x0088ff,       // blue
+            'sprint_40': 0x0088ff, // blue
+            'sprint_100': 0x0088ff, // blue
+            'asuka_easy': 0xff8800, // orange
+            'asuka_normal': 0xff8800, // orange
+            'asuka_hard': 0xff8800, // orange
+            'konoha_easy': 0xff69b4, // pink
+            'konoha_hard': 0xff69b4, // pink
+            'tgm3_sakura': 0x8800ff, // purple
+            'flashpoint': 0x8800ff, // purple
+            'easy_normal': 0x00ff00, // green
+            'easy_easy': 0x00ff00, // green
+            'tgm2_master': 0x888888, // grey
+            'tgm2_normal': 0x00ff00, // green
+            'tgm_plus': 0x888888   // grey
         };
         
         this.initializeModes();
@@ -26,57 +55,152 @@ class ModeManager {
         // Register all available modes with their IDs and class references
         const modeDefinitions = {
             // EASY modes
-            'easy_normal': { 
-                modeClass: 'EasyMode', 
-                config: { difficulty: 'easy', description: 'Score as many points as you can within 300 levels!' }
+            'easy_normal': {
+                modeClass: 'EasyMode',
+                config: {
+                    difficulty: 'easy',
+                    description: 'Score as many points as you can within 300 levels!',
+                    gravity: { type: 'tgm1', value: 0, curve: null },
+                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
+                    nextPieces: 1, holdEnabled: false, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
-            'easy_easy': { 
-                modeClass: 'EasyMode', 
-                config: { difficulty: 'easy', description: 'Clear lines, light fireworks. Have fun!' }
+            'easy_easy': {
+                modeClass: 'EasyMode',
+                config: {
+                    difficulty: 'easy',
+                    description: 'Clear lines, light fireworks. Have fun!',
+                    gravity: { type: 'tgm1', value: 0, curve: null },
+                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
+                    nextPieces: 1, holdEnabled: false, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
             
             // STANDARD modes
-            'sprint_40': {         
-                modeClass: 'Sprint40Mode', 
-                config: { difficulty: 'standard', description: 'Clear 40 lines as fast as possible' }
+            'sprint_40': {
+                modeClass: 'Sprint40Mode',
+                config: {
+                    difficulty: 'standard',
+                    description: 'Clear 40 lines as fast as possible',
+                    gravity: { type: 'static', value: 5120, curve: null },
+                    das: 8/60, arr: 1/60, are: 15/60, lockDelay: 0.2,
+                    nextPieces: 6, holdEnabled: true, ghostEnabled: false,
+                    levelUpType: 'lines', lineClearBonus: 2, gravityLevelCap: 999
+                }
             },
-            'sprint_100': { 
-                modeClass: 'Sprint40Mode', 
-                config: { difficulty: 'standard', description: 'Clear 100 lines as fast as possible' }
+            'sprint_100': {
+                modeClass: 'Sprint40Mode',
+                config: {
+                    difficulty: 'standard',
+                    description: 'Clear 100 lines as fast as possible',
+                    gravity: { type: 'static', value: 5120, curve: null },
+                    das: 8/60, arr: 1/60, are: 15/60, lockDelay: 0.2,
+                    nextPieces: 6, holdEnabled: true, ghostEnabled: false,
+                    levelUpType: 'lines', lineClearBonus: 2, gravityLevelCap: 999,
+                    specialMechanics: {
+                        targetLines: 100,
+                        timeAttack: true,
+                        speedBonus: true
+                    }
+                }
             },
             'ultra': { 
                 modeClass: 'MarathonMode', 
                 config: { difficulty: 'standard', description: '2-minute score attack' }
             },
-            'marathon': { 
-                modeClass: 'MarathonMode', 
-                config: { difficulty: 'standard', description: 'Clear 150 lines' }
+            'marathon': {
+                modeClass: 'MarathonMode',
+                config: {
+                    difficulty: 'standard',
+                    description: 'Clear 150 lines',
+                    gravity: {
+                        type: 'custom',
+                        value: 0,
+                        curve: (level) => {
+                            if (level < 50) return 128;
+                            if (level < 100) return 256;
+                            if (level < 150) return 512;
+                            if (level < 200) return 1024;
+                            return 2048;
+                        }
+                    },
+                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
+                    nextPieces: 3, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'lines', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
-            'zen': { 
-                modeClass: 'ZenMode', 
-                config: { difficulty: 'standard', description: 'Endless relaxed play' }
+            'zen': {
+                modeClass: 'ZenMode',
+                config: {
+                    difficulty: 'standard',
+                    description: 'Endless relaxed play',
+                    gravity: { type: 'static', value: 64, curve: null },
+                    das: 20/60, arr: 1/60, are: 40/60, lockDelay: 2.0,
+                    nextPieces: 7, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
             
             // MASTER modes
-            'tgm1': { 
-                modeClass: 'TGM1Mode', 
-                config: { difficulty: 'master', description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!' }
+            'tgm1': {
+                modeClass: 'TGM1Mode',
+                config: {
+                    difficulty: 'master',
+                    description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!',
+                    gravity: { type: 'tgm1', value: 0, curve: null },
+                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
+                    nextPieces: 1, holdEnabled: false, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
-            'tgm2': { 
-                modeClass: 'TGM2Mode', 
-                config: { difficulty: 'master', description: 'Brand new mechanics, brand new challenges! Do you have what it takes?' }
-            },
-            'tgm2_master': { 
-                modeClass: 'TGM2MasterMode', 
-                config: { difficulty: 'master', description: 'TGM2 Master mode with progressive timing and 999 levels!' }
+            'tgm2': {
+                modeClass: 'TGM2MasterMode',
+                config: {
+                    difficulty: 'master',
+                    description: 'Brand new mechanics, brand new challenges! Do you have what it takes?',
+                    gravity: { type: 'tgm2_master' },
+                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
+                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
+                    specialMechanics: {
+                        fadingRoll: true,
+                        mRoll: true,
+                        tgm2Grading: true,
+                        progressiveTimings: true
+                    }
+                }
             },
             'tgm2_normal': {
                 modeClass: 'TGM2NormalMode',
-                config: { difficulty: 'easy', description: 'TGM2 Normal mode with item blocks at levels 100 and 200!' }
+                config: {
+                    difficulty: 'easy',
+                    description: 'TGM2 Normal mode with item blocks at levels 100 and 200!',
+                    gravity: { type: 'custom', value: 0, curve: null }, // Uses custom gravity in mode
+                    das: 14/60, arr: 1/60, are: 25/60, lockDelay: 0.5,
+                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 300,
+                    hasGrading: false
+                }
             },
-            'tgm_plus': { 
-                modeClass: 'TGMPlusMode', 
-                config: { difficulty: 'master', description: 'Rising garbage mode with fixed 24-row pattern!' }
+            'tgm_plus': {
+                modeClass: 'TGMPlusMode',
+                config: {
+                    difficulty: 'master',
+                    description: 'Rising garbage mode with fixed 24-row pattern!',
+                    gravity: { type: 'tgm2_master' },
+                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
+                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
+                    specialMechanics: {
+                        risingGarbage: true,
+                        noGrading: true,
+                        fixedPattern: true,
+                        excellentMessage: true
+                    },
+                    hasGrading: false
+                }
             },
             'tgm3': { 
                 modeClass: 'TGM3Mode', 
@@ -88,13 +212,34 @@ class ModeManager {
             },
             
             // 20G modes
-            '20g': { 
-                modeClass: 'Mode20G', 
-                config: { difficulty: '20g', description: 'Maximum gravity from the start! Good luck!' }
+            '20g': {
+                modeClass: 'Mode20G',
+                config: {
+                    difficulty: '20g',
+                    description: 'Maximum gravity from the start! Good luck!',
+                    gravity: { type: 'static', value: 5120, curve: null },
+                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
+                    nextPieces: 1, holdEnabled: false, ghostEnabled: false,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                }
             },
-            'tadeath': { 
-                modeClass: 'TADeathMode', 
-                config: { difficulty: '20g', description: 'Extreme 20G mode with torikan time limit. The ultimate test!' }
+            'tadeath': {
+                modeClass: 'TADeathMode',
+                config: {
+                    difficulty: '20g',
+                    description: 'Extreme 20G mode with torikan time limit. The ultimate test!',
+                    gravity: { type: 'fixed_20g' },
+                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
+                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
+                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
+                    specialMechanics: {
+                        fixed20G: true,
+                        progressiveTimings: true,
+                        torikanLimit: true,
+                        minimalGrading: true,
+                        deathMechanics: true
+                    }
+                }
             },
             'shirase': { 
                 modeClass: 'ShiraseMode', 
@@ -152,6 +297,7 @@ class ModeManager {
             return null;
         }
 
+
         // Return cached mode if already loaded
         if (this.loadedModes.has(modeId)) {
             return this.modes.get(modeId);
@@ -159,7 +305,7 @@ class ModeManager {
 
         // Create new mode instance
         let modeInstance = null;
-        
+
         try {
             switch (modeDef.modeClass) {
                 case 'TGM1Mode':
@@ -210,8 +356,10 @@ class ModeManager {
                     break;
 
                 case 'TADeathMode':
+                    console.log(`Checking TADeathMode: ${typeof TADeathMode}`);
                     if (typeof TADeathMode !== 'undefined') {
                         modeInstance = new TADeathMode();
+                        console.log('TADeathMode instantiated successfully');
                     } else {
                         console.warn('TADeathMode not loaded, using BaseMode fallback');
                         modeInstance = new BaseMode();
@@ -259,11 +407,13 @@ class ModeManager {
                     modeInstance = new BaseMode();
             }
             
-            // Set mode metadata
+            // Set mode metadata and config
             if (modeInstance) {
                 modeInstance.modeId = modeId;
                 modeInstance.difficulty = modeDef.config.difficulty;
                 modeInstance.metadata = modeDef.config;
+                // Override the mode's config with the centralized config
+                modeInstance.config = modeDef.config;
             }
             
         } catch (error) {
@@ -305,6 +455,12 @@ class ModeManager {
     // Get mode information without loading
     getModeInfo(modeId) {
         return this.modeDefinitions[modeId] || null;
+    }
+
+    // Get mode configuration
+    getModeConfig(modeId) {
+        const modeInfo = this.getModeInfo(modeId);
+        return modeInfo ? modeInfo.config : null;
     }
 
     // Get all modes grouped by difficulty

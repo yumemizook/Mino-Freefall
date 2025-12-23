@@ -736,7 +736,7 @@ class MenuScene extends Phaser.Scene {
             {
                 name: 'EASY',
                 modes: [
-                    { id: 'easy_normal', name: 'Normal', description: 'Score as many points as you can within 300 levels!' },
+                    { id: 'tgm2_normal', name: 'Normal', description: 'Score as many points as you can within 300 levels!' },
                     { id: 'easy_easy', name: 'Easy', description: 'Clear lines, light fireworks. Have fun!' }
                 ]
             },
@@ -1323,18 +1323,14 @@ class AssetLoaderScene extends Phaser.Scene {
             this.load.audio('stage1', 'bgm/tm1_1.mp3');
             this.load.audio('stage2', 'bgm/tm1_2.mp3');
             this.load.audio('credits', 'bgm/tm1_endroll.mp3');
+
+            // Load TGM2 BGM files
+            this.load.audio('tgm2_stage1', 'bgm/tm1_1.mp3');
+            this.load.audio('tgm2_stage2', 'bgm/tm1_2.mp3');
+            this.load.audio('tgm2_stage3', 'bgm/tm2_3.mp3');
+            this.load.audio('tgm2_stage4', 'bgm/tm2_4.mp3');
         } catch (error) {
-            console.warn('BGM files could not be loaded from bgm directory, trying converted_audio directory:', error);
-            
-            // Try converted_audio directory as fallback
-            try {
-                console.log('Attempting to load BGM files from converted_audio directory...');
-                this.load.audio('stage1', 'converted_audio/tm1_1.mp3');
-                this.load.audio('stage2', 'converted_audio/tm1_2.mp3');
-                this.load.audio('credits', 'converted_audio/tm1_endroll.mp3');
-            } catch (fallbackError) {
-                console.warn('BGM files could not be loaded from either directory:', fallbackError);
-            }
+            console.warn('BGM files could not be loaded from bgm directory', error);
         }
         
         // Load all sound effects
@@ -1641,28 +1637,14 @@ class GameScene extends Phaser.Scene {
         this.wasGroundedDuringSoftDrop = false;
     }
 
-    // Get border color based on selected mode type
+    // Get border color based on selected mode
     getModeTypeBorderColor() {
-        console.log('getModeTypeBorderColor() called - selectedMode:', this.selectedMode);
-        
-        if (!this.selectedMode || typeof getModeManager === 'undefined') {
-            console.log('getModeTypeBorderColor: No mode or manager, returning white');
-            return 0xffffff; // Default white if no mode
-        }
-        
-        const modeManager = getModeManager();
-        const modeInfo = modeManager.getModeInfo(this.selectedMode);
-        
-        console.log('getModeTypeBorderColor: modeInfo =', modeInfo);
-        
-        if (modeInfo && modeInfo.config && modeInfo.config.difficulty) {
-            const difficulty = modeInfo.config.difficulty;
-            const color = modeManager.difficultyColors[difficulty];
-            console.log(`getModeTypeBorderColor: difficulty='${difficulty}', color='${color}'`);
+        if (this.gameMode && this.gameMode.modeId && typeof getModeManager !== 'undefined') {
+            const modeManager = getModeManager();
+            const color = modeManager.modeColors[this.gameMode.modeId];
             return color || 0xffffff;
         }
-        
-        console.log('getModeTypeBorderColor: No difficulty found, returning white');
+
         return 0xffffff; // Default white
     }
 
@@ -1722,22 +1704,43 @@ class GameScene extends Phaser.Scene {
     
     // Apply mode-specific configuration to game settings
     applyModeConfiguration() {
-        if (!this.gameMode) return;
-        
+        if (!this.gameMode) {
+            console.warn('No gameMode available, using default configuration');
+            return;
+        }
+
         const config = this.gameMode.getConfig();
-        
-        // Apply timing configurations
-        this.dasDelay = this.gameMode.getDAS();
-        this.arrDelay = this.gameMode.getARR();
-        this.areDelay = this.gameMode.getARE();
-        this.lockDelay = 0; // Will be set by mode when needed
-        
+
+        if (!config) {
+            console.warn('No config found in gameMode, using default');
+            return;
+        }
+
+        // Apply timing configurations - use mode methods if available for progressive timings
+        this.dasDelay = (this.gameMode.getDAS && typeof this.gameMode.getDAS === 'function') ? this.gameMode.getDAS() : (config.das || 16/60);
+        this.arrDelay = (this.gameMode.getARR && typeof this.gameMode.getARR === 'function') ? this.gameMode.getARR() : (config.arr || 1/60);
+        this.areDelay = (this.gameMode.getARE && typeof this.gameMode.getARE === 'function') ? this.gameMode.getARE() : (config.are || 30/60);
+        this.lockDelay = (this.gameMode.getLockDelay && typeof this.gameMode.getLockDelay === 'function') ? this.gameMode.getLockDelay() : (config.lockDelay || 0.5);
+
+        // Apply other configurations
+        this.nextPiecesCount = config.nextPieces || 1;
+        this.holdEnabled = config.holdEnabled || false;
+        this.ghostEnabled = config.ghostEnabled !== false; // Default true
+        this.levelUpType = config.levelUpType || 'piece';
+        this.lineClearBonus = config.lineClearBonus || 1;
+        this.gravityLevelCap = config.gravityLevelCap || 999;
+
         // Rotation system is handled by global settings, not mode configuration
         // Get from localStorage (already set in constructor)
         this.rotationSystem = localStorage.getItem('rotationSystem') || 'SRS';
-        
-        console.log(`Applied mode configuration: ${this.gameMode.getName()}`);
+
+        console.log(`Applied mode configuration for: ${this.gameMode.getName()}`);
+        console.log(`Config:`, config);
         console.log(`DAS: ${this.dasDelay}s, ARR: ${this.arrDelay}s, ARE: ${this.areDelay}s`);
+        console.log(`Lock Delay: ${this.lockDelay}s, Next Pieces: ${this.nextPiecesCount}`);
+        console.log(`Hold Enabled: ${this.holdEnabled}, Ghost Enabled: ${this.ghostEnabled}`);
+        console.log(`Level Up Type: ${this.levelUpType}, Line Clear Bonus: ${this.lineClearBonus}`);
+        console.log(`Gravity Level Cap: ${this.gravityLevelCap}`);
         console.log(`Rotation System: ${this.rotationSystem} (from settings)`);
     }
     
@@ -1782,29 +1785,35 @@ class GameScene extends Phaser.Scene {
         const uiX = Math.max(20, this.borderOffsetX - 200) + 50;
 
         // Grade display - next to matrix on left, right-aligned, moved 25px right
-        const gradeX = uiX + 25;
-        const gradeY = this.borderOffsetY;
-        const gradeWidth = 80;
-        this.gradeDisplay = this.add.graphics();
-        this.gradeDisplay.lineStyle(2, 0xffffff);
-        this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
-        this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', { 
-            fontSize: `${xlargeFontSize}px`, 
-            fill: '#fff', 
-            fontFamily: 'Courier New',
-            fontStyle: 'bold',
-            align: 'center'
-        }).setOrigin(0.5);
-        // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
-        const nextGradeWidth = gradeWidth * 1.75;
-        this.nextGradeText = this.add.text(gradeX + gradeWidth, gradeY + 90, 'Next: 400 pts', {
-            fontSize: `${uiFontSize}px`,
-            fill: '#ccc',
-            fontFamily: 'Courier New',
-            wordWrap: { width: nextGradeWidth },
-            align: 'right',
-            fontStyle: 'normal'
-        }).setOrigin(1, 0);
+        // Only show for modes that use grading
+        const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+        const hasGrading = modeConfig.hasGrading !== false;
+
+        if (hasGrading) {
+            const gradeX = uiX + 25;
+            const gradeY = this.borderOffsetY;
+            const gradeWidth = 80;
+            this.gradeDisplay = this.add.graphics();
+            this.gradeDisplay.lineStyle(2, 0xffffff);
+            this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+            this.gradeText = this.add.text(gradeX + gradeWidth/2, gradeY + 40, '9', {
+                fontSize: `${xlargeFontSize}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'center'
+            }).setOrigin(0.5);
+            // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
+            const nextGradeWidth = gradeWidth * 1.75;
+            this.nextGradeText = this.add.text(gradeX + gradeWidth, gradeY + 90, 'Next: 400 pts', {
+                fontSize: `${uiFontSize}px`,
+                fill: '#ccc',
+                fontFamily: 'Courier New',
+                wordWrap: { width: nextGradeWidth },
+                align: 'right',
+                fontStyle: 'normal'
+            }).setOrigin(1, 0);
+        }
 
         // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
         const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
@@ -1945,23 +1954,45 @@ class GameScene extends Phaser.Scene {
             // Create audio objects with standard Phaser configuration
             this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
             this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
-            
-            // Start with stage 1 BGM
+
+            // Initialize TGM2 BGM objects
+            this.tgm2_stage1 = this.sound.add('tgm2_stage1', { loop: false, volume: 0.5 });
+            this.tgm2_stage2 = this.sound.add('tgm2_stage2', { loop: false, volume: 0.5 });
+            this.tgm2_stage3 = this.sound.add('tgm2_stage3', { loop: false, volume: 0.5 });
+            this.tgm2_stage4 = this.sound.add('tgm2_stage4', { loop: false, volume: 0.5 });
+
+            // Start with appropriate BGM based on mode
             if (this.bgmEnabled) {
-                this.stage1BGM.play();
-                this.currentBGM = this.stage1BGM;
+                const isTGM2Mode = this.selectedMode && (
+                    this.selectedMode.startsWith('tgm2') ||
+                    this.selectedMode === 'tgm_plus'
+                );
+                const isTADeathMode = this.selectedMode === 'tadeath';
+
+                if (isTGM2Mode) {
+                    this.updateTGM2BGM();
+                } else if (isTADeathMode) {
+                    this.updateTADeathBGM();
+                } else {
+                    this.stage1BGM.play();
+                    this.currentBGM = this.stage1BGM;
+                }
             }
         } catch (error) {
             console.warn('BGM initialization failed, disabling background music:', error);
             this.bgmEnabled = false;
             this.stage1BGM = null;
             this.stage2BGM = null;
+            this.tgm2_stage1 = null;
+            this.tgm2_stage2 = null;
+            this.tgm2_stage3 = null;
+            this.tgm2_stage4 = null;
             this.currentBGM = null;
         }
     }
     
     updateTimer() {
-        if (this.startTime && !this.isPaused && !this.level999Reached) {
+        if (this.startTime && !this.isPaused && !this.level999Reached && !this.gameOver) {
             this.currentTime = (Date.now() - this.startTime) / 1000;
         }
     }
@@ -2109,8 +2140,29 @@ class GameScene extends Phaser.Scene {
     }
     
     updateBGM() {
-        if (!this.bgmEnabled || !this.stage1BGM || !this.stage2BGM) return;
-        
+        if (!this.bgmEnabled) return;
+
+        // Check if this is a TGM2 mode
+        const isTGM2Mode = this.selectedMode && (
+            this.selectedMode.startsWith('tgm2') ||
+            this.selectedMode === 'tgm_plus'
+        );
+
+        // Check if this is T.A.Death mode
+        const isTADeathMode = this.selectedMode === 'tadeath';
+
+        if (isTGM2Mode) {
+            this.updateTGM2BGM();
+        } else if (isTADeathMode) {
+            this.updateTADeathBGM();
+        } else {
+            this.updateTGM1BGM();
+        }
+    }
+
+    updateTGM1BGM() {
+        if (!this.stage1BGM || !this.stage2BGM) return;
+
         if (this.level >= 491 && this.level < 500) {
             if (this.currentBGM) {
                 this.currentBGM.stop();
@@ -2131,6 +2183,138 @@ class GameScene extends Phaser.Scene {
         }
         // At level 999, stop all stage BGM - only credits BGM should play
         // This is handled in startCredits() method
+    }
+
+    updateTGM2BGM() {
+        // TGM2 BGM selection based on level
+        let targetBGM = null;
+        let bgmKey = null;
+
+        if (this.level < 500) {
+            // Levels 0-299: tm2_3.mp3
+            targetBGM = this.tgm2_stage1;
+            bgmKey = 'tgm2_stage1';
+        } else if (this.level < 700) {
+            // Levels 300-499: tm2_4.mp3
+            targetBGM = this.tgm2_stage2;
+            bgmKey = 'tgm2_stage2';
+        } else if (this.level < 900) {
+            // Levels 500-699: tm3_4.mp3
+            targetBGM = this.tgm2_stage3;
+            bgmKey = 'tgm2_stage3';
+        } else {
+            // Levels 700+: tm3_6.mp3
+            targetBGM = this.tgm2_stage4;
+            bgmKey = 'tgm2_stage4';
+        }
+
+        if (targetBGM && this.currentBGM !== targetBGM) {
+            if (this.currentBGM) {
+                this.currentBGM.stop();
+            }
+            this.startTGM2BGM(bgmKey, targetBGM);
+            this.currentBGM = targetBGM;
+        }
+    }
+
+    startTGM2BGM(bgmKey, audioObject) {
+        if (!audioObject) return;
+
+        // Stop any current playback
+        if (audioObject.isPlaying) {
+            audioObject.stop();
+        }
+
+        // Set up loop points based on the BGM
+        let loopStart = 0;
+        let loopEnd = audioObject.duration || 0;
+
+        switch (bgmKey) {
+            case 'tgm2_stage1': // tm2_3.mp3
+                // Play from beginning, loop from 29.872s to 115.193s
+                loopStart = 29.872;
+                loopEnd = 115.193;
+                break;
+            case 'tgm2_stage2': // tm2_4.mp3
+                // Loop from 61.432s to 168.954s
+                loopStart = 61.432;
+                loopEnd = 168.954;
+                break;
+            case 'tgm2_stage3': // tm3_4.mp3
+                // Loop entire file
+                loopStart = 0;
+                break;
+            case 'tgm2_stage4': // tm3_6.mp3
+                // Loop entire file
+                loopStart = 0;
+                break;
+        }
+
+        // For Phaser, we need to handle looping manually since it doesn't support loop points directly
+        // We'll play the intro once, then loop the specified section
+        if (bgmKey === 'tgm2_stage1') {
+            // For tm2_3.mp3, play intro then loop
+            audioObject.once('complete', () => {
+                if (this.bgmEnabled && this.currentBGM === audioObject) {
+                    this.startTGM2Loop(audioObject, loopStart, loopEnd);
+                }
+            });
+            audioObject.play();
+        } else {
+            // For others, start looping immediately
+            this.startTGM2Loop(audioObject, loopStart, loopEnd);
+        }
+    }
+
+    startTGM2Loop(audioObject, loopStart, loopEnd) {
+        if (!audioObject || !this.bgmEnabled) return;
+
+        // Seek to loop start
+        audioObject.seek = loopStart;
+
+        // Set up completion handler to loop back
+        audioObject.once('complete', () => {
+            if (this.bgmEnabled && this.currentBGM === audioObject) {
+                this.startTGM2Loop(audioObject, loopStart, loopEnd);
+            }
+        });
+
+        audioObject.play();
+    }
+
+    updateTADeathBGM() {
+        // T.A.Death BGM selection based on level
+        let targetBGM = null;
+        let bgmKey = null;
+
+        if (this.level < 300) {
+            // Levels 0-299: tm1_2.mp3
+            targetBGM = this.tgm2_stage2;
+            bgmKey = 'tgm2_stage2';
+        } else if (this.level < 500) {
+            // Levels 300-499: tm2_3.flac
+            targetBGM = this.tgm2_stage2;
+            bgmKey = 'tgm2_stage3';
+        } else {
+            // Levels 500+: tm2_4.flac
+            targetBGM = this.tgm2_stage4;
+            bgmKey = 'tgm2_stage4';
+        }
+
+        if (targetBGM && this.currentBGM !== targetBGM) {
+            console.log(`T.A.Death BGM switching to ${bgmKey} at level ${this.level}`);
+            if (this.currentBGM) {
+                this.currentBGM.stop();
+            }
+            if (bgmKey === 'stage2') {
+                // tm1_2.mp3 uses standard looping
+                targetBGM.play();
+            } else {
+                // TGM2 tracks use loop points
+                this.startTGM2BGM(bgmKey, targetBGM);
+            }
+            this.currentBGM = targetBGM;
+        }
     }
     
     manageBGMLoopMode() {
@@ -2712,8 +2896,12 @@ class GameScene extends Phaser.Scene {
             this.pieceActiveTime = Math.floor((this.time.now - this.pieceSpawnTime) / (1000 / 60)); // Convert to frames
         }
         
-        // Update grade based on performance
-        this.updateGrade();
+        // Update grade based on performance (only for modes with grading)
+        const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+        const hasGrading = modeConfig.hasGrading !== false;
+        if (hasGrading) {
+            this.updateGrade();
+        }
         
         // Calculate piece per second rates (skip during credits)
         if (!this.creditsActive) {
@@ -3023,11 +3211,11 @@ class GameScene extends Phaser.Scene {
             this.areActive = true;
             this.lineClearPhase = true;
             this.isClearingLines = true;
-            
+
             // Play clear sound
             const clearSound = this.sound.add('clear', { volume: 0.7 });
             clearSound.play();
-            
+
         } else {
             // Start normal ARE (0.5 seconds)
             this.areDelay = 30/60;
@@ -3035,6 +3223,11 @@ class GameScene extends Phaser.Scene {
             this.areActive = true;
             this.lineClearPhase = false;
             this.isClearingLines = false;
+        }
+
+        // If item animation is active (e.g., powerup activation), delay ARE start by 2 seconds
+        if (this.gameMode && this.gameMode.itemAnimationActive) {
+            this.areTimer = -2; // Delay ARE start by 2 seconds
         }
     }
 
@@ -3194,60 +3387,50 @@ class GameScene extends Phaser.Scene {
 
     updateLevel(type, amount = 1) {
         const oldLevel = this.level;
-        let newLevel = this.level;
 
         if (type === 'piece') {
-            // TGM1: Level increases by 1 for every piece that enters playfield
             this.piecesPlaced++;
+        }
 
-            // Check if CURRENT level is a stop level BEFORE incrementing
-            // Stop levels: 99, 199, 299, 399, 499, 599, 699, 799, 899, 998, 999
-            const currentIsStopLevel = (this.level % 100 === 99) || 
-                                     (this.level === 998) || // 998 requires line clear
-                                     (this.level === 999);   // 999 is final level
-            if (!currentIsStopLevel && this.level < 999) {
-                this.level += 1; // Advance only if current level is NOT a stop level and below 999
-            }
-            // If current level IS a stop level, stay at current level (require line clear)
-            
-        } else if (type === 'lines') {
-            // TGM1: Level increases by number of lines cleared (1,2,3,4 for Tetris)
-            // Line clears can bypass stop levels, BUT 998->999 requires a line clear
-            newLevel += amount; // amount is the number of lines cleared
-            
-            // Special handling for level 998 -> 999 transition (requires line clear)
-            if (oldLevel === 998 && amount > 0) {
-                this.level = 999;
-            } else if (newLevel > 999) {
-                this.level = 999; // Cap at 999
-            } else {
-                this.level = newLevel;
+        // Use mode-specific level update logic
+        let newLevel = this.level;
+        if (this.gameMode && this.gameMode.onLevelUpdate) {
+            newLevel = this.gameMode.onLevelUpdate(this.level, oldLevel, type, amount);
+        } else {
+            // Default logic
+            if (type === 'piece') {
+                newLevel += 1;
+            } else if (type === 'lines') {
+                newLevel += amount;
             }
         }
 
-        // Ensure level never exceeds 999
-        if (this.level > 999) {
-            this.level = 999;
+        this.level = newLevel;
+
+        // Ensure level never exceeds mode's gravity level cap
+        const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
+        if (this.level > maxLevel) {
+            this.level = maxLevel;
         }
 
         // Check for section transitions
         const oldSection = Math.floor(oldLevel / 100);
         const newSection = Math.floor(this.level / 100);
 
-        if (newSection > oldSection && this.level < 999) {
+        if (newSection > oldSection && this.level < maxLevel) {
             this.handleSectionTransition(newSection);
         }
 
         // Check for important level milestones
-        if ((this.level === 100 || this.level === 200 || this.level === 300 || this.level === 500 || this.level === 999) &&
-            this.level !== oldLevel) {
-            if (this.level === 999) {
-                // Keep the Grand Master message for credits trigger
-                this.level999Reached = true; // Set flag for TGM behavior
-                this.startCredits(); // Start credits when reaching level 999
+        const milestones = [100, 200, 300, 500, maxLevel];
+        if (milestones.includes(this.level) && this.level !== oldLevel) {
+            if (this.level === maxLevel) {
+                // Start credits when reaching max level
+                this.level999Reached = true;
+                this.startCredits();
             }
         }
-        
+
         // Update BGM based on level
         this.updateBGM();
     }
@@ -3427,6 +3610,8 @@ class GameScene extends Phaser.Scene {
     }
 
     updateNextGradeText() {
+        if (!this.nextGradeText) return; // Skip if grade display not created
+
         const gradeThresholds = {
             '9': 400, '8': 800, '7': 1400, '6': 2000, '5': 3500, '4': 5500, '3': 8000, '2': 12000, '1': 16000,
             'S1': 22000, 'S2': 30000, 'S3': 40000, 'S4': 52000, 'S5': 66000, 'S6': 82000, 'S7': 100000, 'S8': 120000,
@@ -3444,18 +3629,20 @@ class GameScene extends Phaser.Scene {
         // Play grade up sound
         const gradeUpSound = this.sound.add('gradeup', { volume: 0.6 });
         gradeUpSound.play();
-        
-        // Simple flash animation
-        this.gradeText.setTint(0xffff00);
-        this.time.delayedCall(200, () => {
-            this.gradeText.setTint(0xffffff);
-        });
-        this.time.delayedCall(400, () => {
+
+        // Simple flash animation (only if grade text exists)
+        if (this.gradeText) {
             this.gradeText.setTint(0xffff00);
-        });
-        this.time.delayedCall(600, () => {
-            this.gradeText.setTint(0xffffff);
-        });
+            this.time.delayedCall(200, () => {
+                this.gradeText.setTint(0xffffff);
+            });
+            this.time.delayedCall(400, () => {
+                this.gradeText.setTint(0xffff00);
+            });
+            this.time.delayedCall(600, () => {
+                this.gradeText.setTint(0xffffff);
+            });
+        }
     }
 
     getHeldKeys() {
@@ -3471,6 +3658,10 @@ class GameScene extends Phaser.Scene {
     }
 
     restartGame() {
+        // Check if mode uses grading
+        const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+        const hasGrading = modeConfig.hasGrading !== false;
+
         // Reset all game variables
         this.board = new Board();
         this.currentPiece = null;
@@ -3566,10 +3757,30 @@ class GameScene extends Phaser.Scene {
             this.stage2BGM = null;
         }
 
+        // Clear TGM2 BGM objects
+        if (this.tgm2_stage1) {
+            this.tgm2_stage1.destroy();
+            this.tgm2_stage1 = null;
+        }
+        if (this.tgm2_stage2) {
+            this.tgm2_stage2.destroy();
+            this.tgm2_stage2 = null;
+        }
+        if (this.tgm2_stage3) {
+            this.tgm2_stage3.destroy();
+            this.tgm2_stage3 = null;
+        }
+        if (this.tgm2_stage4) {
+            this.tgm2_stage4.destroy();
+            this.tgm2_stage4 = null;
+        }
+
         // Reset UI
         this.scoreText.setText('0');
         this.currentLevelText.setText('0');
-        this.gradeText.setText('9');
+        if (hasGrading) {
+            this.gradeText.setText('9');
+        }
         this.timeText.setText('0:00.00');
         this.ppsText.setText('0.00');
         this.rawPpsText.setText('0.00');
@@ -3580,18 +3791,6 @@ class GameScene extends Phaser.Scene {
         
         // Restart BGM
         this.updateBGM();
-        
-        // If BGM was playing, restart with loop points
-        if (this.currentBGM && this.bgmEnabled) {
-            const bgmType = this.getCurrentBGMType();
-            if (bgmType === 'stage1') {
-                this.stage1BGM.play();
-                this.currentBGM = this.stage1BGM;
-            } else if (bgmType === 'stage2') {
-                this.stage2BGM.play();
-                this.currentBGM = this.stage2BGM;
-            }
-        }
     }
     
     togglePause() {
@@ -3617,8 +3816,6 @@ class GameScene extends Phaser.Scene {
                 this.currentBGM.pause();
             } else {
                 this.currentBGM.resume();
-                // Ensure we resume from the correct loop point
-                this.updateBGMLoopPoints();
             }
         }
     }
@@ -3627,23 +3824,25 @@ class GameScene extends Phaser.Scene {
     startCredits() {
         this.creditsActive = true;
         this.creditsTimer = 0;
-        
+
         // Play completion sound if GM grade achieved
         if (this.grade === 'GM') {
             const completeSound = this.sound.add('complete', { volume: 0.8 });
             completeSound.play();
         }
-        
+
         // Load credits BGM if available
         try {
-            this.creditsBGM = this.sound.add('credits', { loop: true, volume: 0.3 });
+            // Use tm1_2.mp3 for TGM2 Normal mode credits, otherwise use tm1_endroll.mp3
+            const creditsBGMKey = (this.selectedMode === 'tgm2_normal') ? 'stage2' : 'credits';
+            this.creditsBGM = this.sound.add(creditsBGMKey, { loop: true, volume: 0.3 });
             if (this.creditsBGM && this.bgmEnabled) {
                 this.creditsBGM.play();
             }
         } catch (error) {
             console.warn('Credits BGM could not be loaded:', error);
         }
-        
+
         // Stop current BGM
         if (this.currentBGM) {
             this.currentBGM.stop();
@@ -3750,6 +3949,14 @@ class GameScene extends Phaser.Scene {
             this.creditsBGM.stop();
             this.creditsBGM = null;
         }
+
+        // Stop TGM2 BGM objects
+        const tgm2Bgms = [this.tgm2_stage1, this.tgm2_stage2, this.tgm2_stage3, this.tgm2_stage4];
+        tgm2Bgms.forEach(bgm => {
+            if (bgm && bgm.isPlaying) {
+                bgm.stop();
+            }
+        });
 
         // Start mino fading immediately
         this.startMinoFading();
@@ -3889,9 +4096,17 @@ class GameScene extends Phaser.Scene {
         const rightX = uiX + 120;
         const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
 
-        // Calculate section cap
+        // Calculate section cap based on mode
+        const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
         const section = Math.floor(this.level / 100);
-        const sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+        let sectionCap;
+        if (maxLevel === 300) {
+            // TGM2 Normal: always show 300 as the cap
+            sectionCap = 300;
+        } else {
+            // Default: sections are 0-99, 100-199, etc. up to 999
+            sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+        }
 
         // Current level - top row
         const currentY = levelBottomY - 3 * levelRowHeight;
@@ -3944,6 +4159,10 @@ class GameScene extends Phaser.Scene {
     }
 
     draw() {
+        // Check if mode uses grading
+        const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+        const hasGrading = modeConfig.hasGrading !== false;
+
         // Clear previous game elements
         this.gameGroup.clear(true, true);
         
@@ -4006,10 +4225,13 @@ class GameScene extends Phaser.Scene {
 
         // Update UI
         this.scoreText.setText(this.score.toString());
-        this.gradeText.setText(this.grade);
 
-        // Update next grade requirement
-        this.updateNextGradeText();
+        // Update grade display only for modes that use grading
+        if (hasGrading) {
+            this.gradeText.setText(this.grade);
+            // Update next grade requirement
+            this.updateNextGradeText();
+        }
 
         // Update piece per second displays
         this.ppsText.setText(this.conventionalPPS.toFixed(2));
