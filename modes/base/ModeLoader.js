@@ -41,6 +41,9 @@ class ModeLoader {
         // Built-in mode implementations - in a real implementation, these would be dynamically imported
         const builtInModes = {
             'tgm1': () => require('../modes/TGM1Mode.js'),
+            'tgm2': () => require('../modes/TGM2Mode.js'),
+            'tgm3': () => require('../modes/TGM3Mode.js'),
+            '20g': () => require('../modes/20GMode.js'),
             'marathon': () => require('../modes/MarathonMode.js'),
             'sprint_40': () => require('../modes/SprintMode.js'),
             'zen': () => require('../modes/ZenMode.js')
@@ -89,6 +92,9 @@ class ModeLoader {
     getAvailableModes() {
         return [
             'tgm1.json',
+            'tgm2.json',
+            'tgm3.json',
+            '20g.json',
             'marathon.json', 
             'sprint_40.json',
             'zen.json'

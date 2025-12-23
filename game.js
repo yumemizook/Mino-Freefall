@@ -762,7 +762,7 @@ class MenuScene extends Phaser.Scene {
             {
                 name: '20G',
                 modes: [
-                    { id: '20g', name: '20G', description: 'Maximum gravity speed from the start! Good luck!' },
+                    { id: '20g', name: '20G', description: 'Maximum gravity from the start! Good luck!' },
                     { id: 'tadeath', name: 'T.A.Death', description: 'Difficult 20G challenge mode. Speed is key!' },
                     { id: 'shirase', name: 'Shirase', description: 'Lightning-fast speeds. Do you have what it takes?' },
                     { id: 'master20g', name: 'Master', description: 'Brand new, unique game mechanics. Can you handle them?' }

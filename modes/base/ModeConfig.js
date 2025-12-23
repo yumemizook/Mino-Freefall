@@ -227,6 +227,68 @@ class ModeConfig {
                         volume: 0.5
                     }
                 }
+            },
+            '20g.json': {
+                id: '20g',
+                name: '20G',
+                description: 'Maximum gravity from the start! Good luck!',
+                timing: {
+                    das: { type: 'static', value: 8/60 }, // Faster DAS for 20G
+                    arr: { type: 'static', value: 1/60 },
+                    are: { type: 'static', value: 0.5 },
+                    lockDelay: { type: 'static', value: 0.5 }
+                },
+                pieces: {
+                    nextCount: 1,
+                    holdEnabled: false,
+                    randomizer: 'tgm1'
+                },
+                gravity: {
+                    type: 'static',
+                    value: 5120 // 20G (20 rows per frame)
+                },
+                scoring: {
+                    type: 'tgm1',
+                    gradeSystem: true
+                },
+                completion: {
+                    type: 'level',
+                    target: 999
+                },
+                rules: {
+                    sectionStop: true,
+                    levelCap: 999
+                },
+                audio: {
+                    enabled: true,
+                    bgm: {
+                        sections: [
+                            {
+                                name: 'Stage 1',
+                                startLevel: 0,
+                                endLevel: 490,
+                                track: 'stage1'
+                            },
+                            {
+                                name: 'Stage 2',
+                                startLevel: 500,
+                                endLevel: 998,
+                                track: 'stage2'
+                            },
+                            {
+                                name: 'Final',
+                                startLevel: 999,
+                                endLevel: 999,
+                                track: 'credits'
+                            }
+                        ],
+                        volume: 0.5
+                    },
+                    sfx: {
+                        enabled: true,
+                        volume: 0.7
+                    }
+                }
             }
         };
 
