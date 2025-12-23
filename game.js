@@ -1067,9 +1067,11 @@ class MenuScene extends Phaser.Scene {
             const modeTypeY = index * 50; // Increased spacing between mode types
             
             // Mode type name text positioned relative to container
+            const modeTypeColor = index === this.currentModeTypeIndex ? 
+                this.getDifficultyColor(modeType.name) : '#666666';
             const modeTypeText = this.add.text(0, modeTypeY, modeType.name, {
                 fontSize: '18px',
-                fill: index === this.currentModeTypeIndex ? '#ffff00' : '#666666',
+                fill: modeTypeColor,
                 fontFamily: 'Courier New',
                 fontStyle: index === this.currentModeTypeIndex ? 'bold' : 'normal'
             }).setOrigin(0, 0.5);
@@ -1169,9 +1171,35 @@ class MenuScene extends Phaser.Scene {
         
         console.log(`Starting mode: ${currentSubmode.id}`);
         
-        // For now, start with AssetLoaderScene using the mode ID
-        // In a full implementation, this would use the new multi-mode system
-        this.scene.start('AssetLoaderScene', { mode: currentSubmode.id });
+        // Initialize mode manager and load the selected mode
+        if (typeof getModeManager === 'undefined') {
+            console.error('Mode manager not available - make sure mode files are loaded');
+            // Fallback to default mode
+            this.scene.start('AssetLoaderScene', { mode: 'tgm1' });
+            return;
+        }
+        
+        const modeManager = getModeManager();
+        const gameMode = modeManager.loadMode(currentSubmode.id);
+        
+        if (!gameMode) {
+            console.error(`Failed to load mode: ${currentSubmode.id}`);
+            // Fallback to TGM1 mode
+            this.scene.start('AssetLoaderScene', { mode: 'tgm1' });
+            return;
+        }
+        
+        console.log(`Loaded mode: ${gameMode.getName()} (${currentSubmode.id})`);
+        
+        // Store the mode information for later use
+        this.selectedMode = gameMode;
+        this.selectedModeId = currentSubmode.id;
+        
+        // Start the AssetLoaderScene with the mode information
+        this.scene.start('AssetLoaderScene', { 
+            mode: currentSubmode.id,
+            gameMode: gameMode
+        });
     }
 
     getBestScore(mode) {
@@ -1194,6 +1222,25 @@ class MenuScene extends Phaser.Scene {
         return { score: 0, level: 0, grade: '9', time: '0:00.00' };
     }
     
+    // Get difficulty color for a mode type
+    getDifficultyColor(modeTypeName) {
+        if (typeof getModeManager !== 'undefined') {
+            const modeManager = getModeManager();
+            return modeManager.difficultyColors[modeTypeName.toLowerCase()] || '#ffffff';
+        }
+        // Fallback colors if mode manager not available
+        const fallbackColors = {
+            'easy': '#00ff00',      // green
+            'standard': '#0088ff',  // blue
+            'master': '#888888',    // grey
+            '20g': '#ffff00',       // yellow
+            'race': '#ff8800',      // orange
+            'all clear': '#ff69b4', // pink
+            'puzzle': '#8800ff'     // purple
+        };
+        return fallbackColors[modeTypeName.toLowerCase()] || '#ffffff';
+    }
+
     update() {
         // Check for window resize and update layout if needed
         const currentWindowWidth = window.innerWidth;
@@ -1255,6 +1302,16 @@ class AssetLoaderScene extends Phaser.Scene {
         super({ key: 'AssetLoaderScene' });
     }
 
+    init(data) {
+        this.selectedMode = data.mode || 'Mode 1';
+        this.gameMode = data.gameMode || null;  // Store gameMode from data
+
+        console.log('AssetLoaderScene.init() - received:', {
+            mode: this.selectedMode,
+            hasGameMode: !!this.gameMode
+        });
+    }
+
     preload() {
         // Load all assets for the game
         this.load.image('mino_srs', 'img/mino.png');
@@ -1303,8 +1360,22 @@ class AssetLoaderScene extends Phaser.Scene {
     }
 
     create() {
-        // All assets loaded, proceed to loading screen
-        this.scene.start('LoadingScreenScene', { mode: this.selectedMode });
+        // All assets loaded, proceed to loading screen with mode information
+        console.log('AssetLoaderScene.create() - received data:', {
+            mode: this.selectedMode
+        });
+
+        // Check if gameMode was passed through
+        if (this.gameMode) {
+            console.log('AssetLoaderScene: gameMode IS available -', this.gameMode.getName());
+        } else {
+            console.log('AssetLoaderScene: gameMode NOT available (undefined)');
+        }
+
+        this.scene.start('LoadingScreenScene', {
+            mode: this.selectedMode,
+            gameMode: this.gameMode  // Pass gameMode through!
+        });
     }
 }
 
@@ -1315,6 +1386,12 @@ class LoadingScreenScene extends Phaser.Scene {
 
     init(data) {
         this.selectedMode = data.mode || 'Mode 1';
+        this.gameMode = data.gameMode || null;  // Store gameMode from data
+
+        console.log('LoadingScreenScene.init() - received:', {
+            mode: this.selectedMode,
+            hasGameMode: !!this.gameMode
+        });
     }
 
     create() {
@@ -1368,7 +1445,15 @@ class LoadingScreenScene extends Phaser.Scene {
 
             // Start game after 1 more second
             this.time.delayedCall(1000, () => {
-                this.scene.start('GameScene', { mode: this.selectedMode });
+                console.log('LoadingScreenScene: Starting GameScene with:', {
+                    mode: this.selectedMode,
+                    hasGameMode: !!this.gameMode
+                });
+
+                this.scene.start('GameScene', {
+                    mode: this.selectedMode,
+                    gameMode: this.gameMode  // Pass gameMode through!
+                });
             });
         });
     }
@@ -1401,7 +1486,7 @@ class GameScene extends Phaser.Scene {
         // Calculate cell size and positioning for full screen
         this.calculateLayout();
 
-        // DAS (Delayed Auto Shift) variables
+        // DAS (Delayed Auto Shift) variables - will be set by mode
         this.dasDelay = 16/60; // seconds until auto-repeat starts
         this.arrDelay = 1/60; // seconds between repeats
         this.leftKeyPressed = false;
@@ -1417,7 +1502,7 @@ class GameScene extends Phaser.Scene {
         this.lKeyPressed = false;
         this.xKeyPressed = false;
 
-        // ARE (Appearance Delay)
+        // ARE (Appearance Delay) - will be set by mode
         this.areDelay = 30/60; // seconds until next piece appears
         this.areTimer = 0;
         this.areActive = false;
@@ -1547,6 +1632,7 @@ class GameScene extends Phaser.Scene {
 
         // Mode and best score tracking
         this.selectedMode = null;
+        this.gameMode = null; // Will be set by init method
 
         // Game over timer
         this.gameOverTimer = 0;
@@ -1555,13 +1641,104 @@ class GameScene extends Phaser.Scene {
         this.wasGroundedDuringSoftDrop = false;
     }
 
+    // Get border color based on selected mode type
+    getModeTypeBorderColor() {
+        console.log('getModeTypeBorderColor() called - selectedMode:', this.selectedMode);
+        
+        if (!this.selectedMode || typeof getModeManager === 'undefined') {
+            console.log('getModeTypeBorderColor: No mode or manager, returning white');
+            return 0xffffff; // Default white if no mode
+        }
+        
+        const modeManager = getModeManager();
+        const modeInfo = modeManager.getModeInfo(this.selectedMode);
+        
+        console.log('getModeTypeBorderColor: modeInfo =', modeInfo);
+        
+        if (modeInfo && modeInfo.config && modeInfo.config.difficulty) {
+            const difficulty = modeInfo.config.difficulty;
+            const color = modeManager.difficultyColors[difficulty];
+            console.log(`getModeTypeBorderColor: difficulty='${difficulty}', color='${color}'`);
+            return color || 0xffffff;
+        }
+        
+        console.log('getModeTypeBorderColor: No difficulty found, returning white');
+        return 0xffffff; // Default white
+    }
+
     init(data) {
+        console.log('GameScene.init() - received data:', {
+            mode: data.mode,
+            hasGameMode: !!data.gameMode
+        });
+
         this.selectedMode = data.mode || 'Mode 1';
+        this.gameMode = data.gameMode || null;
+
+        console.log('GameScene.init() - after assignment:', {
+            selectedMode: this.selectedMode,
+            hasGameMode: !!this.gameMode
+        });
+        
+        // Load mode if not provided
+        if (!this.gameMode && typeof getModeManager !== 'undefined') {
+            console.log('GameScene: Loading mode from ModeManager...');
+            const modeManager = getModeManager();
+            this.gameMode = modeManager.getMode(this.selectedMode);
+            console.log('GameScene: Loaded mode:', this.gameMode ? this.gameMode.getName() : 'null');
+        }
+        
+        // Fallback to default if no mode loaded
+        if (!this.gameMode) {
+            console.warn('No game mode loaded, using fallback configuration');
+            this.gameMode = {
+                getConfig: () => ({
+                    gravity: { type: 'tgm1', value: 0, curve: null },
+                    das: 16/60,
+                    arr: 1/60,
+                    are: 30/60,
+                    lockDelay: 0.5,
+                    nextPieces: 1,
+                    holdEnabled: false,
+                    ghostEnabled: true,
+                    levelUpType: 'piece',
+                    lineClearBonus: 1,
+                    gravityLevelCap: 999,
+                    specialMechanics: {}
+                }),
+                getGravitySpeed: (level) => this.getTGM1GravitySpeed(level),
+                getName: () => 'Fallback Mode'
+            };
+        }
+        
+        // Apply mode configuration to game settings
+        this.applyModeConfiguration();
     }
 
     preload() {
         // Assets are loaded in AssetLoaderScene
         // This preload is intentionally empty to avoid duplicate loading
+    }
+    
+    // Apply mode-specific configuration to game settings
+    applyModeConfiguration() {
+        if (!this.gameMode) return;
+        
+        const config = this.gameMode.getConfig();
+        
+        // Apply timing configurations
+        this.dasDelay = this.gameMode.getDAS();
+        this.arrDelay = this.gameMode.getARR();
+        this.areDelay = this.gameMode.getARE();
+        this.lockDelay = 0; // Will be set by mode when needed
+        
+        // Rotation system is handled by global settings, not mode configuration
+        // Get from localStorage (already set in constructor)
+        this.rotationSystem = localStorage.getItem('rotationSystem') || 'SRS';
+        
+        console.log(`Applied mode configuration: ${this.gameMode.getName()}`);
+        console.log(`DAS: ${this.dasDelay}s, ARR: ${this.arrDelay}s, ARE: ${this.areDelay}s`);
+        console.log(`Rotation System: ${this.rotationSystem} (from settings)`);
     }
     
     calculateLayout() {
@@ -1701,8 +1878,10 @@ class GameScene extends Phaser.Scene {
         }
 
         // Playfield border - adjusted to fit exactly 10x20 with smaller width and height
+        // Use mode type color for border
+        const modeTypeColor = this.getModeTypeBorderColor();
         this.playfieldBorder = this.add.graphics();
-        this.playfieldBorder.lineStyle(3, 0xffffff);
+        this.playfieldBorder.lineStyle(3, modeTypeColor);
         this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
             this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
     }
@@ -1753,6 +1932,11 @@ class GameScene extends Phaser.Scene {
         
         // Initialize BGM system
         this.initializeBGM();
+        
+        // Initialize game mode
+        if (this.gameMode && this.gameMode.initializeForGameScene) {
+            this.gameMode.initializeForGameScene(this);
+        }
     }
     
     initializeBGM() {
@@ -2543,6 +2727,11 @@ class GameScene extends Phaser.Scene {
                 this.sectionMessage = null;
             }
         }
+        
+        // Update game mode (for TGM2 grading system, powerup minos, etc.)
+        if (this.gameMode && this.gameMode.update) {
+            this.gameMode.update(this, this.deltaTime);
+        }
 
         // Update credits system
         if (this.creditsActive) {
@@ -2647,7 +2836,7 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Check for 20G gravity (level 500+)
+        // Check for 20G gravity (using configuration-based detection)
         const internalGravity = this.getTGMGravitySpeed(this.level);
         if (internalGravity >= 5120) {
             // For 20G gravity, immediately hard drop the piece to the ground/stack
@@ -2705,7 +2894,14 @@ class GameScene extends Phaser.Scene {
 
     generateNextPieces() {
         for (let i = 0; i < 6; i++) {
-            this.nextPieces.push(this.generateTGM1Piece());
+            // Check if current mode supports powerup minos
+            if (this.gameMode && this.gameMode.generateNextPiece) {
+                const piece = this.gameMode.generateNextPiece(this);
+                this.nextPieces.push(piece);
+            } else {
+                // Fallback to original TGM1 piece generation
+                this.nextPieces.push(this.generateTGM1Piece());
+            }
         }
     }
 
@@ -2812,6 +3008,12 @@ class GameScene extends Phaser.Scene {
         this.updateScore(linesToClear.length, this.currentPiece.type, isTSpin);
         this.updateLevel('lines', linesToClear.length);
         this.canHold = true;
+        
+        // Handle powerup effects for TGM2 mode
+        if (this.gameMode && this.gameMode.handleLineClear) {
+            this.gameMode.handleLineClear(this, linesToClear.length, this.currentPiece.type);
+        }
+        
         this.currentPiece = null;
 
         if (linesToClear.length > 0) {
@@ -3077,6 +3279,17 @@ class GameScene extends Phaser.Scene {
     
 
     getTGMGravitySpeed(level) {
+        // Use mode-based gravity calculation if mode is available
+        if (this.gameMode) {
+            return this.gameMode.getGravitySpeed(level);
+        }
+        
+        // Fallback to TGM1 curve if no mode
+        return this.getTGM1GravitySpeed(level);
+    }
+    
+    // Official TGM1 Internal Gravity system (fallback method)
+    getTGM1GravitySpeed(level) {
         // Official TGM1 Internal Gravity system
         // Returns Internal Gravity value in 1/256 G units
         // Based on Internal Gravity values in the TGM1 specification
@@ -3355,7 +3568,7 @@ class GameScene extends Phaser.Scene {
 
         // Reset UI
         this.scoreText.setText('0');
-        this.levelNumber.setText('0');
+        this.currentLevelText.setText('0');
         this.gradeText.setText('9');
         this.timeText.setText('0:00.00');
         this.ppsText.setText('0.00');
@@ -3540,6 +3753,11 @@ class GameScene extends Phaser.Scene {
 
         // Start mino fading immediately
         this.startMinoFading();
+        
+        // Handle game over in game mode (for TGM2, powerup minos, etc.)
+        if (this.gameMode && this.gameMode.onGameOver) {
+            this.gameMode.onGameOver(this);
+        }
     }
     
     drawCreditsScreen() {
@@ -3735,8 +3953,10 @@ class GameScene extends Phaser.Scene {
         }
         
         // Border adjusted to fit exactly 10x20 with smaller width and height
+        // Use mode type color for border
+        const modeTypeColor = this.getModeTypeBorderColor();
         this.playfieldBorder = this.add.graphics();
-        this.playfieldBorder.lineStyle(3, 0xffffff);
+        this.playfieldBorder.lineStyle(3, modeTypeColor);
         this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
             this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
 

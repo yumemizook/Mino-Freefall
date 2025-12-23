@@ -140,7 +140,31 @@
             Grades are earned based on score thresholds. Grand Master requires reaching level 999 with 126,000+ points in under 13:30.
         </p>
     </div>
+    
+    <!-- Mode System - Load dependencies first -->
+    <script src="modes/modes/BaseMode.js"></script>
+    <script src="modes/modes/TGM2GradingSystem.js"></script>
+
+    <!-- Mode classes - Load after dependencies -->
+    <script src="modes/modes/TGM1Mode.js"></script>
+    <script src="modes/modes/Mode20G.js"></script>
+    <script src="modes/modes/OtherModes.js"></script>
+    <script src="modes/modes/TGM2MasterMode.js"></script>
+    <script src="modes/modes/TGM2NormalMode.js"></script>
+    <script src="modes/modes/TGMPlusMode.js"></script>
+    <script src="modes/modes/TADeathMode.js"></script>
+
+    <!-- Mode Manager - Load after mode classes are available -->
+    <script src="modes/modes/ModeManager.js"></script>
+
+    <!-- Main Game - Load before PowerupMino since it needs Piece class -->
     <script src="game.js"></script>
+
+    <!-- Powerup System - Load after game.js since it extends Piece -->
+    <script src="modes/modes/PowerupMino.js"></script>
+
+    <!-- TGM2 Mode - Load after dependencies -->
+    <script src="modes/modes/TGM2Mode.js"></script>
     
     <!-- Audio Fix: If you see "Audio key missing" errors, run convert_audio.bat -->
     <!-- See README_AUDIO_FIX.md for detailed instructions -->
