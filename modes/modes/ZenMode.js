@@ -1,0 +1,75 @@
+// Zen Mode - Endless relaxed play
+// Based on standardtimings.md specifications
+
+class ZenMode extends BaseMode {
+    constructor() {
+        super();
+        this.modeName = 'Zen';
+        this.description = 'Endless relaxed play';
+        this.linesCleared = 0;
+    }
+
+    getModeConfig() {
+        return {
+            gravity: {
+                type: 'static',
+                value: 5120 // 20G for fast but manageable play
+            },
+            das: 9/60,      // 9 frames
+            arr: 1/60,       // 1 frame
+            are: 7/60,       // 7 frames
+            lockDelay: 30/60, // 30 frames
+            nextPieces: 6,
+            holdEnabled: true,
+            ghostEnabled: true,
+            levelUpType: 'piece',
+            lineClearBonus: 1,
+            gravityLevelCap: 999,
+            hasGrading: false,
+            specialMechanics: {
+                endless: true,
+                relaxed: true
+            }
+        };
+    }
+
+    handleLineClear(gameScene, linesCleared, pieceType) {
+        this.linesCleared += linesCleared;
+        // No end condition for zen mode
+    }
+
+    update(gameScene, deltaTime) {
+        // Zen mode specific updates could go here
+        // Maybe some visual effects or background changes based on lines cleared
+    }
+
+    onGameOver(gameScene) {
+        // Zen mode doesn't really "end" but if game over occurs, save progress
+        const key = `bestScore_zen`;
+        const currentBest = gameScene.getBestScore('zen');
+
+        if (this.linesCleared > currentBest.level) {
+            const newScore = {
+                score: gameScene.score,
+                level: this.linesCleared,
+                grade: 'N/A',
+                time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`
+            };
+            localStorage.setItem(key, JSON.stringify(newScore));
+        }
+    }
+
+    reset() {
+        this.linesCleared = 0;
+    }
+}
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = ZenMode;
+}
+
+// Make available globally for browser usage
+if (typeof window !== 'undefined') {
+    window.ZenMode = ZenMode;
+}

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tetris the Grand Master clone idk</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
@@ -33,6 +33,67 @@
             width: 100vw;
             height: 100vh;
             display: block;
+        }
+        #mobile-warning {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            text-align: center;
+            padding: 20px;
+        }
+        #mobile-warning h1 {
+            color: #ff0000;
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #mobile-warning p {
+            font-size: 18px;
+            line-height: 1.6;
+            max-width: 600px;
+            margin-bottom: 30px;
+        }
+        #mobile-warning .warning-icon {
+            font-size: 60px;
+            color: #ff0000;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        #close-warning {
+            background: #ff0000;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #cc0000;
+            transition: all 0.2s;
+        }
+        #close-warning:hover {
+            background: #cc0000;
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #cc0000;
+        }
+        #close-warning:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0 #cc0000;
         }
         .controls {
             display: none; /* Hidden as requested */
@@ -98,6 +159,21 @@
     </style>
 </head>
 <body>
+    <!-- Mobile Device Warning -->
+    <div id="mobile-warning">
+        <div class="warning-icon">⚠️</div>
+        <h1>MOBILE DEVICE DETECTED</h1>
+        <p><strong>This game is optimized for desktop computers.</strong></p>
+        <p>Mobile devices may experience:</p>
+        <ul style="text-align: left; display: inline-block;">
+            <li>Performance issues and lag</li>
+            <li>Input responsiveness problems (how do you even send inputs without a physical keyboard anyway?)</li>
+            <li>Visual display problems</li>
+        </ul>
+        <p>For the best Tetris experience, please play on a desktop or laptop computer.</p>
+        <button id="close-warning">Continue Anyway</button>
+    </div>
+
     <div id="game-container"></div>
     <div class="controls">
         <h3>Tetris The Grand Master 1 - Controls</h3>
@@ -141,6 +217,45 @@
         </p>
     </div>
     
+    <script>
+        // Mobile device detection and warning
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                   (navigator.maxTouchPoints && navigator.maxTouchPoints > 2) ||
+                   window.innerWidth <= 768;
+        }
+
+        // Check if user has already dismissed the warning
+        function hasDismissedWarning() {
+            return localStorage.getItem('mobileWarningDismissed') === 'true';
+        }
+
+        function showMobileWarning() {
+            const warning = document.getElementById('mobile-warning');
+            const closeBtn = document.getElementById('close-warning');
+            
+            if (warning) {
+                warning.style.display = 'flex';
+                
+                closeBtn.addEventListener('click', () => {
+                    warning.style.display = 'none';
+                    localStorage.setItem('mobileWarningDismissed', 'true');
+                });
+            }
+        }
+
+        // Initialize mobile warning
+        if (isMobileDevice() && !hasDismissedWarning()) {
+            showMobileWarning();
+        } else {
+            // Hide warning if not on mobile or already dismissed
+            const warning = document.getElementById('mobile-warning');
+            if (warning) {
+                warning.style.display = 'none';
+            }
+        }
+    </script>
+    
     <!-- Mode System - Load dependencies first -->
     <script src="modes/modes/BaseMode.js"></script>
     <script src="modes/modes/TGM2GradingSystem.js"></script>
@@ -153,6 +268,10 @@
     <script src="modes/modes/TGM2NormalMode.js"></script>
     <script src="modes/modes/TGMPlusMode.js"></script>
     <script src="modes/modes/TADeathMode.js"></script>
+    <script src="modes/modes/Sprint40Mode.js"></script>
+    <script src="modes/modes/MarathonMode.js"></script>
+    <script src="modes/modes/UltraMode.js"></script>
+    <script src="modes/modes/ZenMode.js"></script>
 
     <!-- Mode Manager - Load after mode classes are available -->
     <script src="modes/modes/ModeManager.js"></script>

@@ -1257,43 +1257,782 @@ class MenuScene extends Phaser.Scene {
 class SettingsScene extends Phaser.Scene {
     constructor() {
         super({ key: 'SettingsScene' });
+        this.keybindLabels = {};
+        this.keybindTexts = {};
+        this.listeningForKey = null;
+        this.keybindActions = {
+            moveLeft: 'Move Left',
+            moveRight: 'Move Right',
+            softDrop: 'Soft Drop',
+            rotateCW: 'Rotate CW',
+            rotateCCW: 'Rotate CCW',
+            hardDrop: 'Hard Drop',
+            hold: 'Hold',
+            pause: 'Pause',
+            restart: 'Restart'
+        };
+        
+        // Volume controls
+        this.mainVolumeLabel = null;
+        this.mainVolumeText = null;
+        this.mainVolumeSlider = null;
+        this.mainVolumeSliderFill = null;
+        this.mainVolumeKnob = null;
+        
+        this.bgmVolumeLabel = null;
+        this.bgmVolumeText = null;
+        this.bgmVolumeSlider = null;
+        this.bgmVolumeSliderFill = null;
+        this.bgmVolumeKnob = null;
+        
+        this.sfxVolumeLabel = null;
+        this.sfxVolumeText = null;
+        this.sfxVolumeSlider = null;
+        this.sfxVolumeSliderFill = null;
+        this.sfxVolumeKnob = null;
     }
 
     create() {
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
 
-        // Title
-        this.add.text(centerX, centerY - 100, 'Settings', {
+        // Title - moved up 50px
+        this.add.text(centerX, centerY - 200, 'Settings', {
             fontSize: '36px',
             fill: '#ffffff',
             fontFamily: 'Courier New'
         }).setOrigin(0.5);
 
-        // Rotation system toggle
+        // Rotation system toggle - moved up 50px
         const rotationSystem = localStorage.getItem('rotationSystem') || 'SRS';
-        this.rotationText = this.add.text(centerX, centerY - 20, `Rotation System: ${rotationSystem}`, {
+        this.rotationText = this.add.text(centerX, centerY - 130, `Rotation System: ${rotationSystem}`, {
             fontSize: '24px',
             fill: '#ffffff',
             fontFamily: 'Courier New'
         }).setOrigin(0.5).setInteractive();
 
         this.rotationText.on('pointerdown', () => {
-            const newSystem = rotationSystem === 'SRS' ? 'ARS' : 'SRS';
+            const currentSystem = localStorage.getItem('rotationSystem') || 'SRS';
+            const newSystem = currentSystem === 'SRS' ? 'ARS' : 'SRS';
             localStorage.setItem('rotationSystem', newSystem);
             this.rotationText.setText(`Rotation System: ${newSystem}`);
+            this.updateRotationSystemDisplay(newSystem);
         });
 
-        // Back to menu
-        const backButton = this.add.text(centerX, centerY + 60, 'Back to Menu', {
+        // Add T piece display under rotation system text
+        this.rotationSystem = rotationSystem;
+        this.tPieceDisplay = this.createTPieceDisplay(centerX, centerY - 90);
+
+        // Keybind settings - moved to left side
+        const keybindsX = centerX - 300; // Moved to left
+        const keybindsY = centerY - 100;
+        
+        this.add.text(keybindsX, keybindsY - 40, 'Keybinds (Click to change)', {
+            fontSize: '20px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        let yOffset = keybindsY;
+        const spacing = 35;
+
+        Object.keys(this.keybindActions).forEach(action => {
+            // Label
+            this.keybindLabels[action] = this.add.text(keybindsX - 80, yOffset, this.keybindActions[action] + ':', {
+                fontSize: '18px',
+                fill: '#ffffff',
+                fontFamily: 'Courier New'
+            }).setOrigin(1, 0.5); // Right-aligned
+
+            // Current keybind
+            const currentKey = this.getCurrentKeybind(action);
+            this.keybindTexts[action] = this.add.text(keybindsX + 80, yOffset, currentKey, {
+                fontSize: '18px',
+                fill: '#00ff00',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            }).setOrigin(0, 0.5).setInteractive(); // Left-aligned
+
+            this.keybindTexts[action].on('pointerdown', () => {
+                this.startListeningForKey(action);
+            });
+
+            yOffset += spacing;
+        });
+
+        // Volume controls - moved to right side with main volume control
+        const volumeX = centerX + 300; // Moved to right
+        const volumeY = centerY - 100;
+
+        // Main Volume
+        this.mainVolumeLabel = this.add.text(volumeX, volumeY - 60, 'Master Volume', {
+            fontSize: '20px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Main Volume slider background
+        const mainSliderX = volumeX;
+        const mainSliderY = volumeY - 20;
+        const sliderWidth = 200;
+        const sliderHeight = 10;
+        
+        this.mainVolumeSlider = this.add.graphics();
+        this.mainVolumeSlider.fillStyle(0x333333);
+        this.mainVolumeSlider.fillRect(mainSliderX - sliderWidth/2, mainSliderY - sliderHeight/2, sliderWidth, sliderHeight);
+        
+        // Main Volume slider fill
+        this.mainVolumeSliderFill = this.add.graphics();
+        this.mainVolumeSliderFill.fillStyle(0x00ff00);
+        this.mainVolumeSliderFill.fillRect(mainSliderX - sliderWidth/2, mainSliderY - sliderHeight/2, sliderWidth * this.getMasterVolume(), sliderHeight);
+        
+        // Main Volume slider knob
+        this.mainVolumeKnob = this.add.graphics();
+        this.mainVolumeKnob.fillStyle(0xffffff);
+        this.mainVolumeKnob.fillCircle(mainSliderX - sliderWidth/2 + sliderWidth * this.getMasterVolume(), mainSliderY, 8);
+
+        // Main Volume percentage text
+        this.mainVolumeText = this.add.text(mainSliderX, mainSliderY + 30, `${Math.round(this.getMasterVolume() * 100)}%`, {
+            fontSize: '16px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Make Main slider interactive
+        this.mainVolumeSlider.setInteractive(new Phaser.Geom.Rectangle(mainSliderX - sliderWidth/2, mainSliderY - sliderHeight/2, sliderWidth, sliderHeight), Phaser.Geom.Rectangle.Contains);
+        this.mainVolumeSlider.on('pointerdown', (pointer) => {
+            this.updateMainVolumeFromPointer(pointer);
+        });
+        this.mainVolumeSlider.on('pointermove', (pointer) => {
+            if (pointer.isDown) {
+                this.updateMainVolumeFromPointer(pointer);
+            }
+        });
+
+        // BGM Volume
+        this.bgmVolumeLabel = this.add.text(volumeX, volumeY + 40, 'BGM Volume', {
+            fontSize: '20px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // BGM Volume slider background
+        const bgmSliderX = volumeX;
+        const bgmSliderY = volumeY + 80;
+        
+        this.bgmVolumeSlider = this.add.graphics();
+        this.bgmVolumeSlider.fillStyle(0x333333);
+        this.bgmVolumeSlider.fillRect(bgmSliderX - sliderWidth/2, bgmSliderY - sliderHeight/2, sliderWidth, sliderHeight);
+        
+        // BGM Volume slider fill
+        this.bgmVolumeSliderFill = this.add.graphics();
+        this.bgmVolumeSliderFill.fillStyle(0x00ff00);
+        this.bgmVolumeSliderFill.fillRect(bgmSliderX - sliderWidth/2, bgmSliderY - sliderHeight/2, sliderWidth * this.getBGMVolume(), sliderHeight);
+        
+        // BGM Volume slider knob
+        this.bgmVolumeKnob = this.add.graphics();
+        this.bgmVolumeKnob.fillStyle(0xffffff);
+        this.bgmVolumeKnob.fillCircle(bgmSliderX - sliderWidth/2 + sliderWidth * this.getBGMVolume(), bgmSliderY, 8);
+
+        // BGM Volume percentage text
+        this.bgmVolumeText = this.add.text(bgmSliderX, bgmSliderY + 30, `${Math.round(this.getBGMVolume() * 100)}%`, {
+            fontSize: '16px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Make BGM slider interactive
+        this.bgmVolumeSlider.setInteractive(new Phaser.Geom.Rectangle(bgmSliderX - sliderWidth/2, bgmSliderY - sliderHeight/2, sliderWidth, sliderHeight), Phaser.Geom.Rectangle.Contains);
+        this.bgmVolumeSlider.on('pointerdown', (pointer) => {
+            this.updateBGMVolumeFromPointer(pointer);
+        });
+        this.bgmVolumeSlider.on('pointermove', (pointer) => {
+            if (pointer.isDown) {
+                this.updateBGMVolumeFromPointer(pointer);
+            }
+        });
+
+        // SFX Volume
+        this.sfxVolumeLabel = this.add.text(volumeX, volumeY + 160, 'SFX Volume', {
+            fontSize: '20px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // SFX Volume slider background
+        const sfxSliderX = volumeX;
+        const sfxSliderY = volumeY + 200;
+        
+        this.sfxVolumeSlider = this.add.graphics();
+        this.sfxVolumeSlider.fillStyle(0x333333);
+        this.sfxVolumeSlider.fillRect(sfxSliderX - sliderWidth/2, sfxSliderY - sliderHeight/2, sliderWidth, sliderHeight);
+        
+        // SFX Volume slider fill
+        this.sfxVolumeSliderFill = this.add.graphics();
+        this.sfxVolumeSliderFill.fillStyle(0x00ff00);
+        this.sfxVolumeSliderFill.fillRect(sfxSliderX - sliderWidth/2, sfxSliderY - sliderHeight/2, sliderWidth * this.getSFXVolume(), sliderHeight);
+        
+        // SFX Volume slider knob
+        this.sfxVolumeKnob = this.add.graphics();
+        this.sfxVolumeKnob.fillStyle(0xffffff);
+        this.sfxVolumeKnob.fillCircle(sfxSliderX - sliderWidth/2 + sliderWidth * this.getSFXVolume(), sfxSliderY, 8);
+
+        // SFX Volume percentage text
+        this.sfxVolumeText = this.add.text(sfxSliderX, sfxSliderY + 30, `${Math.round(this.getSFXVolume() * 100)}%`, {
+            fontSize: '16px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Make SFX slider interactive
+        this.sfxVolumeSlider.setInteractive(new Phaser.Geom.Rectangle(sfxSliderX - sliderWidth/2, sfxSliderY - sliderHeight/2, sliderWidth, sliderHeight), Phaser.Geom.Rectangle.Contains);
+        this.sfxVolumeSlider.on('pointerdown', (pointer) => {
+            this.updateSFXVolumeFromPointer(pointer);
+        });
+        this.sfxVolumeSlider.on('pointermove', (pointer) => {
+            if (pointer.isDown) {
+                this.updateSFXVolumeFromPointer(pointer);
+            }
+        });
+
+        // Reset to defaults button - moved down 70px
+        this.resetButton = this.add.text(centerX, centerY + 190, 'Reset to Defaults', {
+            fontSize: '18px',
+            fill: '#ff8800',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        this.resetButton.on('pointerdown', () => {
+            this.resetKeybindsToDefaults();
+        });
+
+        // Reset high scores button - moved down 70px
+        this.resetScoresButton = this.add.text(centerX, centerY + 230, 'Reset High Scores', {
+            fontSize: '18px',
+            fill: '#ff8800',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5).setInteractive();
+
+        this.resetScoresButton.on('pointerdown', () => {
+            this.resetHighScores();
+        });
+
+        // Back to menu - moved down 70px
+        this.backButton = this.add.text(centerX, centerY + 270, 'Back to Menu', {
             fontSize: '24px',
             fill: '#ffffff',
             fontFamily: 'Courier New'
         }).setOrigin(0.5).setInteractive();
 
-        backButton.on('pointerdown', () => {
+        this.backButton.on('pointerdown', () => {
             this.scene.start('MenuScene');
         });
+
+        // Setup keyboard input for keybind changes
+        this.input.keyboard.on('keydown', this.onKeyDown, this);
+    }
+
+    getCurrentKeybind(action) {
+        const keybinds = this.getKeybinds();
+        const keyCode = keybinds[action];
+        
+        // Create reverse mapping for key codes to names
+        const reverseKeyMap = {};
+        Object.keys(Phaser.Input.Keyboard.KeyCodes).forEach(key => {
+            reverseKeyMap[Phaser.Input.Keyboard.KeyCodes[key]] = key;
+        });
+        
+        const keyName = reverseKeyMap[keyCode];
+        
+        const displayMap = {
+            'LEFT': '←',
+            'RIGHT': '→',
+            'UP': '↑',
+            'DOWN': '↓',
+            'SPACE': 'Space',
+            'ESC': 'Esc',
+            'ENTER': 'Enter',
+            'SHIFT': 'Shift',
+            'CTRL': 'Ctrl',
+            'ALT': 'Alt',
+            'BACKSPACE': 'Backspace',
+            'TAB': 'Tab',
+            'CAPSLOCK': 'Caps Lock',
+            'NUMLOCK': 'Num Lock',
+            'SCROLLLOCK': 'Scroll Lock',
+            'PAUSE': 'Pause',
+            'INSERT': 'Insert',
+            'HOME': 'Home',
+            'PAGEUP': 'Page Up',
+            'PAGEDOWN': 'Page Down',
+            'END': 'End',
+            'DELETE': 'Delete'
+        };
+
+        let displayName = displayMap[keyName] || keyName;
+        if (!keyName) displayName = 'Key ' + keyCode;
+        return displayName;
+    }
+
+    getKeybinds() {
+        const defaultKeybinds = {
+            moveLeft: Phaser.Input.Keyboard.KeyCodes.Z,
+            moveRight: Phaser.Input.Keyboard.KeyCodes.C,
+            softDrop: Phaser.Input.Keyboard.KeyCodes.S,
+            rotateCW: Phaser.Input.Keyboard.KeyCodes.K,
+            rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
+            hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
+            hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+            pause: Phaser.Input.Keyboard.KeyCodes.ESC,
+            restart: Phaser.Input.Keyboard.KeyCodes.ENTER
+        };
+
+        const stored = localStorage.getItem('keybinds');
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                return { ...defaultKeybinds, ...parsed };
+            } catch (error) {
+                console.warn('Failed to parse stored keybinds:', error);
+            }
+        }
+        return defaultKeybinds;
+    }
+
+    startListeningForKey(action) {
+        if (this.listeningForKey) {
+            // Cancel previous listening
+            this.keybindTexts[this.listeningForKey].setStyle({ fill: '#00ff00' });
+        }
+
+        this.listeningForKey = action;
+        this.keybindTexts[action].setStyle({ fill: '#ffff00' });
+        this.keybindTexts[action].setText('Press a key...');
+    }
+
+    onKeyDown(event) {
+        if (this.listeningForKey) {
+            const action = this.listeningForKey;
+            const keyCode = event.keyCode;
+
+            // Save the new keybind
+            const keybinds = this.getKeybinds();
+            keybinds[action] = keyCode;
+            localStorage.setItem('keybinds', JSON.stringify(keybinds));
+
+            // Update display using the same method as getCurrentKeybind
+            const currentKey = this.getCurrentKeybind(action);
+            this.keybindTexts[action].setText(currentKey);
+            this.keybindTexts[action].setStyle({ fill: '#00ff00' });
+
+            this.listeningForKey = null;
+        }
+    }
+
+    resetKeybindsToDefaults() {
+        localStorage.removeItem('keybinds');
+        localStorage.removeItem('masterVolume');
+        // Refresh all keybind displays
+        Object.keys(this.keybindActions).forEach(action => {
+            const currentKey = this.getCurrentKeybind(action);
+            this.keybindTexts[action].setText(currentKey);
+        });
+        // Reset volume display
+        this.updateVolumeDisplay();
+    }
+
+    // Volume control methods
+    getMasterVolume() {
+        const volume = localStorage.getItem('masterVolume');
+        return volume ? parseFloat(volume) : 1.0;
+    }
+
+    getBGMVolume() {
+        const volume = localStorage.getItem('bgmVolume');
+        return volume ? parseFloat(volume) : 1.0;
+    }
+
+    getSFXVolume() {
+        const volume = localStorage.getItem('sfxVolume');
+        return volume ? parseFloat(volume) : 1.0;
+    }
+
+    setMasterVolume(volume) {
+        const clampedVolume = Math.max(0, Math.min(1, volume));
+        localStorage.setItem('masterVolume', clampedVolume.toString());
+        this.updateMainVolumeDisplay();
+        
+        // Apply master volume to all sounds
+        if (this.sound) {
+            this.sound.setVolume(clampedVolume);
+        }
+    }
+
+    setBGMVolume(volume) {
+        const clampedVolume = Math.max(0, Math.min(1, volume));
+        localStorage.setItem('bgmVolume', clampedVolume.toString());
+        this.updateBGMVolumeDisplay();
+        
+        // Apply volume to BGM sounds
+        if (this.sound) {
+            // Update all BGM sounds
+            const bgmSounds = ['stage1', 'stage2', 'tgm2_stage1', 'tgm2_stage2', 'tgm2_stage3', 'tgm2_stage4', 'credits'];
+            bgmSounds.forEach(soundKey => {
+                const sound = this.sound.get(soundKey);
+                if (sound) {
+                    const masterVolume = this.getMasterVolume();
+                    sound.setVolume(clampedVolume * masterVolume * 0.5); // Base volume 0.5, limited by master
+                }
+            });
+        }
+    }
+
+    setSFXVolume(volume) {
+        const clampedVolume = Math.max(0, Math.min(1, volume));
+        localStorage.setItem('sfxVolume', clampedVolume.toString());
+        this.updateSFXVolumeDisplay();
+        
+        // Apply volume to SFX sounds
+        if (this.sound) {
+            // Update all SFX sounds
+            const sfxSounds = ['ready', 'go', 'gradeup', 'complete', 'clear', 'fall', 'sectionchange', 'IRS', 'ground', 'lock', 'sound_s', 'sound_z', 'sound_t', 'sound_j', 'sound_l', 'sound_o', 'sound_i'];
+            sfxSounds.forEach(soundKey => {
+                const sound = this.sound.get(soundKey);
+                if (sound) {
+                    const masterVolume = this.getMasterVolume();
+                    sound.setVolume(clampedVolume * masterVolume * 0.7); // Base volume 0.7, limited by master
+                }
+            });
+        }
+    }
+
+    updateMainVolumeFromPointer(pointer) {
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300; // Main slider X position
+        const sliderWidth = 200;
+        const sliderY = centerY - 20; // Main slider Y position
+        
+        // Calculate volume based on pointer position
+        const relativeX = pointer.x - (sliderX - sliderWidth/2);
+        const volume = Math.max(0, Math.min(1, relativeX / sliderWidth));
+        
+        this.setMasterVolume(volume);
+    }
+
+    updateBGMVolumeFromPointer(pointer) {
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300; // BGM slider X position
+        const sliderWidth = 200;
+        const sliderY = centerY + 80; // BGM slider Y position (moved down 20px)
+        
+        // Calculate volume based on pointer position
+        const relativeX = pointer.x - (sliderX - sliderWidth/2);
+        const volume = Math.max(0, Math.min(1, relativeX / sliderWidth));
+        
+        this.setBGMVolume(volume);
+    }
+
+    updateSFXVolumeFromPointer(pointer) {
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300; // SFX slider X position
+        const sliderWidth = 200;
+        const sliderY = centerY + 200; // SFX slider Y position (moved down 20px)
+        
+        // Calculate volume based on pointer position
+        const relativeX = pointer.x - (sliderX - sliderWidth/2);
+        const volume = Math.max(0, Math.min(1, relativeX / sliderWidth));
+        
+        this.setSFXVolume(volume);
+    }
+
+    updateMainVolumeDisplay() {
+        const volume = this.getMasterVolume();
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300;
+        const sliderWidth = 200;
+        const sliderY = centerY - 20;
+        
+        // Update slider fill
+        if (this.mainVolumeSliderFill) {
+            this.mainVolumeSliderFill.clear();
+            this.mainVolumeSliderFill.fillStyle(0x00ff00);
+            this.mainVolumeSliderFill.fillRect(sliderX - sliderWidth/2, sliderY - 5, sliderWidth * volume, 10);
+        }
+        
+        // Update knob position
+        if (this.mainVolumeKnob) {
+            this.mainVolumeKnob.clear();
+            this.mainVolumeKnob.fillStyle(0xffffff);
+            this.mainVolumeKnob.fillCircle(sliderX - sliderWidth/2 + sliderWidth * volume, sliderY, 8);
+        }
+        
+        // Update text
+        if (this.mainVolumeText) {
+            this.mainVolumeText.setText(`${Math.round(volume * 100)}%`);
+        }
+    }
+
+    updateBGMVolumeDisplay() {
+        const volume = this.getBGMVolume();
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300;
+        const sliderWidth = 200;
+        const sliderY = centerY + 80;
+        
+        // Update slider fill
+        if (this.bgmVolumeSliderFill) {
+            this.bgmVolumeSliderFill.clear();
+            this.bgmVolumeSliderFill.fillStyle(0x00ff00);
+            this.bgmVolumeSliderFill.fillRect(sliderX - sliderWidth/2, sliderY - 5, sliderWidth * volume, 10);
+        }
+        
+        // Update knob position
+        if (this.bgmVolumeKnob) {
+            this.bgmVolumeKnob.clear();
+            this.bgmVolumeKnob.fillStyle(0xffffff);
+            this.bgmVolumeKnob.fillCircle(sliderX - sliderWidth/2 + sliderWidth * volume, sliderY, 8);
+        }
+        
+        // Update text
+        if (this.bgmVolumeText) {
+            this.bgmVolumeText.setText(`${Math.round(volume * 100)}%`);
+        }
+    }
+
+    updateSFXVolumeDisplay() {
+        const volume = this.getSFXVolume();
+        const centerX = this.cameras.main.width / 2;
+        const sliderX = centerX + 300;
+        const sliderWidth = 200;
+        const sliderY = centerY + 200;
+        
+        // Update slider fill
+        if (this.sfxVolumeSliderFill) {
+            this.sfxVolumeSliderFill.clear();
+            this.sfxVolumeSliderFill.fillStyle(0x00ff00);
+            this.sfxVolumeSliderFill.fillRect(sliderX - sliderWidth/2, sliderY - 5, sliderWidth * volume, 10);
+        }
+        
+        // Update knob position
+        if (this.sfxVolumeKnob) {
+            this.sfxVolumeKnob.clear();
+            this.sfxVolumeKnob.fillStyle(0xffffff);
+            this.sfxVolumeKnob.fillCircle(sliderX - sliderWidth/2 + sliderWidth * volume, sliderY, 8);
+        }
+        
+        // Update text
+        if (this.sfxVolumeText) {
+            this.sfxVolumeText.setText(`${Math.round(volume * 100)}%`);
+        }
+    }
+
+    resetKeybindsToDefaults() {
+        localStorage.removeItem('keybinds');
+        localStorage.removeItem('masterVolume');
+        localStorage.removeItem('bgmVolume');
+        localStorage.removeItem('sfxVolume');
+        // Refresh all keybind displays
+        Object.keys(this.keybindActions).forEach(action => {
+            const currentKey = this.getCurrentKeybind(action);
+            this.keybindTexts[action].setText(currentKey);
+        });
+        // Reset volume displays
+        this.updateMainVolumeDisplay();
+        this.updateBGMVolumeDisplay();
+        this.updateSFXVolumeDisplay();
+    }
+
+    resetHighScores() {
+        // Get all mode types from MenuScene
+        const modeTypes = [
+            {
+                name: 'EASY',
+                modes: [
+                    { id: 'tgm2_normal', name: 'Normal', description: 'Score as many points as you can within 300 levels!' },
+                    { id: 'easy_easy', name: 'Easy', description: 'Clear lines, light fireworks. Have fun!' }
+                ]
+            },
+            {
+                name: 'STANDARD',
+                modes: [
+                    { id: 'sprint_40', name: 'Sprint 40L', description: 'Clear 40 lines as fast as possible' },
+                    { id: 'sprint_100', name: 'Sprint 100L', description: 'Clear 100 lines as fast as possible' },
+                    { id: 'ultra', name: 'Ultra', description: '2-minute score attack' },
+                    { id: 'marathon', name: 'Marathon', description: 'Clear 150 lines' },
+                    { id: 'zen', name: 'Zen', description: 'Endless relaxed play' }
+                ]
+            },
+            {
+                name: 'MASTER',
+                modes: [
+                    { id: 'tgm1', name: 'TGM1', description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!' },
+                    { id: 'tgm2', name: 'TGM2', description: 'Brand new mechanics, brand new challenges! Do you have what it takes?' },
+                    { id: 'tgm3', name: 'TGM3', description: 'Try to be COOL!!, or you will REGRET!! it' },
+                    { id: 'tgm4', name: 'TGM4', description: 'Patience is key...' },
+                    { id: 'tgm_plus', name: 'TGM+', description: 'Rising garbage mode. Master the art of survival!' }
+                ]
+            },
+            {
+                name: '20G',
+                modes: [
+                    { id: '20g', name: '20G', description: 'Maximum gravity from the start! Good luck!' },
+                    { id: 'tadeath', name: 'T.A.Death', description: 'Difficult 20G challenge mode. Speed is key!' },
+                    { id: 'shirase', name: 'Shirase', description: 'Lightning-fast speeds. Do you have what it takes?' },
+                    { id: 'master20g', name: 'Master', description: 'Brand new, unique game mechanics. Can you handle them?' }
+                ]
+            },
+            {
+                name: 'RACE',
+                modes: [
+                    { id: 'asuka_easy', name: 'Asuka Easy', description: '20G Tetris stacking introduction' },
+                    { id: 'asuka_normal', name: 'Asuka', description: 'Race mode. Finish 1300 levels in 7 minutes.' },
+                    { id: 'asuka_hard', name: 'Asuka Hard', description: 'The true test of skill and speed!' }
+                ]
+            },
+            {
+                name: 'ALL CLEAR',
+                modes: [
+                    { id: 'konoha_easy', name: 'Konoha Easy', description: 'Easy all-clear challenge with 5 pieces!' },
+                    { id: 'konoha_hard', name: 'Konoha Hard', description: 'Hard all-clear challenge with all 7 pieces!' }
+                ]
+            },
+            {
+                name: 'PUZZLE',
+                modes: [
+                    { id: 'tgm3_sakura', name: 'TGM3-Sakura', description: 'Puzzle mode from TGM3' },
+                    { id: 'flashpoint', name: 'Flashpoint', description: 'From Flashpoint.' }
+                ]
+            }
+        ];
+
+        // Clear all high scores
+        modeTypes.forEach(modeType => {
+            modeType.modes.forEach(mode => {
+                localStorage.removeItem(`bestScore_${mode.id}`);
+            });
+        });
+
+        // Show confirmation message
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        
+        const confirmationText = this.add.text(centerX, centerY + 320, 'High scores reset to defaults!', {
+            fontSize: '16px',
+            fill: '#00ff00',
+            fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+
+        // Remove confirmation after 2 seconds
+        this.time.delayedCall(2000, () => {
+            confirmationText.destroy();
+        });
+    }
+
+    createTPieceDisplay(centerX, centerY, system) {
+        const container = this.add.container(centerX, centerY);
+
+        // Create T piece minos
+        const minoSize = 20;
+        const minos = [];
+
+        // Get T piece shape and color based on rotation system
+        const rotations = system === 'ARS' ? SEGA_ROTATIONS.T.rotations : TETROMINOES.T.rotations;
+        const color = system === 'ARS' ? ARS_COLORS.T : TETROMINOES.T.color;
+        const textureKey = system === 'ARS' ? 'mino_ars' : 'mino_srs';
+
+        // T piece shape in rotation 0 (3-wide)
+        const shape = rotations[0];
+
+        // Create mino sprites - use actual textures if available, otherwise fallback to colored rectangles
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                if (shape[r][c]) {
+                    // Center the T piece around (0,0) in the container
+                    const offsetX = (c - 1) * minoSize; // Center horizontally around c=1
+                    const offsetY = (r - 0.5) * minoSize; // Center vertically around r=0.5 (middle of the T)
+
+                    if (this.textures.exists(textureKey)) {
+                        const sprite = this.add.sprite(offsetX, offsetY, textureKey);
+                        sprite.setDisplaySize(minoSize, minoSize);
+                        sprite.setTint(color);
+                        minos.push(sprite);
+                        container.add(sprite);
+                    } else {
+                        // Fallback: create colored rectangle
+                        const graphics = this.add.graphics();
+                        graphics.fillStyle(color);
+                        graphics.fillRect(offsetX - minoSize/2, offsetY - minoSize/2, minoSize, minoSize);
+                        minos.push(graphics);
+                        container.add(graphics);
+                    }
+                }
+            }
+        }
+
+        return { container, minos, rotation: 0 };
+    }
+
+    updateRotationSystemDisplay(newSystem) {
+        // Animate the T piece when rotation system changes
+        const tPiece = this.tPieceDisplay;
+
+        // Determine the rotation shapes based on system
+        const rotations = newSystem === 'ARS' ? SEGA_ROTATIONS.T.rotations : TETROMINOES.T.rotations;
+
+        // Update the T piece shape and color immediately
+        this.updateTPieceShape(tPiece, rotations, newSystem);
+
+        // Animate 360-degree rotation with the new shape/color
+        this.tweens.add({
+            targets: tPiece.container,
+            angle: 360,
+            duration: 600,
+            ease: 'Power2',
+            onComplete: () => {
+                // Reset angle to 0
+                tPiece.container.angle = 0;
+            }
+        });
+    }
+
+    updateTPieceShape(tPiece, rotations, system) {
+        const minoSize = 20;
+        const color = system === 'ARS' ? ARS_COLORS.T : TETROMINOES.T.color;
+        const textureKey = system === 'ARS' ? 'mino_ars' : 'mino_srs';
+
+        // Get current rotation (keep same rotation index)
+        const currentRotation = tPiece.rotation;
+        const shape = rotations[currentRotation];
+
+        // Clear existing minos and recreate them
+        tPiece.minos.forEach(mino => mino.destroy());
+        tPiece.minos = [];
+
+        // Recreate mino sprites/graphics with new shape
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                if (shape[r][c]) {
+                    // Center the T piece around (0,0) in the container
+                    const offsetX = (c - 1) * minoSize; // Center horizontally around c=1
+                    const offsetY = (r - 0.5) * minoSize; // Center vertically around r=0.5
+
+                    if (this.textures.exists(textureKey)) {
+                        const sprite = this.add.sprite(offsetX, offsetY, textureKey);
+                        sprite.setDisplaySize(minoSize, minoSize);
+                        sprite.setTint(color);
+                        tPiece.minos.push(sprite);
+                        tPiece.container.add(sprite);
+                    } else {
+                        // Fallback: create colored rectangle
+                        const graphics = this.add.graphics();
+                        graphics.fillStyle(color);
+                        graphics.fillRect(offsetX - minoSize/2, offsetY - minoSize/2, minoSize, minoSize);
+                        tPiece.minos.push(graphics);
+                        tPiece.container.add(graphics);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1313,10 +2052,20 @@ class AssetLoaderScene extends Phaser.Scene {
     }
 
     preload() {
+        // Show loading text
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        this.loadingText = this.add.text(centerX, centerY, 'LOADING...', {
+            fontSize: '48px',
+            fill: '#ffffff',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
         // Load all assets for the game
         this.load.image('mino_srs', 'img/mino.png');
         this.load.image('mino_ars', 'img/minoARS.png');
-        
+
         // Load BGM files from the correct directory paths
         try {
             // Load MP3 files from bgm directory (Phaser compatible)
@@ -1332,7 +2081,7 @@ class AssetLoaderScene extends Phaser.Scene {
         } catch (error) {
             console.warn('BGM files could not be loaded from bgm directory', error);
         }
-        
+
         // Load all sound effects
         this.load.audio('ready', 'sfx/ready.wav');
         this.load.audio('go', 'sfx/go.wav');
@@ -1344,7 +2093,7 @@ class AssetLoaderScene extends Phaser.Scene {
         this.load.audio('IRS', 'sfx/IRS.wav');
         this.load.audio('ground', 'sfx/ground.wav');
         this.load.audio('lock', 'sfx/lock.wav');
-        
+
         // Load tetromino sound effects
         this.load.audio('sound_s', 'sfx/s.wav');
         this.load.audio('sound_z', 'sfx/z.wav');
@@ -1356,21 +2105,14 @@ class AssetLoaderScene extends Phaser.Scene {
     }
 
     create() {
-        // All assets loaded, proceed to loading screen with mode information
-        console.log('AssetLoaderScene.create() - received data:', {
-            mode: this.selectedMode
-        });
-
-        // Check if gameMode was passed through
-        if (this.gameMode) {
-            console.log('AssetLoaderScene: gameMode IS available -', this.gameMode.getName());
-        } else {
-            console.log('AssetLoaderScene: gameMode NOT available (undefined)');
+        // Remove loading text and start game scene
+        if (this.loadingText) {
+            this.loadingText.destroy();
         }
 
-        this.scene.start('LoadingScreenScene', {
+        this.scene.start('GameScene', {
             mode: this.selectedMode,
-            gameMode: this.gameMode  // Pass gameMode through!
+            gameMode: this.gameMode
         });
     }
 }
@@ -1600,6 +2342,7 @@ class GameScene extends Phaser.Scene {
         this.minoFadeTimer = 0;
         this.placedMinos = []; // Track all placed minos for fading
         this.placedMinoRows = []; // Track rows containing minos for row-by-row fading
+        this.fadingComplete = false; // Track when fading is complete
         this.gameOverTextDelay = 3; // seconds until GAME OVER text appears
         this.gameOverTextTimer = 0;
         this.showGameOverText = false;
@@ -1630,9 +2373,14 @@ class GameScene extends Phaser.Scene {
         this.selectedMode = null;
         this.gameMode = null; // Will be set by init method
 
+        // Loading and ready-go phases
+        this.loadingPhase = true;
+        this.readyGoPhase = false;
+        this.gameStarted = false;
+
         // Game over timer
         this.gameOverTimer = 0;
-        
+
         // Soft drop ground sound tracking
         this.wasGroundedDuringSoftDrop = false;
     }
@@ -1819,9 +2567,34 @@ class GameScene extends Phaser.Scene {
         const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
         const levelRowHeight = 20; // Decreased spacing
         const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
-        this.levelLabel = this.add.text(uiX + 135, levelBottomY - 3.5 * levelRowHeight - 43, 'LEVEL', { 
-            fontSize: `${uiFontSize}px`, 
-            fill: '#fff', 
+
+        // Determine mode types
+        const isMarathonMode = !!(this.selectedMode && (this.selectedMode === 'marathon' || this.selectedMode === 'ultra'));
+        const isZenMode = !!(this.selectedMode === 'zen');
+        const isSprintMode = !!(this.selectedMode && (this.selectedMode === 'sprint_40' || this.selectedMode === 'sprint_100'));
+
+        // For Marathon mode, add separate level display above
+        if (isMarathonMode) {
+            this.levelDisplayLabel = this.add.text(uiX + 135, levelBottomY - 4.5 * levelRowHeight - 43, 'LEVEL', {
+                fontSize: `${uiFontSize - 4}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            }).setOrigin(1, 0);
+            this.levelDisplayText = this.add.text(uiX + 140, levelBottomY - 4 * levelRowHeight - 43, '0', {
+                fontSize: `${levelFontSize}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold',
+                align: 'right'
+            }).setOrigin(1, 0);
+        }
+
+        // Level/Lines label and display
+        const levelLabelText = (isMarathonMode || isZenMode || isSprintMode) ? 'LINES' : 'LEVEL';
+        this.levelLabel = this.add.text(uiX + 135, levelBottomY - 3.5 * levelRowHeight - 43, levelLabelText, {
+            fontSize: `${uiFontSize}px`,
+            fill: '#fff',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
         }).setOrigin(1, 0);
@@ -1843,33 +2616,35 @@ class GameScene extends Phaser.Scene {
             align: 'right'
         }).setOrigin(1, 0);
 
-        // Piece per second displays
-        this.ppsLabel = this.add.text(uiX + 140, levelBottomY + 55, 'PPS', { 
-            fontSize: `${uiFontSize - 4}px`, 
-            fill: '#fff', 
+        // Piece per second displays - moved to right side of matrix, aligned with bottom of stack
+        const ppsX = this.borderOffsetX + (this.cellSize * this.board.cols) + 20;
+        const ppsY = this.borderOffsetY + this.playfieldHeight - 40; // Align with bottom of stack
+        this.ppsLabel = this.add.text(ppsX, ppsY, 'PPS', {
+            fontSize: `${uiFontSize - 4}px`,
+            fill: '#fff',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
-        }).setOrigin(1, 0);
-        this.ppsText = this.add.text(uiX + 140, levelBottomY + 70, '0.00', { 
-            fontSize: `${largeFontSize}px`, 
-            fill: '#fff', 
+        }).setOrigin(0, 0);
+        this.ppsText = this.add.text(ppsX, ppsY + 15, '0.00', {
+            fontSize: `${largeFontSize}px`,
+            fill: '#fff',
             fontFamily: 'Courier New',
             fontStyle: 'bold',
-            align: 'right'
-        }).setOrigin(1, 0);
-        this.rawPpsLabel = this.add.text(uiX + 140, levelBottomY + 95, 'RAW PPS', { 
-            fontSize: `${uiFontSize - 6}px`, 
-            fill: '#ccc', 
+            align: 'left'
+        }).setOrigin(0, 0);
+        this.rawPpsLabel = this.add.text(ppsX, ppsY + 40, 'RAW PPS', {
+            fontSize: `${uiFontSize - 6}px`,
+            fill: '#ccc',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
-        }).setOrigin(1, 0);
-        this.rawPpsText = this.add.text(uiX + 140, levelBottomY + 110, '0.00', { 
-            fontSize: `${largeFontSize - 4}px`, 
-            fill: '#ccc', 
+        }).setOrigin(0, 0);
+        this.rawPpsText = this.add.text(ppsX, ppsY + 55, '0.00', {
+            fontSize: `${largeFontSize - 4}px`,
+            fill: '#ccc',
             fontFamily: 'Courier New',
             fontStyle: 'bold',
-            align: 'right'
-        }).setOrigin(1, 0);
+            align: 'left'
+        }).setOrigin(0, 0);
 
         // Time - centered below border, larger font, bold
         if (!this.timeText) {
@@ -1938,14 +2713,20 @@ class GameScene extends Phaser.Scene {
 
         // UI - positioned relative to screen size
         this.setupUI();
-        
+
         // Initialize BGM system
         this.initializeBGM();
-        
+
         // Initialize game mode
         if (this.gameMode && this.gameMode.initializeForGameScene) {
             this.gameMode.initializeForGameScene(this);
         }
+
+        // Start loading sequence
+        this.time.delayedCall(500, () => {
+            this.loadingPhase = false;
+            this.showReadyGo();
+        });
     }
     
     initializeBGM() {
@@ -1990,7 +2771,49 @@ class GameScene extends Phaser.Scene {
             this.currentBGM = null;
         }
     }
-    
+
+    showReadyGo() {
+        this.readyGoPhase = true;
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+
+        const readyText = this.add.text(centerX, centerY, 'READY', {
+            fontSize: '64px',
+            fill: '#ffff00',
+            fontFamily: 'Courier New',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.gameGroup.add(readyText);
+
+        // Play ready sound
+        if (this.sound && this.sound.get('ready')) {
+            this.sound.add('ready', { volume: 0.7 }).play();
+        }
+
+        this.time.delayedCall(1000, () => {
+            readyText.destroy();
+
+            const goText = this.add.text(centerX, centerY, 'GO', {
+                fontSize: '64px',
+                fill: '#00ff00',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            }).setOrigin(0.5);
+            this.gameGroup.add(goText);
+
+            // Play go sound
+            if (this.sound && this.sound.get('go')) {
+                this.sound.add('go', { volume: 0.7 }).play();
+            }
+
+            this.time.delayedCall(1000, () => {
+                goText.destroy();
+                this.readyGoPhase = false;
+                this.gameStarted = true;
+            });
+        });
+    }
+
     updateTimer() {
         if (this.startTime && !this.isPaused && !this.level999Reached && !this.gameOver) {
             this.currentTime = (Date.now() - this.startTime) / 1000;
@@ -2628,41 +3451,54 @@ class GameScene extends Phaser.Scene {
             this.rightInRepeat = false;
         }
 
-        // ARE input tracking
-        if (this.areActive) {
+        // ARE input tracking - allow during loading for initial piece handling
+        if (this.areActive || !this.currentPiece) {
             this.areLeftHeld = leftDown || zKeyDown;
             this.areRightHeld = rightDown || cKeyDown;
 
-            // Track rotation key states during ARE for IRS (Initial Rotation System)
+            // Track rotation key states during ARE/loading for IRS (Initial Rotation System)
             this.areRotationKeys.k = kKeyDown;
             this.areRotationKeys.space = spaceKeyDown;
             this.areRotationKeys.l = lKeyDown;
 
-            // Determine rotation direction based on held keys
+            // Determine rotation direction based on currently held keys during ARE
             // Priority: K (clockwise) > Space/L (counter-clockwise)
+            // Deactivate if keys are released during ARE
             if (kKeyDown) {
                 this.areRotationDirection = 1;
+                if (!this.irsActivated) {
+                    console.log(`[IRS] Rotation key K held during ARE, activating CW rotation`);
+                    this.irsActivated = true;
+                }
             } else if (spaceKeyDown || lKeyDown) {
                 this.areRotationDirection = -1;
+                if (!this.irsActivated) {
+                    console.log(`[IRS] Rotation key ${spaceKeyDown ? 'Space' : 'L'} held during ARE, activating CCW rotation`);
+                    this.irsActivated = true;
+                }
             } else {
-                this.areRotationDirection = 0; // Deactivate IRS if no rotation keys held
+                this.areRotationDirection = 0;
+                if (this.irsActivated) {
+                    console.log(`[IRS] Rotation keys released during ARE, deactivating IRS`);
+                    this.irsActivated = false;
+                }
             }
 
-            // Update IRS state
-            this.irsActivated = this.areRotationDirection !== 0;
-
-            // TGM1 has no hold mechanics - commented out for TGM1 mode
-            // Uncomment for other modes that support hold
-            /*
-            if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
+            // Hold functionality for ARE - check if hold key is currently held during ARE
+            const holdCurrentlyHeld = this.holdEnabled && this.keys.shift.isDown;
+            if (holdCurrentlyHeld && !this.areHoldPressed) {
                 this.areHoldPressed = true;
+                console.log(`[IHS] Hold key held during ARE, activating IHS`);
+            } else if (!holdCurrentlyHeld && this.areHoldPressed) {
+                this.areHoldPressed = false;
+                console.log(`[IHS] Hold key released during ARE, deactivating IHS`);
             }
-            */
         } else {
-            // Reset ARE rotation tracking when not in ARE
+            // Reset ARE rotation tracking when not in ARE and piece exists
             this.areRotationKeys = { k: false, space: false, l: false };
             this.areRotationDirection = 0;
             this.irsActivated = false;
+            this.areHoldPressed = false;
         }
         
         // Update mino fading system (runs even when game is over)
@@ -2692,6 +3528,7 @@ class GameScene extends Phaser.Scene {
                 // Check if all rows are faded
                 if (this.minoFadeProgress >= this.placedMinoRows.length) {
                     this.minoFadeActive = false;
+                    this.fadingComplete = true;
                 }
             }
         }
@@ -2730,8 +3567,9 @@ class GameScene extends Phaser.Scene {
             return;
         }
 
-        if (!this.areActive) {
+        if (!this.areActive || !this.currentPiece) {
             // Track key states for DAS using custom keys (z for left, c for right)
+            // Allow DAS during loading for initial piece handling
             // Soft drop handling - only when s key is held
             if (downDown || sKeyDown) {
                 if (this.currentPiece.move(this.board, 0, 1)) {
@@ -2779,13 +3617,10 @@ class GameScene extends Phaser.Scene {
                 }
                 // If piece was already grounded, don't increment lock delay
             }
-            // TGM1 has no hold mechanics - commented out for TGM1 mode
-            // Uncomment for other modes that support hold
-            /*
-            if (Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
+            // Hold functionality for modes that support it
+            if (this.holdEnabled && Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
                 this.hold();
             }
-            */
         }
         
         // Pause/unpause with ESC
@@ -2883,6 +3718,7 @@ class GameScene extends Phaser.Scene {
                     this.isClearingLines = false;
                 } else {
                     // Normal ARE completed, spawn next piece
+                    console.log(`[ARE] ARE completed, spawning piece`);
                     this.areActive = false;
                     this.spawnPiece();
                 }
@@ -2954,21 +3790,17 @@ class GameScene extends Phaser.Scene {
         }
         const type = this.nextPieces.shift();
 
-        // Determine initial rotation based on ARE inputs for IRS
-        let initialRotation = 0;
-        if (this.areRotationDirection === 1) {
-            initialRotation = 1; // Clockwise 90 degrees
-        } else if (this.areRotationDirection === -1) {
-            initialRotation = 3; // Counter-clockwise 90 degrees (270 degrees)
-        }
+        // Create piece with default rotation first
+        this.currentPiece = new Piece(type, this.rotationSystem, 0);
 
-        this.currentPiece = new Piece(type, this.rotationSystem, initialRotation);
+        console.log(`[SPAWN] Starting spawn for piece ${type}, ARE active: ${this.areActive}, rotation direction: ${this.areRotationDirection}, hold pressed: ${this.areHoldPressed}`);
+
+        console.log(`[SPAWN] Starting spawn for piece ${type}, ARE active: ${this.areActive}, rotation direction: ${this.areRotationDirection}, hold pressed: ${this.areHoldPressed}`);
+
+        // Track if piece will be pre-rotated for spawn validation
+        let wasPreRotated = false;
         
-        // Play IRS sound if piece is prerotated
-        if (initialRotation !== 0) {
-            const irsSound = this.sound.add('IRS', { volume: 0.5 });
-            irsSound.play();
-        }
+        // IRS sound will be played after IRS is applied
         
         // Play next mino sound for the piece that will spawn NEXT (not current piece)
         if (this.nextPieces.length > 0) {
@@ -2989,7 +3821,7 @@ class GameScene extends Phaser.Scene {
 
         if (!this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y)) {
             // If prerotated piece can't spawn, try shifting up to give player a chance
-            if (initialRotation !== 0) {
+            if (wasPreRotated) {
                 let shifted = false;
                 for (let shiftY = -1; shiftY >= -3; shiftY--) {
                     if (this.board.isValidPosition(this.currentPiece, this.currentPiece.x, this.currentPiece.y + shiftY)) {
@@ -3005,7 +3837,7 @@ class GameScene extends Phaser.Scene {
                         this.currentBGM.stop();
                         this.currentBGM = null;
                     }
-    
+
                     // Show game over screen
                     this.showGameOverScreen();
                     return;
@@ -3047,14 +3879,44 @@ class GameScene extends Phaser.Scene {
         // Reset ARE rotation tracking
         this.areRotationDirection = 0;
 
-        // TGM1 has no hold mechanics - commented out for TGM1 mode
-        // Uncomment for other modes that support hold
-        /*
-        if (this.areHoldPressed) {
+        console.log(`[IHS] Before IHS application: current piece ${this.currentPiece.type}, hold piece ${this.holdPiece ? this.holdPiece.type : 'none'}, areHoldPressed ${this.areHoldPressed}`);
+
+        // Handle ARE hold (Initial Hold System) for modes that support hold
+        if (this.holdEnabled && this.areHoldPressed) {
+            console.log(`[IHS] ARE Hold pressed: ${this.areHoldPressed}, Hold enabled: ${this.holdEnabled}`);
             this.hold();
             this.areHoldPressed = false;
         }
-        */
+
+        console.log(`[IHS] After IHS application: current piece ${this.currentPiece.type}, hold piece ${this.holdPiece ? this.holdPiece.type : 'none'}`);
+
+        // Apply IRS to the spawning piece (which may have been swapped by IHS)
+        if (this.areRotationDirection === 1) {
+            console.log(`[IRS] ARE Rotation CW pressed: ${this.areRotationDirection === 1}, Hold pressed: ${this.areHoldPressed}`);
+            this.currentPiece.rotation = 1; // Clockwise 90 degrees
+            this.currentPiece.shape = this.currentPiece.getRotatedShape();
+            wasPreRotated = true;
+        } else if (this.areRotationDirection === -1) {
+            console.log(`[IRS] ARE Rotation CCW pressed: ${this.areRotationDirection === -1}, Hold pressed: ${this.areHoldPressed}`);
+            this.currentPiece.rotation = 3; // Counter-clockwise 90 degrees
+            this.currentPiece.shape = this.currentPiece.getRotatedShape();
+            wasPreRotated = true;
+        }
+
+        // Log IRS+IHS combination
+        if (wasPreRotated && this.holdEnabled && this.holdPiece) {
+            console.log(`[IRS+IHS] Both IRS and IHS applied: piece ${this.currentPiece.type} rotated to ${this.currentPiece.rotation}, hold contains previous piece`);
+        }
+
+        // Play IRS sound if piece was pre-rotated
+        if (wasPreRotated) {
+            console.log(`[IRS] Playing IRS sound for pre-rotated piece: ${this.currentPiece.type}, rotation: ${this.currentPiece.rotation}`);
+            const irsSound = this.sound.add('IRS', { volume: 0.5 });
+            irsSound.play();
+        }
+
+        // Log final piece state after spawn
+        console.log(`[SPAWN] Final piece after spawn: type ${this.currentPiece.type}, rotation ${this.currentPiece.rotation}, hold: ${this.holdPiece ? this.holdPiece.type : 'none'}`);
         if (this.areLeftHeld) {
             this.leftKeyPressed = true;
             this.leftTimer = this.dasDelay;
@@ -3205,12 +4067,16 @@ class GameScene extends Phaser.Scene {
         this.currentPiece = null;
 
         if (linesToClear.length > 0) {
-            // Start line clear ARE phase (0.683 seconds) with animation
-            this.areDelay = 41/60;
+            // Start line clear ARE phase with mode-specific delay
+            this.areDelay = (this.gameMode && this.gameMode.getLineARE) ? this.gameMode.getLineARE() : 41/60;
             this.areTimer = 0;
             this.areActive = true;
             this.lineClearPhase = true;
             this.isClearingLines = true;
+            // Reset ARE input state when ARE starts
+            this.areRotationDirection = 0;
+            this.areHoldPressed = false;
+            console.log(`[ARE] Starting line clear ARE, delay: ${this.areDelay}s`);
 
             // Play clear sound
             const clearSound = this.sound.add('clear', { volume: 0.7 });
@@ -3223,6 +4089,10 @@ class GameScene extends Phaser.Scene {
             this.areActive = true;
             this.lineClearPhase = false;
             this.isClearingLines = false;
+            // Reset ARE input state when ARE starts
+            this.areRotationDirection = 0;
+            this.areHoldPressed = false;
+            console.log(`[ARE] Starting normal ARE, delay: ${this.areDelay}s`);
         }
 
         // If item animation is active (e.g., powerup activation), delay ARE start by 2 seconds
@@ -3231,25 +4101,42 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    // TGM1 has no hold mechanics - commented out for TGM1 mode
-    // Uncomment for other modes that support hold
-    /*
+    // Hold functionality for modes that support it
     hold() {
-        if (!this.canHold) return;
+        if (!this.canHold || !this.holdEnabled) return;
+
+        console.log(`[IHS] Hold function called, current piece: ${this.currentPiece.type}, hold piece: ${this.holdPiece ? this.holdPiece.type : 'none'}`);
+
         if (this.holdPiece) {
+            // Swap current piece with hold piece
+            const oldCurrent = this.currentPiece.type;
+            const oldHold = this.holdPiece.type;
             [this.currentPiece, this.holdPiece] = [this.holdPiece, this.currentPiece];
-            this.currentPiece.x = 3;
-            this.currentPiece.y = 0;
-            this.currentPiece.rotation = 0;
-            this.currentPiece.shape = TETROMINOES[this.currentPiece.type].shape.map(row => [...row]);
+            this.currentPiece.x = 3; // Reset position
+            this.currentPiece.y = 1; // Spawn position
+            this.currentPiece.rotation = 0; // Reset rotation
+            // Reset piece shape to initial rotation
+            const rotations = this.rotationSystem === 'ARS' ? SEGA_ROTATIONS[this.currentPiece.type].rotations : TETROMINOES[this.currentPiece.type].rotations;
+            this.currentPiece.shape = rotations[0].map(row => [...row]);
+            console.log(`[IHS] Swapped pieces: ${oldCurrent} -> hold, ${oldHold} -> current`);
         } else {
+            // Move current piece to hold
             this.holdPiece = this.currentPiece;
+            console.log(`[IHS] Moved ${this.currentPiece.type} to hold, spawning new piece`);
             this.spawnPiece();
         }
+
         this.canHold = false;
         this.resetLockDelay();
+        this.isGrounded = false;
+
+        // Play hold sound if available
+        if (this.sound && this.sound.get('lock')) {
+            const holdSound = this.sound.add('lock', { volume: 0.4 });
+            holdSound.play();
+            console.log(`[IHS] Played hold sound`);
+        }
     }
-    */
 
     clearStoredLines() {
         // ROBUST FIX: Clear lines without index shifting issues
@@ -3327,12 +4214,82 @@ class GameScene extends Phaser.Scene {
         if (this.creditsActive) {
             return;
         }
-        
+
+        // Determine scoring system based on mode
+        const isStandardMode = ['marathon', 'sprint_40', 'sprint_100', 'ultra', 'zen'].includes(this.selectedMode);
+
+        if (isStandardMode) {
+            this.updateGuidelineScore(lines, pieceType, isTSpin);
+        } else {
+            this.updateTGM1Score(lines, pieceType, isTSpin);
+        }
+    }
+
+    updateGuidelineScore(lines, pieceType = null, isTSpin = false) {
+        let points = 0;
+        let clearType = null;
+
+        // Guideline scoring with T-spin detection
+        if (lines > 0) {
+            // Base line clear points
+            const basePoints = [0, 100, 300, 500, 800][lines] || 800; // Single, Double, Triple, Tetris
+            points = basePoints * this.level;
+
+            // T-spin bonuses
+            if (isTSpin) {
+                if (lines === 1) {
+                    points = 800 * this.level; // T-Spin Single
+                    clearType = 't-spin single';
+                } else if (lines === 2) {
+                    points = 1200 * this.level; // T-Spin Double
+                    clearType = 't-spin double';
+                } else if (lines === 3) {
+                    points = 1600 * this.level; // T-Spin Triple
+                    clearType = 't-spin triple';
+                }
+            }
+
+            // Back-to-back bonus (1.5x for consecutive line clears)
+            if (this.backToBack && (lines >= 4 || (isTSpin && lines >= 2))) {
+                points = Math.floor(points * 1.5);
+                clearType = clearType ? clearType + ' b2b' : 'b2b';
+            }
+
+            // Set back-to-back flag for next clear
+            this.backToBack = (lines >= 4 || (isTSpin && lines >= 2));
+
+            // Perfect clear bonus (not standard but common in implementations)
+            const boardIsFull = this.board.grid.every(row => row.every(cell => cell !== 0));
+            if (boardIsFull) {
+                points += 3500; // All Clear bonus
+                clearType = clearType ? clearType + ' all clear' : 'all clear';
+            }
+        } else {
+            this.backToBack = false;
+        }
+
+        // Soft drop bonus (1 point per row)
+        points += this.softDropRows;
+
+        // Hard drop bonus (2 points per row)
+        points += this.hardDropRows * 2;
+
+        // Reset drop counters for next piece
+        this.softDropRows = 0;
+        this.hardDropRows = 0;
+
+        this.score += points;
+        this.totalLines += lines;
+        this.lastClearType = clearType;
+
+        // Track piece for potential T-spin detection next time
+        this.lastPieceType = pieceType;
+    }
+
+    updateTGM1Score(lines, pieceType = null, isTSpin = false) {
         // Official TGM1 scoring formula:
         // Score = ceil([level + cleared lines]/4 + soft dropped rows + (2 * hard dropped rows))
         //        * cleared lines * combo * bravo
-        //        + ceil(level after clear / 2)  // COMMENTED OUT - used for other modes
-        //        + (speed * 7)                 // COMMENTED OUT - used for other modes
 
         let points = 0;
         let clearType = null;
@@ -3358,19 +4315,10 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Calculate speed bonus (COMMENTED OUT - used for other modes)
-        // Speed = Lock delay - Piece active time (minimum 0)
-        // const speed = Math.max(0, 30 - this.pieceActiveTime); // Lock delay is 30 frames
-
-        // Calculate level after clear for the bonus (COMMENTED OUT - used for other modes)
-        // const levelAfterClear = this.level + lines;
-
         // Main scoring formula
         if (lines > 0) {
             const baseScore = Math.ceil((this.level + lines) / 4 + this.softDropRows + (2 * this.hardDropRows));
             points = baseScore * lines * combo * bravo;
-            // points += Math.ceil(levelAfterClear / 2); // COMMENTED OUT - used for other modes
-            // points += (speed * 7);                    // COMMENTED OUT - used for other modes
         }
 
         // Reset drop counters for next piece
@@ -3411,6 +4359,14 @@ class GameScene extends Phaser.Scene {
         const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
         if (this.level > maxLevel) {
             this.level = maxLevel;
+        }
+
+        // Update mode-specific timings in case they change with level
+        if (this.gameMode) {
+            this.dasDelay = (this.gameMode.getDAS && typeof this.gameMode.getDAS === 'function') ? this.gameMode.getDAS() : 16/60;
+            this.arrDelay = (this.gameMode.getARR && typeof this.gameMode.getARR === 'function') ? this.gameMode.getARR() : 1/60;
+            this.areDelay = (this.gameMode.getARE && typeof this.gameMode.getARE === 'function') ? this.gameMode.getARE() : 30/60;
+            this.lockDelay = (this.gameMode.getLockDelay && typeof this.gameMode.getLockDelay === 'function') ? this.gameMode.getLockDelay() : 0.5;
         }
 
         // Check for section transitions
@@ -3724,7 +4680,13 @@ class GameScene extends Phaser.Scene {
         this.placedMinos = [];
         this.placedMinoRows = [];
         this.minoFadeActive = false;
+        this.fadingComplete = false;
         this.showGameOverText = false;
+
+        // Reset loading phases
+        this.loadingPhase = true;
+        this.readyGoPhase = false;
+        this.gameStarted = false;
         
         // Validate piece history to ensure it's correct after reset
         this.validatePieceHistory();
@@ -3781,14 +4743,24 @@ class GameScene extends Phaser.Scene {
         if (hasGrading) {
             this.gradeText.setText('9');
         }
+        // Reset Marathon mode separate level display
+        if (isMarathonMode && this.levelDisplayText) {
+            this.levelDisplayText.setText('0');
+        }
         this.timeText.setText('0:00.00');
         this.ppsText.setText('0.00');
         this.rawPpsText.setText('0.00');
 
+        // Restart loading sequence
+        this.time.delayedCall(500, () => {
+            this.loadingPhase = false;
+            this.showReadyGo();
+        });
+
         // Restart game
         this.generateNextPieces();
         this.spawnPiece();
-        
+
         // Restart BGM
         this.updateBGM();
     }
@@ -4096,59 +5068,99 @@ class GameScene extends Phaser.Scene {
         const rightX = uiX + 120;
         const levelFontSize = Math.max(24, Math.min(36, Math.floor(this.cellSize * 1.0))); // Increased font
 
-        // Calculate section cap based on mode
-        const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
-        const section = Math.floor(this.level / 100);
-        let sectionCap;
-        if (maxLevel === 300) {
-            // TGM2 Normal: always show 300 as the cap
-            sectionCap = 300;
-        } else {
-            // Default: sections are 0-99, 100-199, etc. up to 999
-            sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+        // Determine mode types
+        const isMarathonMode = this.selectedMode && (this.selectedMode === 'marathon' || this.selectedMode === 'ultra');
+        const isZenMode = this.selectedMode === 'zen';
+        const isSprintMode = this.selectedMode && (this.selectedMode === 'sprint_40' || this.selectedMode === 'sprint_100');
+
+        // For Marathon mode, update separate level display
+        if (isMarathonMode && this.levelDisplayText) {
+            this.levelDisplayText.setText(this.level.toString());
         }
 
-        // Current level - top row
+        // For Zen/Ultra modes, only show lines cleared, no level bar or cap
+        if (isZenMode) {
+            // Current lines - top row
+            const currentY = levelBottomY - 3 * levelRowHeight;
+            const currentLinesText = this.totalLines.toString();
+            if (!this.currentLevelText) {
+                this.currentLevelText = this.add.text(rightX + 17, currentY - 30, currentLinesText, {
+                    fontSize: `${levelFontSize}px`,
+                    fill: '#fff',
+                    fontFamily: 'Courier New',
+                    fontStyle: 'bold',
+                    align: 'right'
+                }).setOrigin(1, 0);
+            } else {
+                this.currentLevelText.setText(currentLinesText);
+            }
+            return; // Don't draw bar or cap for Zen mode
+        }
+
+        // Calculate section cap based on mode
+        let sectionCap;
+        if (isMarathonMode) {
+            // Marathon: next multiple of 10 above current lines
+            sectionCap = Math.ceil((this.totalLines + 1) / 10) * 10;
+        } else if (isSprintMode) {
+            // Sprint: 40 for sprint_40, 100 for sprint_100
+            sectionCap = this.selectedMode === 'sprint_40' ? 40 : 100;
+        } else {
+            // TGM modes: default section calculation
+            const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
+            const section = Math.floor(this.level / 100);
+            if (maxLevel === 300) {
+                // TGM2 Normal: always show 300 as the cap
+                sectionCap = 300;
+            } else {
+                // Default: sections are 0-99, 100-199, etc. up to 999
+                sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+            }
+        }
+
+        // Current level/lines - top row
         const currentY = levelBottomY - 3 * levelRowHeight;
-        const currentLevelText = this.level.toString();
+        const currentValue = (isMarathonMode || isZenMode || isSprintMode) ? this.totalLines.toString() : this.level.toString();
         if (!this.currentLevelText) {
-            this.currentLevelText = this.add.text(rightX + 17, currentY - 30, currentLevelText, { 
-                fontSize: `${levelFontSize}px`, 
-                fill: '#fff', 
+            this.currentLevelText = this.add.text(rightX + 17, currentY - 30, currentValue, {
+                fontSize: `${levelFontSize}px`,
+                fill: '#fff',
                 fontFamily: 'Courier New',
                 fontStyle: 'bold',
                 align: 'right'
             }).setOrigin(1, 0);
         } else {
-            this.currentLevelText.setText(currentLevelText);
+            this.currentLevelText.setText(currentValue);
         }
 
-        // Bar - middle row, white background with red fill
-        const barY = levelBottomY - 2 * levelRowHeight;
-        const barWidth = 60;
-        const barHeight = 4;
-        const barX = rightX - barWidth;
-        const internalGravity = this.getTGMGravitySpeed(this.level);
-        const gravityRatio = Math.min(internalGravity / 2560, 1); // 0 to 1, 5120 is 20G
+        // Bar - middle row, white background with red fill (skip for Marathon)
+        if (!isMarathonMode) {
+            const barY = levelBottomY - 2 * levelRowHeight;
+            const barWidth = 60;
+            const barHeight = 4;
+            const barX = rightX - barWidth;
+            const internalGravity = this.getTGMGravitySpeed(this.level);
+            const gravityRatio = Math.min(internalGravity / 2560, 1); // 0 to 1, 5120 is 20G
 
-        if (!this.levelBar) {
-            this.levelBar = this.add.graphics();
+            if (!this.levelBar) {
+                this.levelBar = this.add.graphics();
+            }
+            this.levelBar.clear();
+            // White background
+            this.levelBar.fillStyle(0xffffff);
+            this.levelBar.fillRect(barX + 14, barY - 15, barWidth, barHeight);
+            // Red fill from left
+            this.levelBar.fillStyle(0xff0000);
+            this.levelBar.fillRect(barX + 14, barY - 15, barWidth * gravityRatio, barHeight);
         }
-        this.levelBar.clear();
-        // White background
-        this.levelBar.fillStyle(0xffffff);
-        this.levelBar.fillRect(barX + 14, barY - 15, barWidth, barHeight);
-        // Red fill from left
-        this.levelBar.fillStyle(0xff0000);
-        this.levelBar.fillRect(barX + 14, barY - 15, barWidth * gravityRatio, barHeight);
 
         // Cap level - bottom row
         const capY = levelBottomY - levelRowHeight;
         const capText = sectionCap.toString();
         if (!this.capLevelText) {
-            this.capLevelText = this.add.text(rightX + 17, capY - 25, capText, { 
-                fontSize: `${levelFontSize}px`, 
-                fill: '#fff', 
+            this.capLevelText = this.add.text(rightX + 17, capY - 25, capText, {
+                fontSize: `${levelFontSize}px`,
+                fill: '#fff',
                 fontFamily: 'Courier New',
                 fontStyle: 'bold',
                 align: 'right'
@@ -4165,22 +5177,42 @@ class GameScene extends Phaser.Scene {
 
         // Clear previous game elements
         this.gameGroup.clear(true, true);
-        
+
+        // Show loading text during loading phase
+        if (this.loadingPhase) {
+            const centerX = this.cameras.main.width / 2;
+            const centerY = this.cameras.main.height / 2;
+            const loadingText = this.add.text(centerX, centerY, 'LOADING...', {
+                fontSize: '48px',
+                fill: '#ffffff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            }).setOrigin(0.5);
+            this.gameGroup.add(loadingText);
+            return; // Don't draw anything else during loading
+        }
+
         // Draw credits screen first (behind everything)
         if (this.creditsActive) {
             this.drawCreditsScreen();
         }
-        
-        // Border adjusted to fit exactly 10x20 with smaller width and height
-        // Use mode type color for border
-        const modeTypeColor = this.getModeTypeBorderColor();
-        this.playfieldBorder = this.add.graphics();
-        this.playfieldBorder.lineStyle(3, modeTypeColor);
-        this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
-            this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
 
-        // Draw game elements using matrix offset
-        this.board.draw(this, this.matrixOffsetX, this.matrixOffsetY, this.cellSize);
+        // Draw matrix and border during ready-go and after
+        if (this.readyGoPhase || this.gameStarted) {
+            // Border adjusted to fit exactly 10x20 with smaller width and height
+            // Use mode type color for border
+            const modeTypeColor = this.getModeTypeBorderColor();
+            this.playfieldBorder = this.add.graphics();
+            this.playfieldBorder.lineStyle(3, modeTypeColor);
+            this.playfieldBorder.strokeRect(this.borderOffsetX - 4, this.borderOffsetY - 3,
+                this.cellSize * this.board.cols + 4, this.cellSize * this.visibleRows + 5); // Height reduced by 1px, width expanded 1px left
+            this.gameGroup.add(this.playfieldBorder);
+
+            // Draw game elements using matrix offset (skip during game over after fading)
+            if (this.gameStarted && (!this.gameOver || (!this.minoFadeActive && !this.fadingComplete))) {
+                this.board.draw(this, this.matrixOffsetX, this.matrixOffsetY, this.cellSize);
+            }
+        }
         
         // Draw line clear animation if active
         if (this.isClearingLines && this.clearedLines.length > 0) {
@@ -4256,10 +5288,10 @@ class GameScene extends Phaser.Scene {
 
 
         // Draw NEXT label - positioned to the right of border
-        const nextX = this.borderOffsetX + (this.cellSize * this.board.cols) + 50;
+        const nextX = this.borderOffsetX + (this.cellSize * this.board.cols) + 20;
         const nextY = this.borderOffsetY;
         const nextFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
-        
+
         const nextLabel = this.add.text(nextX, nextY, 'NEXT', {
             fontSize: `${nextFontSize}px`,
             fill: '#fff',
@@ -4268,35 +5300,44 @@ class GameScene extends Phaser.Scene {
         });
         this.gameGroup.add(nextLabel);
 
-        // TGM1: Only show 1 next piece
-        if (this.nextPieces.length > 0) {
-            const nextPiece = new Piece(this.nextPieces[0], this.rotationSystem);
+        // Draw multiple next pieces based on mode configuration
+        const maxNextPieces = this.nextPiecesCount || 1;
+        const previewCellSize = Math.max(8, Math.floor(this.cellSize * 0.6)); // Smaller preview pieces
+        for (let i = 0; i < Math.min(maxNextPieces, this.nextPieces.length); i++) {
+            const nextPiece = new Piece(this.nextPieces[i], this.rotationSystem);
             // Use matrix-relative positioning like the main game pieces
             nextPiece.x = 0;
             nextPiece.y = 2; // Start from the top visible row
             // Position the next piece area to the right of the playfield
-            const nextAreaOffsetX = this.borderOffsetX + (this.cellSize * this.board.cols) + 50;
-            const nextAreaOffsetY = this.borderOffsetY + 40;
-            nextPiece.draw(this, nextAreaOffsetX, nextAreaOffsetY, this.cellSize);
+            const nextAreaOffsetX = this.borderOffsetX + (this.cellSize * this.board.cols) + 20;
+            const nextAreaOffsetY = this.borderOffsetY + 30 + (i * (previewCellSize * 3 + 4)); // Closer spacing
+            nextPiece.draw(this, nextAreaOffsetX, nextAreaOffsetY, previewCellSize);
         }
 
-        // TGM1 has no hold mechanics - commented out for TGM1 mode
-        // Uncomment for other modes that support hold
-        /*
-        // Draw HOLD label
-        const holdLabel = this.add.text(this.boardOffsetX - 80, this.boardOffsetY - 30, 'HOLD', {
-            fontSize: '20px',
-            fill: '#fff'
-        });
-        this.gameGroup.add(holdLabel);
+        // Draw HOLD label and piece for modes that support hold
+        if (this.holdEnabled) {
+            const holdX = this.borderOffsetX - 80;
+            const holdY = this.borderOffsetY;
+            const holdFontSize = Math.max(16, Math.min(24, Math.floor(this.cellSize * 0.8)));
 
-        // Draw hold
-        if (this.holdPiece) {
-            this.holdPiece.x = 0;
-            this.holdPiece.y = 0;
-            this.holdPiece.draw(this, this.boardOffsetX - 80, this.boardOffsetY, this.cellSize);
+            const holdLabel = this.add.text(holdX, holdY, 'HOLD', {
+                fontSize: `${holdFontSize}px`,
+                fill: '#fff',
+                fontFamily: 'Courier New',
+                fontStyle: 'bold'
+            });
+            this.gameGroup.add(holdLabel);
+
+            // Draw hold piece with same size as preview pieces
+            if (this.holdPiece) {
+                const previewCellSize = Math.max(8, Math.floor(this.cellSize * 0.6));
+                // Create a copy of the hold piece with default rotation for display
+                const displayPiece = new Piece(this.holdPiece.type, this.holdPiece.rotationSystem, 0);
+                displayPiece.x = 0;
+                displayPiece.y = 2; // Start from the top visible row
+                displayPiece.draw(this, holdX, holdY + 30, previewCellSize);
+            }
         }
-        */
 
         // Section messages removed - uncomment if needed for other modes
         /*

@@ -18,10 +18,10 @@ class TGM2Mode extends BaseMode {
         // TGM2-specific configuration
         this.config = {
             gravity: { type: 'tgm2' }, // Use TGM2 gravity curve
-            das: 14/60,                    // Standard TGM2 DAS
-            arr: 2/60,                     // Standard TGM2 ARR
-            are: 25/60,                    // TGM2 ARE timing
-            lockDelay: 0.5,                // Standard lock delay
+            das: 16/60,                    // TGM2 DAS (16 frames)
+            arr: 1/60,                     // ARR is always 1/60
+            are: 27/60,                    // TGM2 ARE timing (27 frames)
+            lockDelay: 30/60,              // Lock delay (30 frames)
             nextPieces: 4,                 // Standard next queue
             holdEnabled: true,             // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
@@ -62,6 +62,14 @@ class TGM2Mode extends BaseMode {
     getConfig() {
         return this.config;
     }
+
+    // Timing getter methods
+    getDAS() { return this.config.das; }
+    getARR() { return this.config.arr; }
+    getARE() { return this.config.are; }
+    getLineARE() { return this.config.are; } // Same as ARE for TGM2
+    getLockDelay() { return this.config.lockDelay; }
+    getLineClearDelay() { return this.config.are; } // Use ARE for line clear delay
     
     // Get mode name
     getName() {
@@ -117,16 +125,37 @@ class TGM2Mode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-        
+
         // Initialize powerup handler
         if (typeof PowerupEffectHandler !== 'undefined') {
             this.powerupHandler = new PowerupEffectHandler(gameScene);
         }
-        
+
         // Initialize TGM2 grading system level
         this.tgm2Grading.setLevel(gameScene.level);
-        
+
         console.log('TGM2 Mode initialized with TGM2 grading system (no powerup minos)');
+    }
+
+    // Handle level progression with section stops
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'piece') {
+            // Check if current level is a stop level BEFORE incrementing
+            const currentIsStopLevel = (level % 100 === 99) ||
+                                      (level === 998) || // 998 requires line clear
+                                      (level === 999);   // 999 is final level
+            if (!currentIsStopLevel && level < 999) {
+                return level + 1;
+            }
+            return level; // Stay at stop level
+        } else if (updateType === 'lines') {
+            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
+            if (oldLevel === 998 && amount > 0) {
+                return 999;
+            }
+            return Math.min(level + 1, 999);
+        }
+        return level;
     }
     
     // Handle piece spawning with powerup support

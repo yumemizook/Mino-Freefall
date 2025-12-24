@@ -42,12 +42,12 @@ class TADeathMode extends BaseMode {
         // Progressive timing system (6 phases) - T.A. Death official timings
         this.currentTimingPhase = 1; // 1-6 phases based on level
         this.timingPhases = [
-            { minLevel: 0,   maxLevel: 99,  are: 18/60, lineAre: 14/60, das: 12/60, lock: 30/60, lineClear: 12/60 },
-            { minLevel: 100, maxLevel: 199, are: 14/60, lineAre: 8/60,  das: 12/60, lock: 26/60, lineClear: 6/60 },
-            { minLevel: 200, maxLevel: 299, are: 14/60, lineAre: 8/60,  das: 11/60, lock: 22/60, lineClear: 6/60 },
-            { minLevel: 300, maxLevel: 399, are: 8/60,  lineAre: 8/60,  das: 10/60, lock: 18/60, lineClear: 6/60 },
-            { minLevel: 400, maxLevel: 499, are: 7/60,  lineAre: 7/60,  das: 8/60,  lock: 15/60, lineClear: 5/60 },
-            { minLevel: 500, maxLevel: 999, are: 6/60,  lineAre: 6/60,  das: 8/60,  lock: 15/60, lineClear: 4/60 }
+            { minLevel: 0,   maxLevel: 99,  are: 18/60, lineAre: 14/60, das: 12/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
+            { minLevel: 100, maxLevel: 199, are: 14/60, lineAre: 8/60,  das: 12/60, arr: 1/60, lock: 26/60, lineClear: 6/60 },
+            { minLevel: 200, maxLevel: 299, are: 14/60, lineAre: 8/60,  das: 11/60, arr: 1/60, lock: 22/60, lineClear: 6/60 },
+            { minLevel: 300, maxLevel: 399, are: 8/60,  lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 18/60, lineClear: 6/60 },
+            { minLevel: 400, maxLevel: 499, are: 7/60,  lineAre: 7/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 5/60 },
+            { minLevel: 500, maxLevel: 999, are: 6/60,  lineAre: 6/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 4/60 }
         ];
         
         // T.A. Death specific states
@@ -59,8 +59,36 @@ class TADeathMode extends BaseMode {
     }
     
     // Get mode configuration
+    getModeConfig() {
+        return {
+            gravity: { type: 'fixed_20g' },     // Fixed 20G gravity throughout
+            das: 12/60,                        // Base T.A. Death DAS (changes with timing phases)
+            arr: 1/60,                         // Standard ARR
+            are: 18/60,                        // Base T.A. Death ARE (changes with timing phases)
+            lockDelay: 30/60,                  // Base lock delay (changes with timing phases)
+            nextPieces: 1,                     // Standard next queue
+            holdEnabled: true,                 // T.A. Death supports hold
+            ghostEnabled: true,                // Ghost piece enabled
+            levelUpType: 'piece',              // Level up per piece
+            lineClearBonus: 1,
+            gravityLevelCap: 999,
+            hasGrading: true,
+            specialMechanics: {
+                fixed20G: true,                // Fixed 20G gravity throughout
+                progressiveTimings: true,      // 6 progressive timing phases
+                torikanLimit: true,            // Time limit at level 500
+                minimalGrading: true,          // Only M and GM grades
+                deathMechanics: true           // Death mode specific mechanics
+            }
+        };
+    }
+
+    // Get mode configuration
     getConfig() {
-        return this.config;
+        return {
+            ...this.getDefaultConfig(),
+            ...this.getModeConfig()
+        };
     }
     
     // Get mode name
@@ -87,7 +115,9 @@ class TADeathMode extends BaseMode {
     }
 
     getARR() {
-        return this.config.arr;
+        const arr = this.getCurrentTimingPhase().arr;
+        console.log(`T.A.Death ARR: ${arr} (phase ${this.currentTimingPhase})`);
+        return arr;
     }
 
     getARE() {
@@ -168,7 +198,7 @@ class TADeathMode extends BaseMode {
         if (updateType === 'piece') {
             return level + 1;
         } else if (updateType === 'lines') {
-            return level + amount;
+            return level + 1;
         }
 
         return level;

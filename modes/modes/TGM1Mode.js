@@ -16,7 +16,7 @@ class TGM1Mode extends BaseMode {
                 curve: null
             },
             das: 16/60,      // TGM1: 16 frames DAS
-            arr: 1/60,       // TGM1: 1 frame ARR  
+            arr: 1/60,       // TGM1: 1 frame ARR
             are: 30/60,      // TGM1: 30 frames ARE
             lockDelay: 0.5,  // TGM1: 30 frames lock delay
             nextPieces: 1,   // TGM1: Show only 1 next piece
@@ -41,6 +41,14 @@ class TGM1Mode extends BaseMode {
         };
     }
 
+    // Timing getter methods
+    getDAS() { return this.getModeConfig().das; }
+    getARR() { return this.getModeConfig().arr; }
+    getARE() { return this.getModeConfig().are; }
+    getLineARE() { return this.getModeConfig().are; } // Same as ARE for TGM1
+    getLockDelay() { return this.getModeConfig().lockDelay; }
+    getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
+
     // TGM1 uses the standard TGM1 gravity curve
     getGravitySpeed(level) {
         return this.getTGM1GravitySpeed(level);
@@ -58,11 +66,11 @@ class TGM1Mode extends BaseMode {
             }
             return level; // Stay at stop level
         } else if (updateType === 'lines') {
-            // Line clears can bypass stop levels, but 998->999 requires line clear
+            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
             if (oldLevel === 998 && amount > 0) {
                 return 999;
             }
-            return Math.min(level + amount, 999);
+            return Math.min(level + 1, 999);
         }
         return level;
     }

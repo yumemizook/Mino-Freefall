@@ -139,6 +139,10 @@ class BaseMode {
         return this.getConfig().lockDelay;
     }
 
+    getLineARE() {
+        return 41/60; // Default line clear ARE (41 frames for TGM)
+    }
+
     getNextPiecesCount() {
         return this.getConfig().nextPieces;
     }

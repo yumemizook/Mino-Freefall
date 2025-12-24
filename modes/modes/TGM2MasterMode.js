@@ -48,12 +48,12 @@ class TGM2MasterMode extends BaseMode {
         // Progressive timing system
         this.currentTimingPhase = 1; // 1-6 phases based on level
         this.timingPhases = [
-            { minLevel: 0, maxLevel: 499, are: 27/60, lineAre: 27/60, das: 16/60, lock: 30/60, lineClear: 40/60 },
-            { minLevel: 500, maxLevel: 600, are: 27/60, lineAre: 27/60, das: 10/60, lock: 30/60, lineClear: 25/60 },
-            { minLevel: 601, maxLevel: 700, are: 27/60, lineAre: 18/60, das: 10/60, lock: 30/60, lineClear: 16/60 },
-            { minLevel: 701, maxLevel: 800, are: 18/60, lineAre: 14/60, das: 10/60, lock: 30/60, lineClear: 12/60 },
-            { minLevel: 801, maxLevel: 900, are: 14/60, lineAre: 8/60,  das: 10/60, lock: 30/60, lineClear: 6/60 },
-            { minLevel: 901, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  lock: 17/60, lineClear: 6/60 }
+            { minLevel: 0, maxLevel: 499, are: 27/60, lineAre: 27/60, das: 16/60, arr: 1/60, lock: 30/60, lineClear: 40/60 },
+            { minLevel: 500, maxLevel: 600, are: 27/60, lineAre: 27/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 25/60 },
+            { minLevel: 601, maxLevel: 700, are: 27/60, lineAre: 18/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 16/60 },
+            { minLevel: 701, maxLevel: 800, are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
+            { minLevel: 801, maxLevel: 900, are: 14/60, lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 30/60, lineClear: 6/60 },
+            { minLevel: 901, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 }
         ];
         
         // Initialize TGM2 grading system
@@ -61,8 +61,35 @@ class TGM2MasterMode extends BaseMode {
     }
     
     // Get mode configuration
+    getModeConfig() {
+        return {
+            gravity: { type: 'tgm2_master' }, // Use TGM2 Master gravity curve
+            das: 16/60,                    // Base TGM2 Master DAS (changes with timing phases)
+            arr: 2/60,                     // Standard TGM2 Master ARR
+            are: 27/60,                    // Base TGM2 Master ARE timing (changes with timing phases)
+            lockDelay: 30/60,              // TGM2 Master lock delay (changes with timing phases)
+            nextPieces: 4,                 // Standard next queue
+            holdEnabled: true,             // TGM2 supports hold
+            ghostEnabled: true,            // Ghost piece enabled
+            levelUpType: 'piece',          // Level up per piece
+            lineClearBonus: 1,
+            gravityLevelCap: 999,
+            hasGrading: true,
+            specialMechanics: {
+                fadingRoll: true,          // Enable Fading Roll credit roll
+                mRoll: true,               // Enable M-Roll challenge
+                tgm2Grading: true,         // Use TGM2 grading system
+                progressiveTimings: true   // Enable progressive timing system
+            }
+        };
+    }
+
+    // Get mode configuration
     getConfig() {
-        return this.config;
+        return {
+            ...this.getDefaultConfig(),
+            ...this.getModeConfig()
+        };
     }
     
     // Get mode name
@@ -120,7 +147,7 @@ class TGM2MasterMode extends BaseMode {
     }
     
     getARR() {
-        return this.config.arr;
+        return this.getCurrentTimingPhase().arr;
     }
     
     getARE() {
@@ -182,11 +209,27 @@ class TGM2MasterMode extends BaseMode {
         console.log('TGM2 Master Mode initialized with progressive timing system');
     }
     
-    // Handle level progression
+    // Handle level progression with section stops
     onLevelUpdate(level, oldLevel, updateType, amount) {
         // Update timing phase
         this.updateTimingPhase(level);
-        
+
+        if (updateType === 'piece') {
+            // Check if current level is a stop level BEFORE incrementing
+            const currentIsStopLevel = (level % 100 === 99) ||
+                                      (level === 998) || // 998 requires line clear
+                                      (level === 999);   // 999 is final level
+            if (!currentIsStopLevel && level < 999) {
+                return level + 1;
+            }
+            return level; // Stay at stop level
+        } else if (updateType === 'lines') {
+            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
+            if (oldLevel === 998 && amount > 0) {
+                return 999;
+            }
+            return Math.min(level + 1, 999);
+        }
         return level;
     }
     

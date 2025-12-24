@@ -6,8 +6,27 @@ class TGM2NormalMode extends BaseMode {
         super();
         this.modeName = 'TGM2 Normal';
         this.modeId = 'tgm2_normal';
-        
-        
+
+        // TGM2 Normal mode configuration
+        this.config = {
+            gravity: { type: 'tgm2_normal' },
+            das: 16/60,                    // TGM2 Normal DAS (16 frames)
+            arr: 1/60,                     // ARR is always 1/60
+            are: 27/60,                    // TGM2 Normal ARE (27 frames)
+            lockDelay: 30/60,              // Lock delay (30 frames)
+            lineClearDelay: 40/60,         // Line clear delay (40 frames)
+            nextPieces: 4,                 // Standard next queue
+            holdEnabled: true,             // TGM2 supports hold
+            ghostEnabled: true,            // Ghost piece enabled
+            levelUpType: 'piece',          // Level up per piece
+            lineClearBonus: 1,
+            gravityLevelCap: 300,          // TGM2 Normal caps at 300
+            specialMechanics: {
+                itemBlocks: true,          // Enable item blocks at 100/200
+                sectionStops: [99, 199, 299] // Level stops, but 99/199 are bypassed by items
+            }
+        };
+
         // TGM2 scoring (no grading)
         this.tgm2Score = 0;
         
@@ -28,8 +47,33 @@ class TGM2NormalMode extends BaseMode {
     }
     
     // Get mode configuration
+    getModeConfig() {
+        return {
+            gravity: { type: 'tgm2_normal' },
+            das: 14/60,                    // TGM2 Normal DAS (14 frames)
+            arr: 1/60,                     // ARR is always 1/60
+            are: 25/60,                    // TGM2 Normal ARE (25 frames)
+            lockDelay: 30/60,              // Lock delay (30 frames)
+            nextPieces: 4,                 // Standard next queue
+            holdEnabled: true,             // TGM2 supports hold
+            ghostEnabled: true,            // Ghost piece enabled
+            levelUpType: 'piece',          // Level up per piece
+            lineClearBonus: 1,
+            gravityLevelCap: 300,          // TGM2 Normal caps at 300
+            hasGrading: false,
+            specialMechanics: {
+                itemBlocks: true,          // Enable item blocks at 100/200
+                sectionStops: [99, 199, 299] // Level stops, but 99/199 are bypassed by items
+            }
+        };
+    }
+
+    // Get mode configuration
     getConfig() {
-        return this.config;
+        return {
+            ...this.getDefaultConfig(),
+            ...this.getModeConfig()
+        };
     }
     
     // Get mode name
@@ -97,7 +141,7 @@ class TGM2NormalMode extends BaseMode {
     }
     
     getLineARE() {
-        return this.config.lineAre;
+        return this.config.are; // TGM2 Normal doesn't have separate Line ARE
     }
     
     getLockDelay() {
@@ -128,8 +172,8 @@ class TGM2NormalMode extends BaseMode {
             }
             return level; // Stay at stop level
         } else if (updateType === 'lines') {
-            // Line clears can bypass stops
-            return Math.min(level + amount, 300);
+            // Line clears advance level by 1 and can bypass stops
+            return Math.min(level + 1, 300);
         }
 
         // Check for item block spawning

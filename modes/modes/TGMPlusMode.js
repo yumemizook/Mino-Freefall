@@ -11,7 +11,7 @@ class TGMPlusMode extends BaseMode {
         this.config = {
             gravity: { type: 'tgm2_master' }, // Use TGM2 Master gravity curve
             das: 16/60,                    // Standard TGM+ DAS (same as Normal mode)
-            arr: 2/60,                     // Standard TGM+ ARR  
+            arr: 1/60,                     // ARR is always 1/60
             are: 27/60,                    // TGM+ ARE timing (same as Normal mode)
             lineAre: 27/60,                // TGM+ line clear ARE
             lockDelay: 30/60,              // TGM+ lock delay
@@ -48,8 +48,35 @@ class TGMPlusMode extends BaseMode {
     }
     
     // Get mode configuration
+    getModeConfig() {
+        return {
+            gravity: { type: 'tgm2_master' }, // Use TGM2 Master gravity curve
+            das: 16/60,                    // Standard TGM+ DAS (same as Normal mode)
+            arr: 1/60,                     // ARR is always 1/60
+            are: 27/60,                    // TGM+ ARE timing (same as Normal mode)
+            lockDelay: 30/60,              // TGM+ lock delay
+            nextPieces: 4,                 // Standard next queue
+            holdEnabled: true,             // TGM+ supports hold
+            ghostEnabled: true,            // Ghost piece enabled
+            levelUpType: 'piece',          // Level up per piece
+            lineClearBonus: 1,
+            gravityLevelCap: 999,
+            hasGrading: false,
+            specialMechanics: {
+                risingGarbage: true,       // Enable rising garbage system
+                noGrading: true,           // No grading system
+                fixedPattern: true,        // Fixed 24-row garbage pattern
+                excellentMessage: true     // Show "Excellent!" on completion
+            }
+        };
+    }
+
+    // Get mode configuration
     getConfig() {
-        return this.config;
+        return {
+            ...this.getDefaultConfig(),
+            ...this.getModeConfig()
+        };
     }
     
     // Get mode name
@@ -174,8 +201,29 @@ class TGMPlusMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-        
+
         console.log('TGM+ Mode initialized with rising garbage system');
+    }
+
+    // Handle level progression with section stops
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'piece') {
+            // Check if current level is a stop level BEFORE incrementing
+            const currentIsStopLevel = (level % 100 === 99) ||
+                                      (level === 998) || // 998 requires line clear
+                                      (level === 999);   // 999 is final level
+            if (!currentIsStopLevel && level < 999) {
+                return level + 1;
+            }
+            return level; // Stay at stop level
+        } else if (updateType === 'lines') {
+            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
+            if (oldLevel === 998 && amount > 0) {
+                return 999;
+            }
+            return Math.min(level + 1, 999);
+        }
+        return level;
     }
     
     // Handle piece locking

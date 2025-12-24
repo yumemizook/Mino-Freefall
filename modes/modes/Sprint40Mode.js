@@ -1,0 +1,128 @@
+class Sprint40Mode extends BaseMode {
+    constructor() {
+        super();
+        this.modeName = 'Sprint';
+        this.description = 'Clear lines as fast as possible';
+        this.targetLines = 40; // Default, can be overridden
+        this.linesCleared = 0;
+        this.startTime = null;
+        this.finishTime = null;
+    }
+
+    getModeConfig() {
+        return {
+            gravity: {
+                type: 'static',
+                value: 4 // 20G
+            },
+            das: 9/60,      // 9 frames
+            arr: 1/60,       // 1 frame
+            are: 7/60,       // 7 frames
+            lockDelay: 30/60, // 10 frames
+            nextPieces: 6,
+            holdEnabled: true,
+            ghostEnabled: true,
+            levelUpType: 'lines',
+            lineClearBonus: 1,
+            gravityLevelCap: 999,
+            hasGrading: false,
+            specialMechanics: {
+                timeAttack: true,
+                targetLines: this.targetLines
+            }
+        };
+    }
+
+    // Timing getter methods
+    getDAS() { return this.getModeConfig().das; }
+    getARR() { return this.getModeConfig().arr; }
+    getARE() { return this.getModeConfig().are; }
+    getLineARE() { return this.getModeConfig().are; } // Same as ARE for Sprint
+    getLockDelay() { return this.getModeConfig().lockDelay; }
+    getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
+
+    initializeForGameScene(gameScene) {
+        // Set target lines based on mode
+        if (gameScene.selectedMode === 'sprint_100') {
+            this.targetLines = 100;
+        } else {
+            this.targetLines = 40;
+        }
+        this.linesCleared = 0;
+        this.startTime = null;
+        this.finishTime = null;
+    }
+
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'lines') {
+            this.linesCleared += amount;
+            // Level increases by number of lines cleared
+            return oldLevel + amount;
+        }
+        return level;
+    }
+
+    handleLineClear(gameScene, linesCleared, pieceType) {
+        this.linesCleared += linesCleared;
+
+        // Record finish time on first completion
+        if (this.linesCleared >= this.targetLines && !this.finishTime) {
+            this.finishTime = gameScene.currentTime;
+            gameScene.showGameOverScreen();
+        }
+    }
+
+    update(gameScene, deltaTime) {
+        // Track start time
+        if (!this.startTime && gameScene.currentPiece) {
+            this.startTime = gameScene.currentTime;
+        }
+    }
+
+    onGameOver(gameScene) {
+        if (this.finishTime) {
+            // Save time-based score
+            const key = `bestScore_${gameScene.selectedMode}`;
+            const currentBest = gameScene.getBestScore(gameScene.selectedMode);
+            const timeString = `${Math.floor(this.finishTime / 60)}:${Math.floor(this.finishTime % 60).toString().padStart(2, '0')}.${Math.floor((this.finishTime % 1) * 100).toString().padStart(2, '0')}`;
+
+            // Compare times (lower is better)
+            const currentTime = this.finishTime;
+            const bestTime = this.parseTime(currentBest.time);
+
+            if (!bestTime || currentTime < bestTime) {
+                const newScore = {
+                    score: gameScene.score,
+                    level: this.linesCleared,
+                    grade: 'N/A',
+                    time: timeString
+                };
+                localStorage.setItem(key, JSON.stringify(newScore));
+            }
+        }
+    }
+
+    parseTime(timeString) {
+        if (!timeString || timeString === '0:00.00') return null;
+        const parts = timeString.split(':');
+        if (parts.length !== 2) return null;
+        const [minutes, seconds] = parts;
+        return parseInt(minutes) * 60 + parseFloat(seconds);
+    }
+
+    reset() {
+        this.linesCleared = 0;
+        this.startTime = null;
+        this.finishTime = null;
+    }
+}
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Sprint40Mode;
+}
+
+// Make available globally for browser usage
+if (typeof window !== 'undefined') {
+    window.Sprint40Mode = Sprint40Mode;
+}

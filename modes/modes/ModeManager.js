@@ -83,11 +83,7 @@ class ModeManager {
                 modeClass: 'Sprint40Mode',
                 config: {
                     difficulty: 'standard',
-                    description: 'Clear 40 lines as fast as possible',
-                    gravity: { type: 'static', value: 5120, curve: null },
-                    das: 8/60, arr: 1/60, are: 15/60, lockDelay: 0.2,
-                    nextPieces: 6, holdEnabled: true, ghostEnabled: false,
-                    levelUpType: 'lines', lineClearBonus: 2, gravityLevelCap: 999
+                    description: 'Clear 40 lines as fast as possible'
                 }
             },
             'sprint_100': {
@@ -95,10 +91,6 @@ class ModeManager {
                 config: {
                     difficulty: 'standard',
                     description: 'Clear 100 lines as fast as possible',
-                    gravity: { type: 'static', value: 5120, curve: null },
-                    das: 8/60, arr: 1/60, are: 15/60, lockDelay: 0.2,
-                    nextPieces: 6, holdEnabled: true, ghostEnabled: false,
-                    levelUpType: 'lines', lineClearBonus: 2, gravityLevelCap: 999,
                     specialMechanics: {
                         targetLines: 100,
                         timeAttack: true,
@@ -114,32 +106,14 @@ class ModeManager {
                 modeClass: 'MarathonMode',
                 config: {
                     difficulty: 'standard',
-                    description: 'Clear 150 lines',
-                    gravity: {
-                        type: 'custom',
-                        value: 0,
-                        curve: (level) => {
-                            if (level < 50) return 128;
-                            if (level < 100) return 256;
-                            if (level < 150) return 512;
-                            if (level < 200) return 1024;
-                            return 2048;
-                        }
-                    },
-                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
-                    nextPieces: 3, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'lines', lineClearBonus: 1, gravityLevelCap: 999
+                    description: 'Clear 150 lines'
                 }
             },
             'zen': {
                 modeClass: 'ZenMode',
                 config: {
                     difficulty: 'standard',
-                    description: 'Endless relaxed play',
-                    gravity: { type: 'static', value: 64, curve: null },
-                    das: 20/60, arr: 1/60, are: 40/60, lockDelay: 2.0,
-                    nextPieces: 7, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                    description: 'Endless relaxed play'
                 }
             },
             
@@ -148,58 +122,28 @@ class ModeManager {
                 modeClass: 'TGM1Mode',
                 config: {
                     difficulty: 'master',
-                    description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!',
-                    gravity: { type: 'tgm1', value: 0, curve: null },
-                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
-                    nextPieces: 1, holdEnabled: false, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                    description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!'
                 }
             },
             'tgm2': {
                 modeClass: 'TGM2MasterMode',
                 config: {
                     difficulty: 'master',
-                    description: 'Brand new mechanics, brand new challenges! Do you have what it takes?',
-                    gravity: { type: 'tgm2_master' },
-                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
-                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
-                    specialMechanics: {
-                        fadingRoll: true,
-                        mRoll: true,
-                        tgm2Grading: true,
-                        progressiveTimings: true
-                    }
+                    description: 'Brand new mechanics, brand new challenges! Do you have what it takes?'
                 }
             },
             'tgm2_normal': {
                 modeClass: 'TGM2NormalMode',
                 config: {
                     difficulty: 'easy',
-                    description: 'TGM2 Normal mode with item blocks at levels 100 and 200!',
-                    gravity: { type: 'custom', value: 0, curve: null }, // Uses custom gravity in mode
-                    das: 14/60, arr: 1/60, are: 25/60, lockDelay: 0.5,
-                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 300,
-                    hasGrading: false
+                    description: 'TGM2 Normal mode with item blocks at levels 100 and 200!'
                 }
             },
             'tgm_plus': {
                 modeClass: 'TGMPlusMode',
                 config: {
                     difficulty: 'master',
-                    description: 'Rising garbage mode with fixed 24-row pattern!',
-                    gravity: { type: 'tgm2_master' },
-                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
-                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
-                    specialMechanics: {
-                        risingGarbage: true,
-                        noGrading: true,
-                        fixedPattern: true,
-                        excellentMessage: true
-                    },
-                    hasGrading: false
+                    description: 'Rising garbage mode with fixed 24-row pattern!'
                 }
             },
             'tgm3': { 
@@ -216,29 +160,14 @@ class ModeManager {
                 modeClass: 'Mode20G',
                 config: {
                     difficulty: '20g',
-                    description: 'Maximum gravity from the start! Good luck!',
-                    gravity: { type: 'static', value: 5120, curve: null },
-                    das: 16/60, arr: 1/60, are: 30/60, lockDelay: 0.5,
-                    nextPieces: 1, holdEnabled: false, ghostEnabled: false,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
+                    description: 'Maximum gravity from the start! Good luck!'
                 }
             },
             'tadeath': {
                 modeClass: 'TADeathMode',
                 config: {
                     difficulty: '20g',
-                    description: 'Extreme 20G mode with torikan time limit. The ultimate test!',
-                    gravity: { type: 'fixed_20g' },
-                    das: 16/60, arr: 1/60, are: 27/60, lockDelay: 30/60,
-                    nextPieces: 4, holdEnabled: true, ghostEnabled: true,
-                    levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999,
-                    specialMechanics: {
-                        fixed20G: true,
-                        progressiveTimings: true,
-                        torikanLimit: true,
-                        minimalGrading: true,
-                        deathMechanics: true
-                    }
+                    description: 'Extreme 20G mode with torikan time limit. The ultimate test!'
                 }
             },
             'shirase': { 
@@ -401,6 +330,15 @@ class ModeManager {
                         modeInstance = new BaseMode();
                     }
                     break;
+
+                case 'UltraMode':
+                    if (typeof UltraMode !== 'undefined') {
+                        modeInstance = new UltraMode();
+                    } else {
+                        console.warn('UltraMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
                     
                 default:
                     console.warn(`Unknown mode class: ${modeDef.modeClass}, using BaseMode fallback`);
@@ -412,8 +350,14 @@ class ModeManager {
                 modeInstance.modeId = modeId;
                 modeInstance.difficulty = modeDef.config.difficulty;
                 modeInstance.metadata = modeDef.config;
-                // Override the mode's config with the centralized config
-                modeInstance.config = modeDef.config;
+
+                // Only override config for modes that don't have their own getModeConfig() with timing values
+                // Modes with their own getModeConfig() should use that as the single source of truth
+                const modeConfig = modeInstance.getModeConfig();
+                const hasTimingConfig = modeConfig && (modeConfig.das || modeConfig.arr || modeConfig.are || modeConfig.lockDelay);
+                if (!hasTimingConfig) {
+                    modeInstance.config = modeDef.config;
+                }
             }
             
         } catch (error) {

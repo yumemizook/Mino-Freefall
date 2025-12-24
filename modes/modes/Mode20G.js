@@ -54,11 +54,23 @@ class Mode20G extends BaseMode {
         return piece;
     }
 
-    // 20G mode: faster level progression by lines
+    // 20G mode: TGM-style level progression with stops
     onLevelUpdate(level, oldLevel, updateType, amount) {
-        if (updateType === 'lines') {
-            // Faster level progression in 20G mode
-            return Math.min(level + (amount * 2), 999); // Double line clear rate
+        if (updateType === 'piece') {
+            // Check if current level is a stop level BEFORE incrementing
+            const currentIsStopLevel = (level % 100 === 99) ||
+                                      (level === 998) || // 998 requires line clear
+                                      (level === 999);   // 999 is final level
+            if (!currentIsStopLevel && level < 999) {
+                return level + 1;
+            }
+            return level; // Stay at stop level
+        } else if (updateType === 'lines') {
+            // Line clears can bypass stop levels, but 998->999 requires line clear
+            if (oldLevel === 998 && amount > 0) {
+                return 999;
+            }
+            return Math.min(level + amount, 999);
         }
         return level;
     }
