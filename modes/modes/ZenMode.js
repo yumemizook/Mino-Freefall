@@ -9,6 +9,10 @@ class ZenMode extends BaseMode {
         this.linesCleared = 0;
     }
 
+    getLineARE() { return this.getModeConfig().are; } // Same as ARE for Zen
+    getLockDelay() { return this.getModeConfig().lockDelay; }
+    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
+
     getModeConfig() {
         return {
             gravity: {
@@ -18,7 +22,9 @@ class ZenMode extends BaseMode {
             das: 9/60,      // 9 frames
             arr: 1/60,       // 1 frame
             are: 7/60,       // 7 frames
+            lineAre: 7/60,   // Match ARE for line ARE
             lockDelay: 30/60, // 30 frames
+            lineClearDelay: 9/60, // 9 frames line clear delay
             nextPieces: 6,
             holdEnabled: true,
             ghostEnabled: true,

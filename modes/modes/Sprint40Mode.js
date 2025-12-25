@@ -15,10 +15,13 @@ class Sprint40Mode extends BaseMode {
                 type: 'static',
                 value: 4 // 20G
             },
-            das: 9/60,      // 9 frames
-            arr: 1/60,       // 1 frame
-            are: 7/60,       // 7 frames
-            lockDelay: 30/60, // 10 frames
+            das: 9/60,       // 9 frames
+            arr: 1/60,        // 1 frame
+            are: 7/60,        // 7 frames
+            lineAre: 7/60,    // Line ARE matches grid for sprint
+            lockDelay: 30/60,  // 10 frames
+            lineClearDelay: 9/60, // 9 frames for line clear delay flash
+
             nextPieces: 6,
             holdEnabled: true,
             ghostEnabled: true,
@@ -37,9 +40,9 @@ class Sprint40Mode extends BaseMode {
     getDAS() { return this.getModeConfig().das; }
     getARR() { return this.getModeConfig().arr; }
     getARE() { return this.getModeConfig().are; }
-    getLineARE() { return this.getModeConfig().are; } // Same as ARE for Sprint
+    getLineARE() { return this.getModeConfig().lineAre; } // Same as ARE for Sprint
     getLockDelay() { return this.getModeConfig().lockDelay; }
-    getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
+    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
 
     initializeForGameScene(gameScene) {
         // Set target lines based on mode

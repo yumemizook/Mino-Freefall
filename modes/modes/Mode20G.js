@@ -15,20 +15,19 @@ class Mode20G extends BaseMode {
                 value: 5120, // 20G = 20 rows per frame (5120/256 = 20)
                 curve: null
             },
-            das: 10/60,      // Faster DAS for 20G play
+            das: 16/60,      // Faster DAS for 20G play
             arr: 1/60,       // Standard ARR
-            are: 20/60,      // Shorter ARE for faster gameplay
-            lockDelay: 0.3,  // Shorter lock delay for 20G
+            are: 30/60,      // Shorter ARE for faster gameplay
+            lockDelay: 30/60,  // Shorter lock delay for 20G
             nextPieces: 1,   // Show more next pieces for planning
             holdEnabled: false, // No hold in 20G mode
             ghostEnabled: false, // No ghost piece in 20G (too fast)
-            levelUpType: 'lines',  // Level up by lines cleared
+            levelUpType: 'piece',  // TGM1-style: level increases per piece
             lineClearBonus: 1,
             gravityLevelCap: 999,
             specialMechanics: {
                 hardDropOnSpawn: true, // Auto-hard drop pieces on spawn
-                noGravityDelay: true,  // No gradual gravity increase
-                fastScoring: true      // Higher scoring for technical play
+                noGravityDelay: true  // No gradual gravity increase
             }
         };
     }
@@ -36,22 +35,6 @@ class Mode20G extends BaseMode {
     // Always return 20G regardless of level
     getGravitySpeed(level) {
         return 5120; // 20G constant
-    }
-
-    // 20G mode: pieces auto-hard drop on spawn
-    onPieceSpawn(piece, game) {
-        const config = this.getConfig();
-        if (config.specialMechanics.hardDropOnSpawn) {
-            // Immediately drop piece to the ground
-            piece.hardDrop(game.board);
-            
-            // Start lock delay immediately
-            game.isGrounded = true;
-            game.lockDelay = game.deltaTime;
-            
-            return piece;
-        }
-        return piece;
     }
 
     // 20G mode: TGM-style level progression with stops
@@ -71,22 +54,6 @@ class Mode20G extends BaseMode {
             return Math.min(level + lineIncrement, 999);
         }
         return level;
-    }
-
-    // 20G mode: enhanced scoring for technical play
-    calculateScore(baseScore, lines, piece, game) {
-        let score = baseScore;
-        
-        // Bonus for Tetris clears in 20G
-        if (lines === 4) {
-            score *= 2; // Double points for Tetris
-        }
-        
-        // Speed bonus based on time to lock
-        const speedBonus = Math.max(0, 30 - game.pieceActiveTime);
-        score += speedBonus * 10; // 10 points per frame of speed
-        
-        return Math.floor(score);
     }
 
     // 20G mode: check for 20G gravity detection

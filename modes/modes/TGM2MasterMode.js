@@ -75,6 +75,10 @@ class TGM2MasterMode extends BaseMode {
         return this.tgm2Grading ? this.tgm2Grading.internalGrade : 0;
     }
     
+    getGradePoints() {
+        return this.tgm2Grading ? this.tgm2Grading.gradePoints : 0;
+    }
+    
     // Get mode configuration
     getModeConfig() {
         return {

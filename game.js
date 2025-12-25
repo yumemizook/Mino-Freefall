@@ -1053,7 +1053,7 @@ class Piece {
   }
 
   canMoveDown(board) {
-    return this.move(board, 0, 1);
+    return board.isValidPosition(this, this.x, this.y + 1);
   }
 
   hardDrop(board) {
@@ -2972,6 +2972,8 @@ class GameScene extends Phaser.Scene {
     this.grade = "9";
     this.internalGrade = 0;
     this.gradeDisplay = null;
+    this.gradeText = null;
+    this.gradePointsText = null;
     this.levelDisplay = null;
     this.playfieldBorder = null;
     this.gameOver = false;
@@ -3363,11 +3365,18 @@ class GameScene extends Phaser.Scene {
           align: "center",
         })
         .setOrigin(0.5);
-      // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
-      if (this.nextGradeText) {
-        this.nextGradeText.destroy();
+      if (this.gradePointsText) {
+        this.gradePointsText.destroy();
       }
-      this.nextGradeText = null;
+      this.gradePointsText = this.add
+        .text(gradeX + gradeWidth / 2, gradeY + 90, "0", {
+          fontSize: `${largeFontSize - 4}px`,
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+          align: "center",
+        })
+        .setOrigin(0.5, 0);
     }
 
     // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
@@ -3379,14 +3388,15 @@ class GameScene extends Phaser.Scene {
     ); // Increased font
 
     // Determine mode types
-    const isMarathonMode = !!(
-      this.selectedMode &&
-      (this.selectedMode === "marathon" || this.selectedMode === "ultra")
-    );
+    const isMarathonMode = !!(this.selectedMode && this.selectedMode === "marathon");
+    const isUltraMode = !!(this.selectedMode && this.selectedMode === "ultra");
     const isZenMode = !!(this.selectedMode === "zen");
     const isSprintMode = !!(
       this.selectedMode &&
       (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100")
+    );
+    const isLineCountMode = !!(
+      isMarathonMode || isUltraMode || isZenMode || isSprintMode
     );
 
     // For Marathon mode, add separate level display above
@@ -3411,8 +3421,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Level/Lines label and display
-    const levelLabelText =
-      isMarathonMode || isZenMode || isSprintMode ? "LINES" : "LEVEL";
+    const levelLabelText = isLineCountMode ? "LINES" : "LEVEL";
     this.levelLabel = this.add
       .text(
         uiX + 135,
@@ -3539,6 +3548,7 @@ class GameScene extends Phaser.Scene {
       l: Phaser.Input.Keyboard.KeyCodes.L,
       k: Phaser.Input.Keyboard.KeyCodes.K,
       r: Phaser.Input.Keyboard.KeyCodes.R,
+      menu: Phaser.Input.Keyboard.KeyCodes.M,
     });
 
     // Prevent default browser behavior for game keys
@@ -4469,6 +4479,13 @@ class GameScene extends Phaser.Scene {
     }
 
     // Skip ALL game logic if paused or game over
+    if (this.isPaused) {
+      if (this.keys.menu && Phaser.Input.Keyboard.JustDown(this.keys.menu)) {
+        this.scene.start("MenuScene");
+        return;
+      }
+    }
+
     if (this.isPaused || this.gameOver) {
       // Still update UI for pause screen
       this.draw();
@@ -4627,25 +4644,26 @@ class GameScene extends Phaser.Scene {
       this.areTimer += this.deltaTime;
       if (this.areTimer >= this.areDelay) {
         if (this.lineClearDelayActive) {
-          // Line clear delay completed, enter line ARE
+          // Line clear delay completed, perform flash fade-out and enter line ARE
           this.lineClearDelayActive = false;
           this.lineClearPhase = true;
           this.areDelay = this.pendingLineAREDelay || 41 / 60;
           this.areTimer = 0;
           console.log(`[ARE] Line clear delay ended, entering line ARE: ${this.areDelay}s`);
-        } else if (this.lineClearPhase) {
-          // Line clear ARE completed, now actually clear the lines
-          this.clearStoredLines();
 
-          // Play fall sound
+          // Now clear lines and play fall sound at the beginning of line ARE
+          this.clearStoredLines();
           const fallSound = this.sound.add("fall", { volume: 0.7 });
           fallSound.play();
-
-          // Start normal ARE phase (0.5 seconds)
-          this.areDelay = 30 / 60;
-          this.areTimer = 0;
-          this.lineClearPhase = false;
           this.isClearingLines = false;
+          this.lineClearDelayDuration = 0;
+          this.pendingLineAREDelay = 0;
+        } else if (this.lineClearPhase) {
+          // Line ARE completed, spawn next piece
+          this.lineClearPhase = false;
+          this.areActive = false;
+          console.log(`[ARE] Line ARE completed, spawning piece`);
+          this.spawnPiece();
         } else {
           // Normal ARE completed, spawn next piece
           console.log(`[ARE] ARE completed, spawning piece`);
@@ -4835,6 +4853,7 @@ class GameScene extends Phaser.Scene {
 
     // Preserve ARE input states so we can apply IRS/IHS correctly after swapping
     const rotationDirectionAtSpawn = this.areRotationDirection;
+    const rotationKeysAtSpawn = { ...this.areRotationKeys };
     const holdPressedAtSpawn = this.areHoldPressed;
 
     // Reset ARE rotation and hold tracking for the next cycle
@@ -4874,6 +4893,52 @@ class GameScene extends Phaser.Scene {
       this.currentPiece.rotation = 3; // Counter-clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
+    }
+
+    // Prevent the held rotation key from rotating again on the first active frame after spawn.
+    // Otherwise, the piece can rotate twice (IRS + immediate input rotation), which can apply kicks (often +1Y).
+    if (rotationKeysAtSpawn.k) {
+      this.kKeyPressed = true;
+    }
+    if (rotationKeysAtSpawn.space) {
+      this.spaceKeyPressed = true;
+    }
+    if (rotationKeysAtSpawn.l) {
+      this.lKeyPressed = true;
+    }
+
+    // IRS rotates the piece without kicks; ensure the rotated spawn is still valid.
+    if (
+      wasPreRotated &&
+      !this.board.isValidPosition(
+        this.currentPiece,
+        this.currentPiece.x,
+        this.currentPiece.y,
+      )
+    ) {
+      let shifted = false;
+      for (let shiftY = -1; shiftY >= -3; shiftY--) {
+        if (
+          this.board.isValidPosition(
+            this.currentPiece,
+            this.currentPiece.x,
+            this.currentPiece.y + shiftY,
+          )
+        ) {
+          this.currentPiece.y += shiftY;
+          shifted = true;
+          break;
+        }
+      }
+
+      if (!shifted) {
+        if (this.currentBGM) {
+          this.currentBGM.stop();
+          this.currentBGM = null;
+        }
+        this.showGameOverScreen();
+        return;
+      }
     }
 
     // Log IRS+IHS combination
@@ -6282,13 +6347,13 @@ class GameScene extends Phaser.Scene {
     ); // Increased font
 
     // Determine mode types
-    const isMarathonMode =
-      this.selectedMode &&
-      (this.selectedMode === "marathon" || this.selectedMode === "ultra");
+    const isMarathonMode = this.selectedMode === "marathon";
+    const isUltraMode = this.selectedMode === "ultra";
     const isZenMode = this.selectedMode === "zen";
     const isSprintMode =
       this.selectedMode &&
       (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100");
+    const isLineCountMode = isMarathonMode || isUltraMode || isZenMode || isSprintMode;
 
     // For Marathon mode, update separate level display
     if (isMarathonMode && this.levelDisplayText) {
@@ -6296,7 +6361,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // For Zen/Ultra modes, only show lines cleared, no level bar or cap
-    if (isZenMode) {
+    if (isZenMode || isUltraMode) {
       // Current lines - top row
       const currentY = levelBottomY - 3 * levelRowHeight;
       const currentLinesText = this.totalLines.toString();
@@ -6340,9 +6405,7 @@ class GameScene extends Phaser.Scene {
     // Current level/lines - top row
     const currentY = levelBottomY - 3 * levelRowHeight;
     const currentValue =
-      isMarathonMode || isZenMode || isSprintMode
-        ? this.totalLines.toString()
-        : this.level.toString();
+      isLineCountMode ? this.totalLines.toString() : this.level.toString();
     if (!this.currentLevelText) {
       this.currentLevelText = this.add
         .text(rightX + 17, currentY - 30, currentValue, {
@@ -6520,6 +6583,10 @@ class GameScene extends Phaser.Scene {
     // Update grade display only for modes that use grading
     if (hasGrading) {
       this.gradeText.setText(this.grade);
+      if (this.gradePointsText && this.gameMode && typeof this.gameMode.getGradePoints === "function") {
+        const gradePoints = this.gameMode.getGradePoints();
+        this.gradePointsText.setText(`Points: ${gradePoints}`);
+      }
     }
 
     // Update piece per second displays
@@ -6530,9 +6597,22 @@ class GameScene extends Phaser.Scene {
     this.drawLevelBar();
 
     // Format and display time
-    const minutes = Math.floor(this.currentTime / 60);
-    const seconds = Math.floor(this.currentTime % 60);
-    const centiseconds = Math.floor((this.currentTime % 1) * 100);
+    const isUltraMode = this.selectedMode === "ultra";
+    let timeToDisplay = this.currentTime;
+
+    if (isUltraMode) {
+      const timeLimit =
+        this.gameMode && this.gameMode.timeLimit ? this.gameMode.timeLimit : 120;
+      const elapsedActiveTime =
+        this.gameMode && typeof this.gameMode.elapsedActiveTime === "number"
+          ? this.gameMode.elapsedActiveTime
+          : this.currentTime;
+      timeToDisplay = Math.max(0, timeLimit - elapsedActiveTime);
+    }
+
+    const minutes = Math.floor(timeToDisplay / 60);
+    const seconds = Math.floor(timeToDisplay % 60);
+    const centiseconds = Math.floor((timeToDisplay % 1) * 100);
     const timeString = `${minutes}:${seconds.toString().padStart(2, "0")}.${centiseconds.toString().padStart(2, "0")}`;
 
     if (this.timeText) {
@@ -6664,9 +6744,23 @@ class GameScene extends Phaser.Scene {
           },
         )
         .setOrigin(0.5);
+      const menuText = this.add
+        .text(
+          this.windowWidth / 2,
+          this.windowHeight / 2 + 90,
+          "Press M to return to menu",
+          {
+            fontSize: `${resumeFontSize - 4}px`,
+            fill: "#ffcccc",
+            fontFamily: "Courier New",
+            fontStyle: "normal",
+          },
+        )
+        .setOrigin(0.5);
       this.gameGroup.add(overlay);
       this.gameGroup.add(pauseText);
       this.gameGroup.add(resumeText);
+      this.gameGroup.add(menuText);
     }
 
     // Draw game over text - centered on screen (only after 3 seconds)

@@ -8,22 +8,26 @@ class UltraMode extends BaseMode {
         this.description = '2-minute score attack';
         this.timeLimit = 120; // 2 minutes in seconds
         this.startTime = null;
+        this.elapsedActiveTime = 0;
     }
 
     getModeConfig() {
         return {
             gravity: {
                 type: 'static',
-                value: 5120 // 20G
+                value: 4
             },
-            das: 9/60,      // 9 frames
-            arr: 1/60,       // 1 frame
-            are: 7/60,       // 7 frames
+            das: 9/60,       // 9 frames
+            arr: 1/60,        // 1 frame
+            are: 7/60,        // 7 frames
+            lineAre: 7/60,    // Match ARE for Ultra
             lockDelay: 10/60, // 10 frames
+            lineClearDelay: 9/60, // 9 frames line clear delay
+
             nextPieces: 6,
             holdEnabled: true,
             ghostEnabled: true,
-            levelUpType: 'piece',
+            levelUpType: 'none',
             lineClearBonus: 1,
             gravityLevelCap: 999,
             hasGrading: false,
@@ -38,12 +42,13 @@ class UltraMode extends BaseMode {
     getDAS() { return this.getModeConfig().das; }
     getARR() { return this.getModeConfig().arr; }
     getARE() { return this.getModeConfig().are; }
-    getLineARE() { return this.getModeConfig().are; } // Same as ARE for Ultra
+    getLineARE() { return this.getModeConfig().lineAre; } // Same as ARE for Ultra
     getLockDelay() { return this.getModeConfig().lockDelay; }
-    getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
+    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
 
     initializeForGameScene(gameScene) {
         this.startTime = null;
+        this.elapsedActiveTime = 0;
     }
 
     update(gameScene, deltaTime) {
@@ -52,10 +57,18 @@ class UltraMode extends BaseMode {
             this.startTime = gameScene.currentTime;
         }
 
+        if (this.startTime !== null) {
+            this.elapsedActiveTime = gameScene.currentTime - this.startTime;
+        }
+
         // Check time limit
-        if (this.startTime !== null && gameScene.currentTime - this.startTime >= this.timeLimit) {
+        if (this.startTime !== null && this.elapsedActiveTime >= this.timeLimit) {
             gameScene.showGameOverScreen();
         }
+    }
+
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        return oldLevel;
     }
 
     onGameOver(gameScene) {

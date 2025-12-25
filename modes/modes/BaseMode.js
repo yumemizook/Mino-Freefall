@@ -173,6 +173,10 @@ class BaseMode {
         return this.getConfig().lineClearBonus;
     }
 
+    getGradePoints() {
+        return 0;
+    }
+
     getGravityLevelCap() {
         return this.getConfig().gravityLevelCap;
     }

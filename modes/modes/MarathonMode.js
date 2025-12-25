@@ -19,7 +19,10 @@ class MarathonMode extends BaseMode {
             das: 9/60,      // 9 frames
             arr: 1/60,       // 1 frame
             are: 7/60,       // 7 frames
+            lineAre: 7/60,   // Matches ARE for Marathon
             lockDelay: 30/60, // 30 frames
+            lineClearDelay: 9/60, // 9 frames line clear delay (per new standard)
+
             nextPieces: 6,
             holdEnabled: true,
             ghostEnabled: true,
@@ -27,6 +30,7 @@ class MarathonMode extends BaseMode {
             lineClearBonus: 1,
             gravityLevelCap: 999,
             hasGrading: false,
+
             specialMechanics: {
                 targetLines: 150,
                 progressiveGravity: true
@@ -38,47 +42,46 @@ class MarathonMode extends BaseMode {
     getDAS() { return this.getModeConfig().das; }
     getARR() { return this.getModeConfig().arr; }
     getARE() { return this.getModeConfig().are; }
-    getLineARE() { return this.getModeConfig().are; } // Same as ARE for Marathon
+    getLineARE() { return this.getModeConfig().lineAre; } // Same as ARE for Marathon
     getLockDelay() { return this.getModeConfig().lockDelay; }
-    getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
+    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
 
     // Marathon gravity curve based on standardtimings.md
     getMarathonGravity(level) {
-        // Convert level to internal gravity units (1/65536 G)
-        let internalGravity;
+        // Convert level to internal gravity units (1/256 G)
+        // Source values are from MarathonGravity.md in 1/65536 G units.
+        const tableLevel = Math.max(1, Math.floor(level) + 1);
 
-        if (level < 1) internalGravity = 1092;
-        else if (level < 2) internalGravity = 1377;
-        else if (level < 3) internalGravity = 1767;
-        else if (level < 4) internalGravity = 2309;
-        else if (level < 5) internalGravity = 3076;
-        else if (level < 6) internalGravity = 4168;
-        else if (level < 7) internalGravity = 5748;
-        else if (level < 8) internalGravity = 8090;
-        else if (level < 9) internalGravity = 11619;
-        else if (level < 10) internalGravity = 17066;
-        else if (level < 11) internalGravity = 25401;
-        else if (level < 12) internalGravity = 39009;
-        else if (level < 13) internalGravity = 60681; // ~0.9G
-        else if (level < 14) internalGravity = 99296;  // ~1.5G
-        else if (level < 15) internalGravity = 156038; // ~2.4G
-        else internalGravity = 5120; // 20G cap
-
-        return internalGravity;
+        switch (tableLevel) {
+            case 1: return 4;
+            case 2: return 5;
+            case 3: return 7;
+            case 4: return 9;
+            case 5: return 12;
+            case 6: return 16;
+            case 7: return 22;
+            case 8: return 32;
+            case 9: return 45;
+            case 10: return 67;
+            case 11: return 99;
+            case 12: return 152;
+            case 13: return 237;
+            case 14: return 388;
+            case 15: return 610;
+            default: return 5120; // 20G cap
+        }
     }
 
     onLevelUpdate(level, oldLevel, updateType, amount) {
         if (updateType === 'lines') {
             this.linesCleared += amount;
-            // Level increases by number of lines cleared
-            return oldLevel + amount;
+            return Math.floor(this.linesCleared / 10);
         }
-        return level;
+
+        return oldLevel;
     }
 
     handleLineClear(gameScene, linesCleared, pieceType) {
-        this.linesCleared += linesCleared;
-
         // Check for marathon completion
         if (this.linesCleared >= this.targetLines) {
             gameScene.showGameOverScreen();

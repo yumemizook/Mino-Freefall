@@ -1,0 +1,1 @@
+1. fix SRS rotation system to be accurate to modern games. start from scratch and tweak the kick table from there.
