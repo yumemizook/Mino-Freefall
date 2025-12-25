@@ -26,7 +26,7 @@ class TADeathMode extends BaseMode {
         };
         
         // T.A. Death grading (minimal - only M and GM)
-        this.displayedGrade = '9'; // Start at grade 9
+        this.displayedGrade = ''; // No grade until torikan is beaten
         this.internalGrade = 31;   // Start at 31 (9.5 grade level)
         this.isMGrade = false;
         this.isGMGrade = false;

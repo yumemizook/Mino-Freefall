@@ -254,7 +254,10 @@ class TGM2MasterMode extends BaseMode {
     // Handle line clear with TGM2 grading
     handleLineClear(gameScene, linesCleared, pieceType = null) {
         // Handle TGM2 grading system
-        if (this.config.specialMechanics.tgm2Grading) {
+        if (
+            this.config.specialMechanics.tgm2Grading &&
+            !(gameScene && gameScene.creditsActive)
+        ) {
             // Update level in grading system
             this.tgm2Grading.setLevel(gameScene.level);
             

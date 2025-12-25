@@ -758,19 +758,11 @@ const ARS_KICKS = {
 };
 
 class Board {
-  constructor() {
-    this.rows = 22; // Increased from 20 to 22 for better border alignment
-    this.cols = 10;
-    this.grid = Array.from({ length: this.rows }, () =>
-      Array(this.cols).fill(0),
-    );
-
-    this.fadeGrid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
-  }
-
-  clear() {
-    this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
-    this.fadeGrid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+  constructor(rows = 22, cols = 10) {
+    this.rows = rows;
+    this.cols = cols;
+    this.grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    this.fadeGrid = Array.from({ length: rows }, () => Array(cols).fill(0));
   }
 
   isValidPosition(piece, x, y) {
@@ -779,7 +771,6 @@ class Board {
         if (piece.shape[r][c]) {
           const newX = x + c;
           const newY = y + r;
-          // Allow pieces in hidden rows (negative Y) but prevent going beyond matrix bounds
           if (
             newX < 0 ||
             newX >= this.cols ||
@@ -814,6 +805,8 @@ class Board {
     linesToClear.forEach((line) => {
       this.grid.splice(line, 1);
       this.grid.unshift(Array(this.cols).fill(0));
+      this.fadeGrid.splice(line, 1);
+      this.fadeGrid.unshift(Array(this.cols).fill(0));
     });
     return linesToClear.length;
   }
@@ -826,6 +819,13 @@ class Board {
     for (let r = startRow; r < endRow; r++) {
       for (let c = 0; c < this.cols; c++) {
         if (this.grid[r][c]) {
+          const rowAlpha =
+            scene.minoRowFadeAlpha && scene.minoRowFadeAlpha[r] !== undefined
+              ? scene.minoRowFadeAlpha[r]
+              : 1;
+          if (rowAlpha <= 0) {
+            continue;
+          }
           if (
             scene.fadingRollActive &&
             !scene.invisibleStackActive &&
@@ -837,34 +837,50 @@ class Board {
           if (scene.invisibleStackActive) {
             continue;
           }
-          let color = this.grid[r][c];
 
-          // Apply mino fading if active
+          const color = this.grid[r][c];
           if (scene.minoFadeActive) {
             const minoIndex = scene.placedMinos.findIndex(
-              (mino) =>
-                mino.x === c && mino.y === r && mino.color === this.grid[r][c],
+              (mino) => mino.x === c && mino.y === r && mino.color === color,
             );
             if (minoIndex !== -1 && scene.placedMinos[minoIndex].faded) {
-              // Skip drawing faded minos to make them invisible
               continue;
             }
           }
 
           const textureKey =
             scene.rotationSystem === "ARS" ? "mino_ars" : "mino_srs";
-          const sprite = scene.add.sprite(
-            offsetX + c * cellSize,
-            offsetY + (r - startRow) * cellSize,
-            textureKey,
-          );
-          sprite.setDisplaySize(cellSize, cellSize);
-          sprite.setTint(color);
-          scene.gameGroup.add(sprite);
+          const texture = scene.textures ? scene.textures.get(textureKey) : null;
+          const textureSource = texture && texture.source ? texture.source[0] : null;
+          const hasValidTextureSource =
+            !!texture && !!textureSource && !!textureSource.image;
+          if (hasValidTextureSource) {
+            const sprite = scene.add.sprite(
+              offsetX + c * cellSize,
+              offsetY + (r - startRow) * cellSize,
+              textureKey,
+            );
+            sprite.setDisplaySize(cellSize, cellSize);
+            sprite.setTint(color);
+            sprite.setAlpha(rowAlpha);
+            scene.gameGroup.add(sprite);
+          } else {
+            const graphics = scene.add.graphics();
+            graphics.fillStyle(color, rowAlpha);
+            graphics.fillRect(
+              offsetX + c * cellSize - cellSize / 2,
+              offsetY + (r - startRow) * cellSize - cellSize / 2,
+              cellSize,
+              cellSize,
+            );
+            scene.gameGroup.add(graphics);
+          }
         }
       }
     }
   }
+
+  // End of Board class
 }
 
 class Piece {
@@ -1070,15 +1086,31 @@ class Piece {
           if (pieceY >= 2) {
             const textureKey =
               scene.rotationSystem === "ARS" ? "mino_ars" : "mino_srs";
-            const sprite = scene.add.sprite(
-              offsetX + (this.x + c) * cellSize,
-              offsetY + (pieceY - 2) * cellSize,
-              textureKey,
-            );
-            sprite.setDisplaySize(cellSize, cellSize);
-            sprite.setTint(this.color);
-            sprite.setAlpha(finalAlpha);
-            scene.gameGroup.add(sprite);
+            const texture = scene.textures ? scene.textures.get(textureKey) : null;
+            const textureSource = texture && texture.source ? texture.source[0] : null;
+            const hasValidTextureSource =
+              !!texture && !!textureSource && !!textureSource.image;
+            if (hasValidTextureSource) {
+              const sprite = scene.add.sprite(
+                offsetX + (this.x + c) * cellSize,
+                offsetY + (pieceY - 2) * cellSize,
+                textureKey,
+              );
+              sprite.setDisplaySize(cellSize, cellSize);
+              sprite.setTint(this.color);
+              sprite.setAlpha(finalAlpha);
+              scene.gameGroup.add(sprite);
+            } else {
+              const graphics = scene.add.graphics();
+              graphics.fillStyle(this.color, finalAlpha);
+              graphics.fillRect(
+                offsetX + (this.x + c) * cellSize - cellSize / 2,
+                offsetY + (pieceY - 2) * cellSize - cellSize / 2,
+                cellSize,
+                cellSize,
+              );
+              scene.gameGroup.add(graphics);
+            }
           }
         }
       }
@@ -1276,6 +1308,14 @@ class MenuScene extends Phaser.Scene {
   create() {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
+    this.tPieceX = centerX;
+    this.tPieceY = centerY - 90;
+
+    this.events.once("shutdown", () => {
+      if (this.input && this.input.keyboard && this.input.keyboard.removeAllListeners) {
+        this.input.keyboard.removeAllListeners();
+      }
+    });
 
     // Title
     this.add
@@ -1350,11 +1390,11 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // Best scores leaderboard (right side)
-    this.leaderboardContainer = this.add.container(centerX + 220, centerY - 50);
+    this.leaderboardContainer = this.add.container(centerX + 220, centerY - 40);
 
     // Leaderboard title - create as separate text object
     this.leaderboardTitle = this.add
-      .text(centerX + 220, centerY - 70, "BEST SCORES", {
+      .text(centerX + 220, centerY - 60, "BEST SCORES", {
         fontSize: "20px",
         fill: "#ffffff",
         fontFamily: "Courier New",
@@ -1417,7 +1457,6 @@ class MenuScene extends Phaser.Scene {
 
     this.settingsButton.on("pointerdown", () => {
       // Settings functionality to be implemented
-      console.log("Settings button clicked");
     });
 
     this.settingsButton.on("pointerover", () => {
@@ -1505,6 +1544,10 @@ class MenuScene extends Phaser.Scene {
   }
 
   setupKeyboardControls() {
+    if (this.input && this.input.keyboard && this.input.keyboard.removeAllListeners) {
+      this.input.keyboard.removeAllListeners();
+    }
+
     // Left/Right for submode navigation within selected mode type
     this.input.keyboard.on("keydown-LEFT", () => {
       this.navigateSubmode(-1);
@@ -1692,8 +1735,6 @@ class MenuScene extends Phaser.Scene {
     const currentModeType = this.modeTypes[this.currentModeTypeIndex];
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
 
-    console.log(`Starting mode: ${currentSubmode.id}`);
-
     // Initialize mode manager and load the selected mode
     if (typeof getModeManager === "undefined") {
       console.error(
@@ -1713,8 +1754,6 @@ class MenuScene extends Phaser.Scene {
       this.scene.start("AssetLoaderScene", { mode: "tgm1" });
       return;
     }
-
-    console.log(`Loaded mode: ${gameMode.getName()} (${currentSubmode.id})`);
 
     // Store the mode information for later use
     this.selectedMode = gameMode;
@@ -1795,10 +1834,13 @@ class SettingsScene extends Phaser.Scene {
       moveRight: "Move Right",
       softDrop: "Soft Drop",
       rotateCW: "Rotate CW",
+      rotateCW2: "Rotate CW (Alt)",
       rotateCCW: "Rotate CCW",
+      rotateCCW2: "Rotate CCW (Alt)",
       hardDrop: "Hard Drop",
       hold: "Hold",
       pause: "Pause",
+      menu: "Return to Menu",
       restart: "Restart",
     };
 
@@ -1820,11 +1862,41 @@ class SettingsScene extends Phaser.Scene {
     this.sfxVolumeSlider = null;
     this.sfxVolumeSliderFill = null;
     this.sfxVolumeKnob = null;
+
+    // ARS lock reset mode toggle
+    this.arsResetModeText = null;
+  }
+
+  preload() {
+    const ensureImageTexture = (key, url) => {
+      if (this.textures.exists(key)) {
+        const existingTexture = this.textures.get(key);
+        const src =
+          existingTexture && existingTexture.source
+            ? existingTexture.source[0]
+            : null;
+        if (!src || !src.image) {
+          this.textures.remove(key);
+        }
+      }
+      if (!this.textures.exists(key)) {
+        this.load.image(key, url);
+      }
+    };
+
+    ensureImageTexture("mino_srs", "img/mino.png");
+    ensureImageTexture("mino_ars", "img/minoARS.png");
   }
 
   create() {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
+
+    this.events.once("shutdown", () => {
+      if (this.input && this.input.keyboard) {
+        this.input.keyboard.off("keydown", this.onKeyDown, this);
+      }
+    });
 
     // Title - moved up 50px
     this.add
@@ -1850,13 +1922,50 @@ class SettingsScene extends Phaser.Scene {
       const currentSystem = localStorage.getItem("rotationSystem") || "SRS";
       const newSystem = currentSystem === "SRS" ? "ARS" : "SRS";
       localStorage.setItem("rotationSystem", newSystem);
+      this.rotationSystem = newSystem;
       this.rotationText.setText(`Rotation System: ${newSystem}`);
       this.updateRotationSystemDisplay(newSystem);
+      this.updateArsResetModeVisibility(newSystem);
     });
 
     // Add T piece display under rotation system text
     this.rotationSystem = rotationSystem;
-    this.tPieceDisplay = this.createTPieceDisplay(centerX, centerY - 90);
+    this.tPieceDisplay = this.createTPieceDisplay(this.tPieceX, this.tPieceY, this.rotationSystem);
+    // Ensure initial display uses correct texture/tint for current selection
+    this.updateRotationSystemDisplay(this.rotationSystem);
+
+    // ARS lock reset mode toggle (only relevant when ARS is selected)
+    const arsResetIsMove =
+      (localStorage.getItem("arsMoveReset") || "false") === "true";
+    // ARS reset label (two-line: label + value)
+    this.arsResetLabel = this.add
+      .text(centerX, centerY - 40, "ARS Lock Reset", {
+        fontSize: "18px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.arsResetModeText = this.add
+      .text(
+        centerX,
+        centerY - 20,
+        arsResetIsMove ? "Move (SRS-style)" : "Step (default)",
+        {
+          fontSize: "18px",
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+        },
+      )
+      .setOrigin(0.5)
+      .setInteractive();
+    this.arsResetModeText.on("pointerdown", () => {
+      const current = (localStorage.getItem("arsMoveReset") || "false") === "true";
+      const next = !current;
+      localStorage.setItem("arsMoveReset", next.toString());
+      this.updateArsResetModeText(next);
+    });
+    this.updateArsResetModeVisibility(rotationSystem);
 
     // Keybind settings - moved to left side
     const keybindsX = centerX - 300; // Moved to left
@@ -2224,10 +2333,13 @@ class SettingsScene extends Phaser.Scene {
       moveRight: Phaser.Input.Keyboard.KeyCodes.C,
       softDrop: Phaser.Input.Keyboard.KeyCodes.S,
       rotateCW: Phaser.Input.Keyboard.KeyCodes.K,
+      rotateCW2: Phaser.Input.Keyboard.KeyCodes.UP,
       rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L,
       hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
       hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
       pause: Phaser.Input.Keyboard.KeyCodes.ESC,
+      menu: Phaser.Input.Keyboard.KeyCodes.M,
       restart: Phaser.Input.Keyboard.KeyCodes.ENTER,
     };
 
@@ -2706,7 +2818,7 @@ class SettingsScene extends Phaser.Scene {
     });
   }
 
-  createTPieceDisplay(centerX, centerY, system) {
+  createTPieceDisplay(centerX, centerY, system = this.rotationSystem) {
     const container = this.add.container(centerX, centerY);
 
     // Create T piece minos
@@ -2730,7 +2842,11 @@ class SettingsScene extends Phaser.Scene {
           const offsetX = (c - 1) * minoSize; // Center horizontally around c=1
           const offsetY = (r - 0.5) * minoSize; // Center vertically around r=0.5 (middle of the T)
 
-          if (this.textures.exists(textureKey)) {
+          const texture = this.textures ? this.textures.get(textureKey) : null;
+          const textureSource = texture && texture.source ? texture.source[0] : null;
+          const hasValidTextureSource =
+            !!texture && !!textureSource && !!textureSource.image;
+          if (hasValidTextureSource) {
             const sprite = this.add.sprite(offsetX, offsetY, textureKey);
             sprite.setDisplaySize(minoSize, minoSize);
             sprite.setTint(color);
@@ -2757,27 +2873,25 @@ class SettingsScene extends Phaser.Scene {
   }
 
   updateRotationSystemDisplay(newSystem) {
-    // Animate the T piece when rotation system changes
-    const tPiece = this.tPieceDisplay;
+    this.rotationSystem = newSystem;
 
-    // Determine the rotation shapes based on system
-    const rotations =
-      newSystem === "ARS"
-        ? SEGA_ROTATIONS.T.rotations
-        : TETROMINOES.T.rotations;
-
-    // Update the T piece shape and color immediately
-    this.updateTPieceShape(tPiece, rotations, newSystem);
+    // Rebuild T piece display to ensure correct texture/color
+    if (this.tPieceDisplay && this.tPieceDisplay.container) {
+      this.tPieceDisplay.container.destroy(true);
+    }
+    const centerX = this.tPieceX || this.cameras.main.width / 2;
+    const centerY = this.tPieceY || this.cameras.main.height / 2 - 90;
+    this.tPieceDisplay = this.createTPieceDisplay(centerX, centerY, newSystem);
 
     // Animate 360-degree rotation with the new shape/color
     this.tweens.add({
-      targets: tPiece.container,
+      targets: this.tPieceDisplay.container,
       angle: 360,
       duration: 600,
       ease: "Power2",
       onComplete: () => {
         // Reset angle to 0
-        tPiece.container.angle = 0;
+        this.tPieceDisplay.container.angle = 0;
       },
     });
   }
@@ -2793,7 +2907,7 @@ class SettingsScene extends Phaser.Scene {
 
     // Clear existing minos and recreate them
     tPiece.minos.forEach((mino) => mino.destroy());
-    tPiece.minos = [];
+    tPiece.minos.length = 0;
 
     // Recreate mino sprites/graphics with new shape
     for (let r = 0; r < 3; r++) {
@@ -2803,7 +2917,11 @@ class SettingsScene extends Phaser.Scene {
           const offsetX = (c - 1) * minoSize; // Center horizontally around c=1
           const offsetY = (r - 0.5) * minoSize; // Center vertically around r=0.5
 
-          if (this.textures.exists(textureKey)) {
+          const texture = this.textures ? this.textures.get(textureKey) : null;
+          const textureSource = texture && texture.source ? texture.source[0] : null;
+          const hasValidTextureSource =
+            !!texture && !!textureSource && !!textureSource.image;
+          if (hasValidTextureSource) {
             const sprite = this.add.sprite(offsetX, offsetY, textureKey);
             sprite.setDisplaySize(minoSize, minoSize);
             sprite.setTint(color);
@@ -2825,6 +2943,19 @@ class SettingsScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  updateArsResetModeText(isMoveReset) {
+    if (!this.arsResetModeText) return;
+    this.arsResetModeText.setText(
+      isMoveReset ? "Move (SRS-style)" : "Step (default)",
+    );
+  }
+
+  updateArsResetModeVisibility(rotationSystem) {
+    const visible = rotationSystem === "ARS";
+    if (this.arsResetModeText) this.arsResetModeText.setVisible(visible);
+    if (this.arsResetLabel) this.arsResetLabel.setVisible(visible);
   }
 }
 
@@ -2856,45 +2987,106 @@ class AssetLoaderScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    const ensureImageTexture = (key, url) => {
+      if (this.textures.exists(key)) {
+        const existingTexture = this.textures.get(key);
+        const src = existingTexture && existingTexture.source ? existingTexture.source[0] : null;
+        if (!src || !src.image) {
+          this.textures.remove(key);
+        }
+      }
+      if (!this.textures.exists(key)) {
+        this.load.image(key, url);
+      }
+    };
+
     // Load all assets for the game
-    this.load.image("mino_srs", "img/mino.png");
-    this.load.image("mino_ars", "img/minoARS.png");
+    ensureImageTexture("mino_srs", "img/mino.png");
+    ensureImageTexture("mino_ars", "img/minoARS.png");
 
     // Load BGM files from the correct directory paths
     try {
       // Load MP3 files from bgm directory (Phaser compatible)
-      this.load.audio("stage1", "bgm/tm1_1.mp3");
-      this.load.audio("stage2", "bgm/tm1_2.mp3");
-      this.load.audio("credits", "bgm/tm1_endroll.mp3");
+      if (!this.cache.audio.exists("stage1")) {
+        this.load.audio("stage1", "bgm/tm1_1.mp3");
+      }
+      if (!this.cache.audio.exists("stage2")) {
+        this.load.audio("stage2", "bgm/tm1_2.mp3");
+      }
+      if (!this.cache.audio.exists("credits")) {
+        this.load.audio("credits", "bgm/tm1_endroll.mp3");
+      }
 
       // Load TGM2 BGM files
-      this.load.audio("tgm2_stage1", "bgm/tm1_1.mp3");
-      this.load.audio("tgm2_stage2", "bgm/tm1_2.mp3");
-      this.load.audio("tgm2_stage3", "bgm/tm2_3.mp3");
-      this.load.audio("tgm2_stage4", "bgm/tm2_4.mp3");
+      if (!this.cache.audio.exists("tgm2_stage1")) {
+        this.load.audio("tgm2_stage1", "bgm/tm1_1.mp3");
+      }
+      if (!this.cache.audio.exists("tgm2_stage2")) {
+        this.load.audio("tgm2_stage2", "bgm/tm1_2.mp3");
+      }
+      if (!this.cache.audio.exists("tgm2_stage3")) {
+        this.load.audio("tgm2_stage3", "bgm/tm2_3.mp3");
+      }
+      if (!this.cache.audio.exists("tgm2_stage4")) {
+        this.load.audio("tgm2_stage4", "bgm/tm2_4.mp3");
+      }
     } catch (error) {
       console.warn("BGM files could not be loaded from bgm directory", error);
     }
 
     // Load all sound effects
-    this.load.audio("ready", "sfx/ready.wav");
-    this.load.audio("go", "sfx/go.wav");
-    this.load.audio("gradeup", "sfx/gradeup.wav");
-    this.load.audio("complete", "sfx/complete.wav");
-    this.load.audio("clear", "sfx/clear.wav");
-    this.load.audio("fall", "sfx/fall.wav");
-    this.load.audio("sectionchange", "sfx/sectionchange.wav");
+    if (!this.cache.audio.exists("ready")) {
+      this.load.audio("ready", "sfx/ready.wav");
+    }
+    if (!this.cache.audio.exists("go")) {
+      this.load.audio("go", "sfx/go.wav");
+    }
+    if (!this.cache.audio.exists("gradeup")) {
+      this.load.audio("gradeup", "sfx/gradeup.wav");
+    }
+    if (!this.cache.audio.exists("complete")) {
+      this.load.audio("complete", "sfx/complete.wav");
+    }
+    if (!this.cache.audio.exists("clear")) {
+      this.load.audio("clear", "sfx/clear.wav");
+    }
+    if (!this.cache.audio.exists("fall")) {
+      this.load.audio("fall", "sfx/fall.wav");
+    }
+    if (!this.cache.audio.exists("sectionchange")) {
+      this.load.audio("sectionchange", "sfx/sectionchange.wav");
+    }
 
-    this.load.audio("IRS", "sfx/IRS.wav");
-    this.load.audio("ground", "sfx/ground.wav");
-    this.load.audio("lock", "sfx/lock.wav");
-    this.load.audio("sound_s", "sfx/s.wav");
-    this.load.audio("sound_z", "sfx/z.wav");
-    this.load.audio("sound_t", "sfx/t.wav");
-    this.load.audio("sound_j", "sfx/j.wav");
-    this.load.audio("sound_l", "sfx/l.wav");
-    this.load.audio("sound_o", "sfx/o.wav");
-    this.load.audio("sound_i", "sfx/i.wav");
+    if (!this.cache.audio.exists("IRS")) {
+      this.load.audio("IRS", "sfx/IRS.wav");
+    }
+    if (!this.cache.audio.exists("ground")) {
+      this.load.audio("ground", "sfx/ground.wav");
+    }
+    if (!this.cache.audio.exists("lock")) {
+      this.load.audio("lock", "sfx/lock.wav");
+    }
+    if (!this.cache.audio.exists("sound_s")) {
+      this.load.audio("sound_s", "sfx/s.wav");
+    }
+    if (!this.cache.audio.exists("sound_z")) {
+      this.load.audio("sound_z", "sfx/z.wav");
+    }
+    if (!this.cache.audio.exists("sound_t")) {
+      this.load.audio("sound_t", "sfx/t.wav");
+    }
+    if (!this.cache.audio.exists("sound_j")) {
+      this.load.audio("sound_j", "sfx/j.wav");
+    }
+    if (!this.cache.audio.exists("sound_l")) {
+      this.load.audio("sound_l", "sfx/l.wav");
+    }
+    if (!this.cache.audio.exists("sound_o")) {
+      this.load.audio("sound_o", "sfx/o.wav");
+    }
+    if (!this.cache.audio.exists("sound_i")) {
+      this.load.audio("sound_i", "sfx/i.wav");
+    }
   }
 
   create() {
@@ -2962,8 +3154,10 @@ class GameScene extends Phaser.Scene {
     // lockDelay is a timer; lockDelayMax is the per-mode limit
     this.lockDelay = 0;
     this.lockDelayMax = 0.5;
+    this.lockResetCount = 0; // Number of lock delay resets on current piece (SRS limit)
     // defer starting the lock timer until after the first grounded frame
     this.lockDelayBufferedStart = false;
+    this.lastGroundedY = null; // Track last grounded row for ARS lock reset rule
     this.isGrounded = false;
     this.level = getStartingLevel(); // Set starting level from URL parameter
     this.startingLevel = this.level; // Preserve the starting level for restarts
@@ -3087,6 +3281,8 @@ class GameScene extends Phaser.Scene {
       stage2: { start: 97.622, end: 203.217 },
     };
 
+    this.bgmLoopTimer = null;
+
     // Track if BGM has been played for the first time
     this.bgmFirstPlay = {
       stage1: true,
@@ -3109,15 +3305,19 @@ class GameScene extends Phaser.Scene {
 
     this.invisibleStackActive = false;
     this.fadingRollActive = false;
-
-    // Mino fading system
+    this.fadingRollActive = false;
     this.minoFadeActive = false;
     this.minoFadeProgress = 0;
     this.minoFadeDelay = 30 / 60; // seconds between each row fade (will be calculated dynamically)
     this.minoFadeTimer = 0;
+    this.minoFadePerRowDuration = 0;
     this.placedMinos = []; // Track all placed minos for fading
     this.placedMinoRows = []; // Track rows containing minos for row-by-row fading
     this.fadingComplete = false; // Track when fading is complete
+    this.minoRowFadeAlpha = {}; // Row -> alpha during fading
+    this.gameOverFadeDoneTime = null;
+    this.showGameOverText = false;
+
     this.gameOverTextDelay = 3; // seconds until GAME OVER text appears
     this.gameOverTextTimer = 0;
     this.showGameOverText = false;
@@ -3131,6 +3331,8 @@ class GameScene extends Phaser.Scene {
 
     // Rotation system selection
     this.rotationSystem = localStorage.getItem("rotationSystem") || "SRS"; // 'SRS' or 'ARS'
+    this.arsMoveResetEnabled =
+      (localStorage.getItem("arsMoveReset") || "false") === "true";
     this.rotationSystemDisplay = null;
 
     // Keybind and IRS display
@@ -3362,6 +3564,24 @@ class GameScene extends Phaser.Scene {
     // Only show for modes that use grading
     const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
     const hasGrading = modeConfig.hasGrading !== false;
+    const modeId =
+      this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode;
+    const specialMechanics = modeConfig.specialMechanics || {};
+    const isTADeathMode = modeId === "tadeath";
+    const isTGM2Mode =
+      Boolean(specialMechanics.tgm2Grading) ||
+      (typeof modeId === "string" && modeId.startsWith("tgm2"));
+    const hideGradePoints =
+      modeId === "tgm1" ||
+      modeId === "20g" ||
+      (this.gameMode &&
+        typeof this.gameMode.isTwentyGMode === "function" &&
+        this.gameMode.isTwentyGMode());
+    this.shouldShowGradePoints = !hideGradePoints;
+    this.shouldShowNextGradeText =
+      hasGrading && !isTADeathMode && !isTGM2Mode;
 
     if (hasGrading) {
       const gradeX = uiX + 25;
@@ -3370,8 +3590,18 @@ class GameScene extends Phaser.Scene {
       this.gradeDisplay = this.add.graphics();
       this.gradeDisplay.lineStyle(2, 0xffffff);
       this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+      const initialDisplayedGrade =
+        this.gameMode && typeof this.gameMode.getDisplayedGrade === "function"
+          ? this.gameMode.getDisplayedGrade()
+          : this.grade;
+      this.grade =
+        initialDisplayedGrade !== undefined && initialDisplayedGrade !== null
+          ? initialDisplayedGrade
+          : this.grade;
+      const gradeTextValue = this.grade || "";
+      const gradeVisible = !!gradeTextValue;
       this.gradeText = this.add
-        .text(gradeX + gradeWidth / 2, gradeY + 40, "9", {
+        .text(gradeX + gradeWidth / 2, gradeY + 40, gradeTextValue, {
           fontSize: `${xlargeFontSize}px`,
           fill: "#fff",
           fontFamily: "Courier New",
@@ -3379,39 +3609,46 @@ class GameScene extends Phaser.Scene {
           align: "center",
         })
         .setOrigin(0.5);
+      this.gradeDisplay.setVisible(gradeVisible);
+      this.gradeText.setVisible(gradeVisible);
       if (this.gradePointsText) {
         this.gradePointsText.destroy();
         this.gradePointsText = null;
       }
-      this.gradePointsText = this.add
-        .text(gradeX + gradeWidth / 2, gradeY + 90, "0", {
-          fontSize: `${largeFontSize - 4}px`,
-          fill: "#ffffff",
-          fontFamily: "Courier New",
-          fontStyle: "bold",
-          align: "center",
-        })
-        .setOrigin(0.5, 0);
-      if (this.nextGradeText) {
-        this.nextGradeText.destroy();
-        this.nextGradeText = null;
+      if (this.shouldShowGradePoints) {
+        this.gradePointsText = this.add
+          .text(gradeX + gradeWidth / 2, gradeY + 90, "0", {
+            fontSize: `${largeFontSize - 4}px`,
+            fill: "#ffffff",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+            align: "center",
+          })
+          .setOrigin(0.5, 0);
+        this.gradePointsText.setVisible(gradeVisible);
       }
-      this.nextGradeText = this.add
-        .text(
-          gradeX + gradeWidth / 2,
-          gradeY + 130,
-          "Next grade at 400 points",
-          {
+      if (this.shouldShowNextGradeText) {
+        if (this.nextGradeText) {
+          this.nextGradeText.destroy();
+          this.nextGradeText = null;
+        }
+        this.nextGradeText = this.add
+          .text(gradeX + gradeWidth / 2, gradeY + 130, "", {
             fontSize: `${uiFontSize - 2}px`,
             fill: "#cccccc",
             fontFamily: "Courier New",
             fontStyle: "normal",
             align: "center",
-          },
-        )
-        .setOrigin(0.5, 0);
-      this.nextGradeText.setWordWrapWidth(gradeWidth * 1.5);
-      this.updateNextGradeText();
+          })
+          .setOrigin(0.5, 0);
+        this.nextGradeText.setWordWrapWidth(gradeWidth * 1.5);
+        this.nextGradeText.setVisible(gradeVisible);
+        this.updateNextGradeText();
+      } else if (this.nextGradeText) {
+        this.nextGradeText.destroy();
+        this.nextGradeText = null;
+      }
+      this.updateGradeUIVisibility();
     }
 
     // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
@@ -3531,6 +3768,9 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0, 0);
 
     // Time - centered below border, larger font, bold
+    if (this.timeText && !this.timeText.scene) {
+      this.timeText = null;
+    }
     if (!this.timeText) {
       this.timeText = this.add
         .text(
@@ -3572,35 +3812,199 @@ class GameScene extends Phaser.Scene {
     // Initialize game elements here (spawn deferred until after READY/GO)
     this.gameGroup = this.add.group();
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys({
-      space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-      shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
-      pause: Phaser.Input.Keyboard.KeyCodes.ESC,
-      s: Phaser.Input.Keyboard.KeyCodes.S,
-      x: Phaser.Input.Keyboard.KeyCodes.X,
-      z: Phaser.Input.Keyboard.KeyCodes.Z,
-      c: Phaser.Input.Keyboard.KeyCodes.C,
-      l: Phaser.Input.Keyboard.KeyCodes.L,
-      k: Phaser.Input.Keyboard.KeyCodes.K,
-      r: Phaser.Input.Keyboard.KeyCodes.R,
-      menu: Phaser.Input.Keyboard.KeyCodes.M,
+
+    // Scene instances can be reused across restarts; reset runtime flags/timers.
+    this.board = new Board();
+    this.currentPiece = null;
+    this.holdPiece = null;
+    this.canHold = true;
+    this.nextPieces = [];
+    this.areActive = false;
+    this.areTimer = 0;
+    this.isClearingLines = false;
+    this.clearedLines = [];
+    this.lineClearPhase = false;
+
+    this.score = 0;
+    this.totalLines = 0;
+    this.piecesPlaced = 0;
+    this.comboCount = -1;
+    this.backToBack = false;
+    this.lastClearType = null;
+    this.lastPieceType = null;
+
+    this.level = this.startingLevel != null ? this.startingLevel : getStartingLevel();
+    this.currentSection = Math.floor(this.level / 100);
+    this.sectionStartTime = 0;
+    this.sectionTimes = {};
+    this.sectionTetrises = {};
+    this.currentSectionTetrisCount = 0;
+
+    this.isGrounded = false;
+    this.lockDelay = 0;
+    this.lockDelayBufferedStart = false;
+
+    // Reset randomizer / first-spawn logic so the first spawned piece does not increment level.
+    this.pieceHistory = ["Z", "Z", "S", "S"];
+    this.pieceHistoryIndex = 0;
+    this.firstPiece = true;
+    this.isFirstSpawn = true;
+    this.validatePieceHistory();
+
+    // Reset stack/credits/fade systems
+    this.invisibleStackActive = false;
+    this.fadingRollActive = false;
+    this.minoFadeActive = false;
+    this.minoFadeProgress = 0;
+    this.minoFadeTimer = 0;
+    this.minoFadePerRowDuration = 0;
+    this.placedMinos = [];
+    this.placedMinoRows = [];
+    this.fadingComplete = false;
+    this.minoRowFadeAlpha = {};
+    this.gameOverFadeDoneTime = null;
+    this.showGameOverText = false;
+    this.gameOverTextTimer = 0;
+    this.creditsActive = false;
+    this.creditsTimer = 0;
+    this.congratulationsActive = false;
+    this.gameComplete = false;
+
+    this.gameOver = false;
+    this.gameOverTimer = 0;
+    this.isPaused = false;
+    this.pauseStartTime = null;
+    this.totalPausedTime = 0;
+    this.level999Reached = false;
+    this.readyGoPhase = false;
+    this.loadingPhase = true;
+    this.gameStarted = false;
+    this.showGameOverText = false;
+
+    // Ensure layout values are correct for UI drawing (level bar, border, etc.)
+    this.calculateLayout();
+
+    this.events.once("shutdown", () => {
+      if (this.bgmLoopTimer) {
+        this.bgmLoopTimer.remove(false);
+        this.bgmLoopTimer = null;
+      }
+
+      if (this.currentBGM) {
+        this.currentBGM.stop();
+        this.currentBGM = null;
+      }
+
+      const bgmObjects = [
+        this.stage1BGM,
+        this.stage2BGM,
+        this.tgm2_stage1,
+        this.tgm2_stage2,
+        this.tgm2_stage3,
+        this.tgm2_stage4,
+      ];
+
+      bgmObjects.forEach((bgm) => {
+        if (bgm) {
+          bgm.stop();
+          bgm.destroy();
+        }
+      });
+
+      this.stage1BGM = null;
+      this.stage2BGM = null;
+      this.tgm2_stage1 = null;
+      this.tgm2_stage2 = null;
+      this.tgm2_stage3 = null;
+      this.tgm2_stage4 = null;
+
+      if (this.tweens) {
+        this.tweens.killAll();
+      }
+      if (this.time) {
+        this.time.removeAllEvents();
+      }
+
+      // Scene instances can be reused; ensure we don't keep references to destroyed UI objects.
+      this.timeText = null;
+      this.levelLabel = null;
+      this.levelDisplayLabel = null;
+      this.levelDisplayText = null;
+      this.currentLevelText = null;
+      this.capLevelText = null;
+      this.levelBar = null;
+      this.scoreLabel = null;
+      this.scoreText = null;
+      this.ppsLabel = null;
+      this.ppsText = null;
+      this.rawPpsLabel = null;
+      this.rawPpsText = null;
+      this.gradeDisplay = null;
+      this.gradeText = null;
+      this.gradePointsText = null;
+      this.nextGradeText = null;
+      this.playfieldBorder = null;
+      this.minoRowFadeAlpha = null;
     });
+    const keybinds = (() => {
+      const defaultKeybinds = {
+        moveLeft: Phaser.Input.Keyboard.KeyCodes.Z,
+        moveRight: Phaser.Input.Keyboard.KeyCodes.C,
+        softDrop: Phaser.Input.Keyboard.KeyCodes.S,
+        rotateCW: Phaser.Input.Keyboard.KeyCodes.K,
+        rotateCW2: Phaser.Input.Keyboard.KeyCodes.UP,
+        rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
+        rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L,
+        hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
+        hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+        pause: Phaser.Input.Keyboard.KeyCodes.ESC,
+        menu: Phaser.Input.Keyboard.KeyCodes.M,
+        restart: Phaser.Input.Keyboard.KeyCodes.ENTER,
+      };
+      const stored = localStorage.getItem("keybinds");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          return { ...defaultKeybinds, ...parsed };
+        } catch (e) {
+        }
+      }
+      return defaultKeybinds;
+    })();
+
+    const makeKey = (keyCode) => this.input.keyboard.addKey(keyCode);
+
+    this.keys = {
+      left: makeKey(keybinds.moveLeft),
+      right: makeKey(keybinds.moveRight),
+      softDrop: makeKey(keybinds.softDrop),
+      hardDrop: makeKey(keybinds.hardDrop),
+      rotateCW: makeKey(keybinds.rotateCW),
+      rotateCW2: makeKey(keybinds.rotateCW2),
+      rotateCCW: makeKey(keybinds.rotateCCW),
+      rotateCCW2: makeKey(keybinds.rotateCCW2),
+      hold: makeKey(keybinds.hold),
+      pause: makeKey(keybinds.pause),
+      menu: makeKey(keybinds.menu),
+      restart: makeKey(keybinds.restart),
+    };
 
     // Prevent default browser behavior for game keys
     this.input.keyboard.addCapture([
-      Phaser.Input.Keyboard.KeyCodes.SPACE,
-      Phaser.Input.Keyboard.KeyCodes.S,
-      Phaser.Input.Keyboard.KeyCodes.X,
-      Phaser.Input.Keyboard.KeyCodes.Z,
-      Phaser.Input.Keyboard.KeyCodes.C,
-      Phaser.Input.Keyboard.KeyCodes.L,
-      Phaser.Input.Keyboard.KeyCodes.K,
-      Phaser.Input.Keyboard.KeyCodes.ESC,
-      Phaser.Input.Keyboard.KeyCodes.ENTER,
+      keybinds.moveLeft,
+      keybinds.moveRight,
+      keybinds.softDrop,
+      keybinds.hardDrop,
+      keybinds.rotateCW,
+      keybinds.rotateCW2,
+      keybinds.rotateCCW,
+      keybinds.rotateCCW2,
+      keybinds.hold,
+      keybinds.pause,
+      keybinds.menu,
+      keybinds.restart,
     ]);
-    this.restartKey = this.input.keyboard.addKey(
-      Phaser.Input.Keyboard.KeyCodes.ENTER,
-    );
+    this.restartKey = this.keys.restart;
 
     // Initialize time tracking using Date.now() for reliability
     this.startTime = Date.now();
@@ -3801,9 +4205,13 @@ class GameScene extends Phaser.Scene {
           this.bgmFirstPlay[bgmType] = false;
 
           // Start the loop
-          setTimeout(() => {
+          if (this.bgmLoopTimer) {
+            this.bgmLoopTimer.remove(false);
+            this.bgmLoopTimer = null;
+          }
+          this.bgmLoopTimer = this.time.delayedCall(100, () => {
             this.startLoopPhase(bgmType);
-          }, 100);
+          });
         }
       });
 
@@ -3852,9 +4260,13 @@ class GameScene extends Phaser.Scene {
       loopAudio.once("complete", () => {
         if (this.bgmEnabled) {
           // Immediately restart for seamless loop
-          setTimeout(() => {
+          if (this.bgmLoopTimer) {
+            this.bgmLoopTimer.remove(false);
+            this.bgmLoopTimer = null;
+          }
+          this.bgmLoopTimer = this.time.delayedCall(50, () => {
             this.startLoopPhase(bgmType);
-          }, 50);
+          });
         }
       });
 
@@ -4125,14 +4537,36 @@ class GameScene extends Phaser.Scene {
     const downDown = this.cursors.down.isDown;
 
     // Custom key bindings
-    const sKeyDown = this.keys.s.isDown;
-    const xKeyDown = this.keys.x.isDown;
-    const zKeyDown = this.keys.z.isDown;
-    const cKeyDown = this.keys.c.isDown;
-    const spaceKeyDown = this.keys.space.isDown;
-    const lKeyDown = this.keys.l.isDown;
-    const kKeyDown = this.keys.k.isDown;
+    const zKeyDown = this.keys.left.isDown;
+    const cKeyDown = this.keys.right.isDown;
+    const sKeyDown = this.keys.softDrop.isDown;
+    const xKeyDown = this.keys.hardDrop.isDown;
+    const kKeyDown = this.keys.rotateCW.isDown || this.keys.rotateCW2.isDown;
+    const spaceKeyDown = this.keys.rotateCCW.isDown || this.keys.rotateCCW2.isDown;
+    const lKeyDown = this.keys.rotateCCW2.isDown;
 
+    // During top-out, ignore all movement/rotation. Only allow Start/Restart to return to menu.
+    if (this.gameOver) {
+      this.leftKeyPressed = false;
+      this.rightKeyPressed = false;
+      this.leftInRepeat = false;
+      this.rightInRepeat = false;
+      this.leftTimer = 0;
+      this.rightTimer = 0;
+      this.kKeyPressed = false;
+      this.spaceKeyPressed = false;
+      this.lKeyPressed = false;
+      this.xKeyPressed = false;
+      if (this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+        this.scene.start("MenuScene");
+        return;
+      }
+      // Let game-over logic (fade/timers/UI) run below, but skip movement/rotation.
+    }
+
+    if (this.gameOver) {
+      // Skip any input-driven movement/rotation/drop.
+    } else
     if (this.rotationSystem === "ARS") {
       // ARS: Process rotation before movement
 
@@ -4456,31 +4890,32 @@ class GameScene extends Phaser.Scene {
     // Update mino fading system (runs even when game is over)
     if (this.minoFadeActive) {
       this.minoFadeTimer += this.deltaTime;
-      this.gameOverTextTimer += this.deltaTime;
 
-      // Show GAME OVER text after 3 seconds
-      if (this.gameOverTextTimer >= this.gameOverTextDelay) {
-        this.showGameOverText = true;
-      }
+      const totalRows = this.placedMinoRows.length;
+      if (totalRows === 0 || this.minoFadePerRowDuration <= 0) {
+        this.minoFadeActive = false;
+        this.fadingComplete = true;
+        if (this.gameOverFadeDoneTime === null) {
+          this.gameOverFadeDoneTime = this.time.now;
+        }
+      } else if (this.minoFadeProgress < totalRows) {
+        const rowIndex = this.minoFadeProgress;
+        const rowToFade = this.placedMinoRows[rowIndex];
+        const perRow = this.minoFadePerRowDuration;
+        const alpha = Math.max(0, 1 - this.minoFadeTimer / perRow);
+        this.minoRowFadeAlpha[rowToFade] = alpha;
 
-      if (this.minoFadeTimer >= this.minoFadeDelay) {
-        this.minoFadeTimer = 0;
-        this.minoFadeProgress++;
-
-        // Mark all minos in the next row as faded (if we have that row)
-        if (this.minoFadeProgress <= this.placedMinoRows.length) {
-          const rowToFade = this.placedMinoRows[this.minoFadeProgress - 1];
-          for (let mino of this.placedMinos) {
-            if (mino.y === rowToFade) {
-              mino.faded = true;
+        if (this.minoFadeTimer >= perRow) {
+          this.minoFadeTimer = 0;
+          this.minoFadeProgress++;
+          this.minoRowFadeAlpha[rowToFade] = 0;
+          if (this.minoFadeProgress >= totalRows) {
+            this.minoFadeActive = false;
+            this.fadingComplete = true;
+            if (this.gameOverFadeDoneTime === null) {
+              this.gameOverFadeDoneTime = this.time.now;
             }
           }
-        }
-
-        // Check if all rows are faded
-        if (this.minoFadeProgress >= this.placedMinoRows.length) {
-          this.minoFadeActive = false;
-          this.fadingComplete = true;
         }
       }
     }
@@ -4499,6 +4934,13 @@ class GameScene extends Phaser.Scene {
         this.scene.start("MenuScene");
       }
     }
+    // Show GAME OVER text only after fade completes + 3s
+    if (this.fadingComplete && this.gameOverFadeDoneTime !== null) {
+      const elapsedSinceFade = this.time.now - this.gameOverFadeDoneTime;
+      if (elapsedSinceFade >= 3000) {
+        this.showGameOverText = true;
+      }
+    }
 
     // Update time tracking using Date.now() for reliability
     this.updateTimer();
@@ -4506,11 +4948,13 @@ class GameScene extends Phaser.Scene {
     // Handle BGM first play vs loop mode
     this.manageBGMLoopMode();
 
-    // Track active time and ARE time for PPS calculations
-    if (!this.areActive && !this.level999Reached) {
-      this.activeTime += this.deltaTime;
-    } else if (this.areActive && !this.level999Reached) {
-      this.areTime += this.deltaTime;
+    // Track active time and ARE time for PPS calculations (ignore paused time)
+    if (!this.isPaused && !this.level999Reached) {
+      if (!this.areActive) {
+        this.activeTime += this.deltaTime;
+      } else {
+        this.areTime += this.deltaTime;
+      }
     }
 
     // Skip ALL game logic if paused or game over
@@ -4731,9 +5175,11 @@ class GameScene extends Phaser.Scene {
             this.internalGrade = internalGrade;
           }
         }
+        this.updateGradeUIVisibility();
       } else {
         this.updateGrade();
       }
+      this.updateGradeUIVisibility();
     }
 
     // Calculate piece per second rates (skip during credits)
@@ -4781,6 +5227,9 @@ class GameScene extends Phaser.Scene {
     if (this.nextPieces.length < 6) {
       this.generateNextPieces();
     }
+    // Reset lock reset tracking for new piece
+    this.lockResetCount = 0;
+    this.lastGroundedY = null;
     const type = this.nextPieces.shift();
 
     // Create piece with default rotation first
@@ -4888,6 +5337,7 @@ class GameScene extends Phaser.Scene {
       this.currentPiece.hardDrop(this.board);
       // Set grounded state since piece is now on the ground/stack
       this.isGrounded = true;
+      this.lastGroundedY = this.currentPiece ? this.currentPiece.y : this.lastGroundedY;
       this.lockDelayBufferedStart = true; // start counting on next frame to avoid instant lock
       this.lockDelay = 0;
       // Do NOT call lockPiece() - let normal gameplay continue
@@ -5365,6 +5815,53 @@ class GameScene extends Phaser.Scene {
   }
 
   resetLockDelay() {
+    // SRS: limit lock delay resets to prevent infinite stalling
+    if (this.rotationSystem === "SRS" && this.isGrounded) {
+      if (this.lockResetCount >= 15) {
+        this.lockPiece();
+        return;
+      }
+      this.lockResetCount++;
+    }
+
+    // ARS: lock reset rules
+    if (this.rotationSystem === "ARS" && this.isGrounded) {
+      // If move-reset is enabled, behave like SRS (limited by 15 total resets)
+      if (this.arsMoveResetEnabled) {
+        if (this.lockResetCount >= 15) {
+          this.lockPiece();
+          return;
+        }
+        this.lockResetCount++;
+        this.lockDelay = 0;
+        this.isGrounded = true; // stay grounded
+        this.wasGroundedDuringSoftDrop = false;
+        return;
+      }
+
+      // Default ARS step-reset: only allow reset after dropping at least one row while grounded
+      const currentY = this.currentPiece ? this.currentPiece.y : null;
+      if (currentY === null) return;
+      if (this.lastGroundedY === null) {
+        this.lastGroundedY = currentY;
+        // First grounded frame after touch: start counting lock delay
+        this.lockDelay = 0;
+        this.wasGroundedDuringSoftDrop = false;
+        return;
+      }
+      // Require downward progress of at least one row while staying grounded
+      if (currentY <= this.lastGroundedY) {
+        // No progress: do not reset timer
+        return;
+      }
+      this.lastGroundedY = currentY;
+      // Keep grounded state but reset the timer
+      this.lockDelay = 0;
+      this.wasGroundedDuringSoftDrop = false;
+      return;
+    }
+
+    // Default reset behavior
     this.lockDelay = 0;
     this.isGrounded = false;
     this.wasGroundedDuringSoftDrop = false; // Reset soft drop ground sound tracking
@@ -5849,8 +6346,32 @@ class GameScene extends Phaser.Scene {
     return gradeValues[grade] || 0;
   }
 
+  updateGradeUIVisibility() {
+    if (!this.gradeDisplay || !this.gradeText) return;
+
+    const gradeValue =
+      typeof this.grade === "string" ? this.grade.trim() : this.grade;
+    const hasGrade =
+      gradeValue !== undefined &&
+      gradeValue !== null &&
+      gradeValue !== "" &&
+      gradeValue !== 0;
+
+    this.gradeDisplay.setVisible(hasGrade);
+    this.gradeText.setVisible(hasGrade);
+    if (this.gradePointsText) {
+      this.gradePointsText.setVisible(hasGrade && this.shouldShowGradePoints !== false);
+    }
+
+    if (this.nextGradeText) {
+      this.nextGradeText.setVisible(
+        hasGrade && this.shouldShowNextGradeText,
+      );
+    }
+  }
+
   updateNextGradeText() {
-    if (!this.nextGradeText) return; // Skip if grade display not created
+    if (!this.nextGradeText || !this.shouldShowNextGradeText) return; // Skip if grade display not created
 
     const gradeThresholds = {
       9: 400,
@@ -6143,11 +6664,50 @@ class GameScene extends Phaser.Scene {
   }
 
   startMinoFading() {
+    // Rebuild placed mino tracking from current board state to ensure all rows fade.
+    this.placedMinos = [];
+    this.placedMinoRows = [];
+    for (let y = 0; y < this.board.rows; y++) {
+      for (let x = 0; x < this.board.cols; x++) {
+        const cell = this.board.grid[y][x];
+        if (cell) {
+          this.placedMinos.push({ x, y, color: cell, faded: false });
+          if (!this.placedMinoRows.includes(y)) {
+            this.placedMinoRows.push(y);
+          }
+        }
+      }
+    }
+    // Include the active piece in fading, if present
+    if (this.currentPiece && this.currentPiece.shape) {
+      for (let r = 0; r < this.currentPiece.shape.length; r++) {
+        for (let c = 0; c < this.currentPiece.shape[r].length; c++) {
+          if (this.currentPiece.shape[r][c]) {
+            const x = this.currentPiece.x + c;
+            const y = this.currentPiece.y + r;
+            if (
+              y >= 0 &&
+              y < this.board.rows &&
+              x >= 0 &&
+              x < this.board.cols
+            ) {
+              this.board.grid[y][x] = this.currentPiece.color;
+              this.placedMinos.push({ x, y, color: this.currentPiece.color, faded: false });
+              if (!this.placedMinoRows.includes(y)) {
+                this.placedMinoRows.push(y);
+              }
+            }
+          }
+        }
+      }
+    }
+
     this.minoFadeActive = true;
     this.minoFadeProgress = 0;
     this.minoFadeTimer = 0;
     this.gameOverTextTimer = 0;
     this.showGameOverText = false;
+    this.minoRowFadeAlpha = {};
 
     // Stop BGM immediately when game over and fading starts
     if (this.currentBGM) {
@@ -6158,11 +6718,12 @@ class GameScene extends Phaser.Scene {
     // Sort rows from bottom to top for proper fading order
     this.placedMinoRows.sort((a, b) => b - a); // Descending order
 
-    // Calculate fade delay to complete all rows in 3 seconds
-    if (this.placedMinoRows.length > 0) {
-      this.minoFadeDelay = 3 / this.placedMinoRows.length; // 3 seconds total / number of rows
+    // Calculate fade timing to complete all rows in ~2 seconds total
+    const rowCount = this.placedMinoRows.length;
+    if (rowCount > 0) {
+      this.minoFadePerRowDuration = 2 / rowCount;
     } else {
-      this.minoFadeDelay = 3; // fallback if no minos
+      this.minoFadePerRowDuration = 2;
     }
   }
 
@@ -6238,6 +6799,23 @@ class GameScene extends Phaser.Scene {
     this.gameOver = true;
     this.gameOverTimer = 0; // Start timer for 10 seconds
 
+    // Clear any held input state so pieces cannot keep moving during game over.
+    this.leftKeyPressed = false;
+    this.rightKeyPressed = false;
+    this.leftInRepeat = false;
+    this.rightInRepeat = false;
+    this.leftTimer = 0;
+    this.rightTimer = 0;
+    this.kKeyPressed = false;
+    this.spaceKeyPressed = false;
+    this.lKeyPressed = false;
+    this.xKeyPressed = false;
+
+    if (this.bgmLoopTimer) {
+      this.bgmLoopTimer.remove(false);
+      this.bgmLoopTimer = null;
+    }
+
     // Stop any playing BGM (stage BGM or credits BGM)
     if (this.currentBGM) {
       this.currentBGM.stop();
@@ -6248,6 +6826,19 @@ class GameScene extends Phaser.Scene {
       this.creditsBGM = null;
     }
 
+    // Stop stage BGM objects
+    const stageBgms = [this.stage1BGM, this.stage2BGM];
+    stageBgms.forEach((bgm) => {
+      if (bgm) {
+        if (bgm.isPlaying) {
+          bgm.stop();
+        }
+        bgm.destroy();
+      }
+    });
+    this.stage1BGM = null;
+    this.stage2BGM = null;
+
     // Stop TGM2 BGM objects
     const tgm2Bgms = [
       this.tgm2_stage1,
@@ -6256,10 +6847,17 @@ class GameScene extends Phaser.Scene {
       this.tgm2_stage4,
     ];
     tgm2Bgms.forEach((bgm) => {
-      if (bgm && bgm.isPlaying) {
-        bgm.stop();
+      if (bgm) {
+        if (bgm.isPlaying) {
+          bgm.stop();
+        }
+        bgm.destroy();
       }
     });
+    this.tgm2_stage1 = null;
+    this.tgm2_stage2 = null;
+    this.tgm2_stage3 = null;
+    this.tgm2_stage4 = null;
 
     // Start mino fading immediately
     this.startMinoFading();
@@ -6422,6 +7020,22 @@ class GameScene extends Phaser.Scene {
       (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100");
     const isLineCountMode = isMarathonMode || isUltraMode || isZenMode || isSprintMode;
 
+    if (this.currentLevelText && !this.currentLevelText.scene) {
+      this.currentLevelText = null;
+    }
+    if (this.capLevelText && !this.capLevelText.scene) {
+      this.capLevelText = null;
+    }
+    if (this.levelBar && !this.levelBar.scene) {
+      this.levelBar = null;
+    }
+    if (this.levelDisplayText && !this.levelDisplayText.scene) {
+      this.levelDisplayText = null;
+    }
+    if (this.levelDisplayLabel && !this.levelDisplayLabel.scene) {
+      this.levelDisplayLabel = null;
+    }
+
     // For Marathon mode, update separate level display
     if (isMarathonMode && this.levelDisplayText) {
       this.levelDisplayText.setText(this.level.toString());
@@ -6576,9 +7190,11 @@ class GameScene extends Phaser.Scene {
       this.gameGroup.add(this.playfieldBorder);
 
       // Draw game elements using matrix offset (skip during game over after fading)
+      // During game over fading, keep drawing the stack so row-by-row alpha can be applied.
       if (
         this.gameStarted &&
-        (!this.gameOver || (!this.minoFadeActive && !this.fadingComplete))
+        (!this.gameOver || this.minoFadeActive) &&
+        !this.fadingComplete
       ) {
         this.board.draw(
           this,
@@ -6602,20 +7218,38 @@ class GameScene extends Phaser.Scene {
           for (let col = 0; col < this.board.cols; col++) {
             const textureKey =
               this.rotationSystem === "ARS" ? "mino_ars" : "mino_srs";
-            const sprite = this.add.sprite(
-              this.matrixOffsetX + col * this.cellSize,
-              this.matrixOffsetY + (lineRow - 2) * this.cellSize,
-              textureKey,
-            );
-            sprite.setDisplaySize(this.cellSize, this.cellSize);
-            sprite.setTint(0xffffff); // White for cleared lines
-            sprite.setAlpha(fadeAlpha);
-            this.gameGroup.add(sprite);
+            const texture = this.textures ? this.textures.get(textureKey) : null;
+            const textureSource = texture && texture.source ? texture.source[0] : null;
+            const hasValidTextureSource =
+              !!texture && !!textureSource && !!textureSource.image;
+            if (hasValidTextureSource) {
+              const sprite = this.add.sprite(
+                this.matrixOffsetX + col * this.cellSize,
+                this.matrixOffsetY + (lineRow - 2) * this.cellSize,
+                textureKey,
+              );
+              sprite.setDisplaySize(this.cellSize, this.cellSize);
+              sprite.setTint(0xffffff); // White for cleared lines
+              sprite.setAlpha(fadeAlpha);
+              this.gameGroup.add(sprite);
+            } else {
+              const graphics = this.add.graphics();
+              graphics.fillStyle(0xffffff, fadeAlpha);
+              graphics.fillRect(
+                this.matrixOffsetX + col * this.cellSize - this.cellSize / 2,
+                this.matrixOffsetY + (lineRow - 2) * this.cellSize -
+                  this.cellSize / 2,
+                this.cellSize,
+                this.cellSize,
+              );
+              this.gameGroup.add(graphics);
+            }
           }
         }
       }
     }
-    if (this.currentPiece) {
+    // Draw current/ghost only during active play; during game over fading we already merged the active piece into the board
+    if (this.currentPiece && !this.gameOver && !this.minoFadeActive && !this.fadingComplete) {
       // Ghost piece only visible from levels 0-100 in TGM1
       if (this.level <= 100) {
         const ghost = this.currentPiece.getGhostPosition(this.board);
@@ -6654,7 +7288,7 @@ class GameScene extends Phaser.Scene {
         const gradePoints = this.gameMode.getGradePoints();
         this.gradePointsText.setText(gradePoints != null ? gradePoints.toString() : "0");
       }
-      if (this.nextGradeText) {
+      if (this.nextGradeText && this.shouldShowNextGradeText) {
         this.updateNextGradeText();
       }
     }
@@ -6864,6 +7498,8 @@ const config = {
   width: window.innerWidth,
   height: window.innerHeight,
   parent: "game-container",
+  // Improve text sharpness on high-DPI displays
+  resolution: window.devicePixelRatio || 1,
   scene: [
     MenuScene,
     SettingsScene,
@@ -6874,9 +7510,9 @@ const config = {
   backgroundColor: "#000000",
   fps: 60,
   render: {
-    antialias: true,
-    pixelArt: false,
-    roundPixels: false,
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true,
     powerPreference: "high-performance",
     desynchronized: false,
     clearBeforeRender: true,
@@ -6887,23 +7523,47 @@ const config = {
   },
 };
 
+const existingGame = window.__minoGame;
+if (existingGame && typeof existingGame.destroy === "function") {
+  try {
+    existingGame.destroy(true);
+  } catch (e) {
+  }
+  window.__minoGame = null;
+}
+
+const gameContainer = document.getElementById("game-container");
+if (gameContainer) {
+  while (gameContainer.firstChild) {
+    gameContainer.removeChild(gameContainer.firstChild);
+  }
+}
+
 const game = new Phaser.Game(config);
+window.__minoGame = game;
 
 // Limit frame rate to 60fps
 game.loop.maxFps = 60;
 
 // Handle window resize
-window.addEventListener("resize", () => {
-  game.scale.resize(window.innerWidth, window.innerHeight);
-  // Recalculate layout when window is resized
-  if (game.scene.scenes.length > 0) {
-    const scene = game.scene.scenes[0];
+if (window.__minoResizeHandler) {
+  window.removeEventListener("resize", window.__minoResizeHandler);
+}
+
+window.__minoResizeHandler = () => {
+  const activeGame = window.__minoGame;
+  if (!activeGame || !activeGame.scale) return;
+
+  activeGame.scale.resize(window.innerWidth, window.innerHeight);
+  if (activeGame.scene.scenes.length > 0) {
+    const scene = activeGame.scene.scenes[0];
     if (scene && scene.calculateLayout) {
       scene.calculateLayout();
-      // Recreate UI with new layout
       if (scene.setupUI) {
         scene.setupUI();
       }
     }
   }
-});
+};
+
+window.addEventListener("resize", window.__minoResizeHandler);

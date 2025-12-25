@@ -51,55 +51,66 @@ class TGM2GradingSystem {
         // Base values for line clears (varies by internal grade)
         this.baseValues = [
             // Internal Grade 0
-            { single: 125, double: 10, triple: 20, tetris: 40, tetrisCombo: 50 },
+            { single: 10, double: 20, triple: 40, tetris: 50 },
+
             // Internal Grade 1
-            { single: 80, double: 10, triple: 20, tetris: 30, tetrisCombo: 40 },
+            { single: 10, double: 20, triple: 30, tetris: 40 },
+
             // Internal Grade 2
-            { single: 80, double: 10, triple: 20, tetris: 30, tetrisCombo: 40 },
+            { single: 10, double: 20, triple: 30, tetris: 40 },
             // Internal Grade 3
-            { single: 50, double: 10, triple: 15, tetris: 30, tetrisCombo: 40 },
+            { single: 10, double: 15, triple: 30, tetris: 40 },
+
             // Internal Grade 4
-            { single: 45, double: 10, triple: 15, tetris: 20, tetrisCombo: 40 },
+            { single: 10, double: 15, triple: 20, tetris: 40 },
+
             // Internal Grade 5
-            { single: 45, double: 5, triple: 15, tetris: 20, tetrisCombo: 30 },
+            { single: 5, double: 15, triple: 20, tetris: 30 },
+
             // Internal Grade 6
-            { single: 45, double: 5, triple: 10, tetris: 20, tetrisCombo: 30 },
+            { single: 5, double: 10, triple: 20, tetris: 30 },
+
             // Internal Grade 7
-            { single: 40, double: 5, triple: 10, tetris: 15, tetrisCombo: 30 },
+            { single: 5, double: 10, triple: 15, tetris: 30 },
+
             // Internal Grade 8
-            { single: 40, double: 5, triple: 10, tetris: 15, tetrisCombo: 30 },
+            { single: 5, double: 10, triple: 15, tetris: 30 },
             // Internal Grade 9
-            { single: 40, double: 5, triple: 10, tetris: 15, tetrisCombo: 30 },
+            { single: 5, double: 10, triple: 15, tetris: 30 },
             // Internal Grade 10
-            { single: 40, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
+
             // Internal Grade 11
-            { single: 40, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 12
-            { single: 30, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
+
             // Internal Grade 13
-            { single: 30, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 14
-            { single: 30, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 15-17 (S1)
-            { single: 20, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
+
             // Internal Grade 18 (S2)
-            { single: 20, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 19 (S3)
-            { single: 20, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 20-22 (S4)
-            { single: 15, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 23-24 (S5)
-            { single: 15, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
+
             // Internal Grade 25-26 (S6)
-            { single: 15, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 27-28 (S7)
-            { single: 15, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 29 (S8)
-            { single: 15, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 30 (S8)
-            { single: 10, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 },
+            { single: 2, double: 12, triple: 13, tetris: 30 },
             // Internal Grade 31+ (S9)
-            { single: 10, double: 2, triple: 12, tetris: 13, tetrisCombo: 30 }
+            { single: 2, double: 12, triple: 13, tetris: 30 }
         ];
         
         // Combo multipliers (applies to Base Value before level multiplier)
@@ -180,8 +191,8 @@ class TGM2GradingSystem {
         // Determine base value based on lines cleared
         let baseValue;
         if (isTetris) {
-            // Tetrises use different base values and always have 1.0 combo multiplier
-            baseValue = this.currentCombo > 1 ? baseValues.tetrisCombo : baseValues.tetris;
+            // Tetrises use base value regardless of combo
+            baseValue = baseValues.tetris;
         } else {
             // Non-tetrises use regular base values
             switch (linesCleared) {
@@ -215,6 +226,10 @@ class TGM2GradingSystem {
             
             // Reset decay timer when grade increases
             this.decayTimer = 0;
+            
+            // Clear grade points when a promotion occurs
+            this.gradePoints = 0;
+            break;
         }
         
         // Check for grade display change

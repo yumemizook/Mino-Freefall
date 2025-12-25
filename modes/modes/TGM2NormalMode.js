@@ -377,23 +377,44 @@ class TGM2NormalMode extends BaseMode {
             const matrixOffsetY = gameScene.matrixOffsetY;
 
             animations.forEach(anim => {
-                const sprite = gameScene.add.sprite(
-                    matrixOffsetX + anim.col * cellSize,
-                    matrixOffsetY + (anim.fromRow - 2) * cellSize,
-                    gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs'
-                );
-                sprite.setDisplaySize(cellSize, cellSize);
-                sprite.setTint(anim.color);
+                const textureKey = gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs';
+                const texture = gameScene.textures ? gameScene.textures.get(textureKey) : null;
+                const textureSource = texture && texture.source ? texture.source[0] : null;
+                const hasValidTextureSource = !!texture && !!textureSource && !!textureSource.image;
 
-                gameScene.tweens.add({
-                    targets: sprite,
-                    y: matrixOffsetY + (anim.toRow - 2) * cellSize,
-                    duration: fallDuration,
-                    ease: 'Power2',
-                    onComplete: () => {
-                        sprite.destroy();
-                    }
-                });
+                const startX = matrixOffsetX + anim.col * cellSize;
+                const startY = matrixOffsetY + (anim.fromRow - 2) * cellSize;
+                const endY = matrixOffsetY + (anim.toRow - 2) * cellSize;
+
+                if (hasValidTextureSource) {
+                    const sprite = gameScene.add.sprite(startX, startY, textureKey);
+                    sprite.setDisplaySize(cellSize, cellSize);
+                    sprite.setTint(anim.color);
+
+                    gameScene.tweens.add({
+                        targets: sprite,
+                        y: endY,
+                        duration: fallDuration,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            sprite.destroy();
+                        }
+                    });
+                } else {
+                    const graphics = gameScene.add.graphics();
+                    graphics.fillStyle(anim.color);
+                    graphics.fillRect(startX - cellSize / 2, startY - cellSize / 2, cellSize, cellSize);
+
+                    gameScene.tweens.add({
+                        targets: graphics,
+                        y: endY - startY,
+                        duration: fallDuration,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            graphics.destroy();
+                        }
+                    });
+                }
             });
         }
     }
@@ -440,14 +461,30 @@ class TGM2NormalMode extends BaseMode {
             // Create sprites for all minos in this row
             for (let col = 0; col < gameScene.board.cols; col++) {
                 if (gameScene.board.grid[row][col] !== 0) {
-                    const sprite = gameScene.add.sprite(
-                        matrixOffsetX + col * cellSize,
-                        matrixOffsetY + (row - 2) * cellSize,
-                        gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs'
-                    );
-                    sprite.setDisplaySize(cellSize, cellSize);
-                    sprite.setTint(gameScene.board.grid[row][col]);
-                    sprites.push(sprite);
+                    const textureKey = gameScene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs';
+                    const texture = gameScene.textures ? gameScene.textures.get(textureKey) : null;
+                    const textureSource = texture && texture.source ? texture.source[0] : null;
+                    const hasValidTextureSource = !!texture && !!textureSource && !!textureSource.image;
+                    if (hasValidTextureSource) {
+                        const sprite = gameScene.add.sprite(
+                            matrixOffsetX + col * cellSize,
+                            matrixOffsetY + (row - 2) * cellSize,
+                            textureKey
+                        );
+                        sprite.setDisplaySize(cellSize, cellSize);
+                        sprite.setTint(gameScene.board.grid[row][col]);
+                        sprites.push(sprite);
+                    } else {
+                        const graphics = gameScene.add.graphics();
+                        graphics.fillStyle(gameScene.board.grid[row][col]);
+                        graphics.fillRect(
+                            matrixOffsetX + col * cellSize - cellSize / 2,
+                            matrixOffsetY + (row - 2) * cellSize - cellSize / 2,
+                            cellSize,
+                            cellSize,
+                        );
+                        sprites.push(graphics);
+                    }
                 }
             }
 

@@ -224,13 +224,11 @@ class BaseMode {
     // Mode initialization for game scene
     initializeForGameScene(gameScene) {
         // Default implementation - can be overridden by modes
-        console.log(`Initialized ${this.modeName} for game scene`);
     }
     
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
         // Default implementation - can be overridden by modes
-        console.log(`${this.modeName}: ${linesCleared} lines cleared by ${pieceType}`);
     }
     
     // Update method called every frame
@@ -241,13 +239,11 @@ class BaseMode {
     // Handle game over
     onGameOver(gameScene) {
         // Default implementation - can be overridden by modes
-        console.log(`${this.modeName}: Game over`);
     }
     
     // Reset mode state
     reset() {
         // Default implementation - can be overridden by modes
-        console.log(`${this.modeName}: Reset`);
     }
     
     // Get mode ID

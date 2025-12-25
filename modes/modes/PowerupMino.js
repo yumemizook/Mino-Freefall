@@ -53,14 +53,29 @@ class PowerupMino extends Piece {
                     // Only draw pieces that are in the visible area (row 2 and below in the 22-row matrix)
                     if (pieceY >= 2) {
                         const textureKey = scene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs';
-                        const sprite = scene.add.sprite(offsetX + (this.x + c) * cellSize, offsetY + (pieceY - 2) * cellSize, textureKey);
-                        sprite.setDisplaySize(cellSize, cellSize);
-                        sprite.setTint(this.color);
-                        sprite.setAlpha(finalAlpha);
-                        scene.gameGroup.add(sprite);
-                        
-                        // Add powerup indicator overlay
-                        this.drawPowerupIndicator(sprite, cellSize);
+                        const texture = scene.textures ? scene.textures.get(textureKey) : null;
+                        const textureSource = texture && texture.source ? texture.source[0] : null;
+                        const hasValidTextureSource = !!texture && !!textureSource && !!textureSource.image;
+                        if (hasValidTextureSource) {
+                            const sprite = scene.add.sprite(offsetX + (this.x + c) * cellSize, offsetY + (pieceY - 2) * cellSize, textureKey);
+                            sprite.setDisplaySize(cellSize, cellSize);
+                            sprite.setTint(this.color);
+                            sprite.setAlpha(finalAlpha);
+                            scene.gameGroup.add(sprite);
+                            
+                            // Add powerup indicator overlay
+                            this.drawPowerupIndicator(sprite, cellSize);
+                        } else {
+                            const graphics = scene.add.graphics();
+                            graphics.fillStyle(this.color, finalAlpha);
+                            graphics.fillRect(
+                                offsetX + (this.x + c) * cellSize - cellSize / 2,
+                                offsetY + (pieceY - 2) * cellSize - cellSize / 2,
+                                cellSize,
+                                cellSize,
+                            );
+                            scene.gameGroup.add(graphics);
+                        }
                     }
                 }
             }
