@@ -16,8 +16,8 @@ class TGM2MasterMode extends BaseMode {
             lineAre: 27/60,                // Base line clear ARE (changes with timing phases)
             lockDelay: 30/60,              // TGM2 Master lock delay (changes with timing phases)
             lineClearDelay: 40/60,         // Base line clear delay (changes with timing phases)
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM2 supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,
@@ -83,8 +83,8 @@ class TGM2MasterMode extends BaseMode {
             arr: 2/60,                     // Standard TGM2 Master ARR
             are: 27/60,                    // Base TGM2 Master ARE timing (changes with timing phases)
             lockDelay: 30/60,              // TGM2 Master lock delay (changes with timing phases)
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM2 supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,

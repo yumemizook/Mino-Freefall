@@ -11,7 +11,7 @@ class TADeathMode extends BaseMode {
         this.config = {
             gravity: { type: 'fixed_20g' },     // Fixed 20G gravity throughout
             nextPieces: 1,                  // Standard next queue
-            holdEnabled: true,              // T.A. Death supports hold
+            holdEnabled: false,             // T.A. Death does not support hold
             ghostEnabled: true,             // Ghost piece enabled
             levelUpType: 'piece',           // Level up per piece
             lineClearBonus: 1,
@@ -67,7 +67,7 @@ class TADeathMode extends BaseMode {
             are: 18/60,                        // Base T.A. Death ARE (changes with timing phases)
             lockDelay: 30/60,                  // Base lock delay (changes with timing phases)
             nextPieces: 1,                     // Standard next queue
-            holdEnabled: true,                 // T.A. Death supports hold
+            holdEnabled: false,                // T.A. Death does not support hold
             ghostEnabled: true,                // Ghost piece enabled
             levelUpType: 'piece',              // Level up per piece
             lineClearBonus: 1,

@@ -16,8 +16,8 @@ class TGM2NormalMode extends BaseMode {
             lineAre: 27/60,                // Line ARE mirrors ARE (official table lacks separate value)
             lockDelay: 30/60,              // Lock delay (30 frames)
             lineClearDelay: 40/60,         // Line clear delay (40 frames)
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM2 supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,
@@ -56,8 +56,8 @@ class TGM2NormalMode extends BaseMode {
             are: 25/60,                    // TGM2 Normal ARE (25 frames)
             lineAre: 25/60,                // Mirror ARE (table lacks line ARE column)
             lockDelay: 30/60,              // Lock delay (30 frames)
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM2 supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,

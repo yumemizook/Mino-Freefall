@@ -19,7 +19,7 @@ class Mode20G extends BaseMode {
             arr: 1/60,       // Standard ARR
             are: 20/60,      // Shorter ARE for faster gameplay
             lockDelay: 0.3,  // Shorter lock delay for 20G
-            nextPieces: 5,   // Show more next pieces for planning
+            nextPieces: 1,   // Show more next pieces for planning
             holdEnabled: false, // No hold in 20G mode
             ghostEnabled: false, // No ghost piece in 20G (too fast)
             levelUpType: 'lines',  // Level up by lines cleared

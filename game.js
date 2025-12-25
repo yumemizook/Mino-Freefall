@@ -1163,6 +1163,11 @@ class MenuScene extends Phaser.Scene {
               "Brand new mechanics, brand new challenges! Do you have what it takes?",
           },
           {
+            id: "tgm_plus",
+            name: "TGM+",
+            description: "Rising garbage mode with fixed 24-row pattern!",
+          },
+          {
             id: "tgm3",
             name: "TGM3",
             description: "Try to be COOL!!, or you will REGRET!! it",

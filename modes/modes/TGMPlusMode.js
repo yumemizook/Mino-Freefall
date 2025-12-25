@@ -16,8 +16,8 @@ class TGMPlusMode extends BaseMode {
             lineAre: 27/60,                // TGM+ line clear ARE
             lockDelay: 30/60,              // TGM+ lock delay
             lineClearDelay: 40/60,         // TGM+ line clear delay
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM+ supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM+ supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,
@@ -55,8 +55,8 @@ class TGMPlusMode extends BaseMode {
             arr: 1/60,                     // ARR is always 1/60
             are: 27/60,                    // TGM+ ARE timing (same as Normal mode)
             lockDelay: 30/60,              // TGM+ lock delay
-            nextPieces: 4,                 // Standard next queue
-            holdEnabled: true,             // TGM+ supports hold
+            nextPieces: 1,                 // Standard next queue
+            holdEnabled: false,            // TGM+ supports hold
             ghostEnabled: true,            // Ghost piece enabled
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,
