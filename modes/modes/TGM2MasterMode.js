@@ -214,21 +214,20 @@ class TGM2MasterMode extends BaseMode {
         // Update timing phase
         this.updateTimingPhase(level);
 
+        const atStopLevel = (level % 100 === 99) || level === 998 || level === 999;
+
         if (updateType === 'piece') {
-            // Check if current level is a stop level BEFORE incrementing
-            const currentIsStopLevel = (level % 100 === 99) ||
-                                      (level === 998) || // 998 requires line clear
-                                      (level === 999);   // 999 is final level
-            if (!currentIsStopLevel && level < 999) {
+            if (!atStopLevel && level < 999) {
                 return level + 1;
             }
             return level; // Stay at stop level
         } else if (updateType === 'lines') {
-            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
-            if (oldLevel === 998 && amount > 0) {
+            const lineIncrement = Math.min(amount || 0, 4);
+            // 998->999 requires a line clear
+            if (oldLevel === 998 && lineIncrement > 0) {
                 return 999;
             }
-            return Math.min(level + 1, 999);
+            return Math.min(level + lineIncrement, 999);
         }
         return level;
     }

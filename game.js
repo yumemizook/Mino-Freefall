@@ -2206,7 +2206,11 @@ class GameScene extends Phaser.Scene {
         this.canHold = true;
         this.nextPieces = []; // Initialize next pieces array
         this.gravityTimer = 0.0;
+        // lockDelay is a timer; lockDelayMax is the per-mode limit
         this.lockDelay = 0;
+        this.lockDelayMax = 0.5;
+        // defer starting the lock timer until after the first grounded frame
+        this.lockDelayBufferedStart = false;
         this.isGrounded = false;
         this.level = getStartingLevel(); // Set starting level from URL parameter
         this.startingLevel = this.level; // Preserve the starting level for restarts
@@ -2468,7 +2472,7 @@ class GameScene extends Phaser.Scene {
         this.dasDelay = (this.gameMode.getDAS && typeof this.gameMode.getDAS === 'function') ? this.gameMode.getDAS() : (config.das || 16/60);
         this.arrDelay = (this.gameMode.getARR && typeof this.gameMode.getARR === 'function') ? this.gameMode.getARR() : (config.arr || 1/60);
         this.areDelay = (this.gameMode.getARE && typeof this.gameMode.getARE === 'function') ? this.gameMode.getARE() : (config.are || 30/60);
-        this.lockDelay = (this.gameMode.getLockDelay && typeof this.gameMode.getLockDelay === 'function') ? this.gameMode.getLockDelay() : (config.lockDelay || 0.5);
+        this.lockDelayMax = (this.gameMode.getLockDelay && typeof this.gameMode.getLockDelay === 'function') ? this.gameMode.getLockDelay() : (config.lockDelay || 0.5);
 
         // Apply other configurations
         this.nextPiecesCount = config.nextPieces || 1;
@@ -2485,7 +2489,7 @@ class GameScene extends Phaser.Scene {
         console.log(`Applied mode configuration for: ${this.gameMode.getName()}`);
         console.log(`Config:`, config);
         console.log(`DAS: ${this.dasDelay}s, ARR: ${this.arrDelay}s, ARE: ${this.areDelay}s`);
-        console.log(`Lock Delay: ${this.lockDelay}s, Next Pieces: ${this.nextPiecesCount}`);
+        console.log(`Lock Delay: ${this.lockDelayMax}s, Next Pieces: ${this.nextPiecesCount}`);
         console.log(`Hold Enabled: ${this.holdEnabled}, Ghost Enabled: ${this.ghostEnabled}`);
         console.log(`Level Up Type: ${this.levelUpType}, Line Clear Bonus: ${this.lineClearBonus}`);
         console.log(`Gravity Level Cap: ${this.gravityLevelCap}`);
@@ -3580,7 +3584,7 @@ class GameScene extends Phaser.Scene {
                     // Piece just became grounded - start lock delay and play ground sound once
                     this.isGrounded = true;
                     this.lockDelay += this.deltaTime;
-                    if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
+                    if (this.lockDelay >= this.lockDelayMax) { // 30 frames = 0.5 seconds
                         this.lockPiece();
                     }
                     // Play ground sound only once when piece first touches ground during soft drop
@@ -3606,7 +3610,7 @@ class GameScene extends Phaser.Scene {
                     // Only start lock delay if piece wasn't already grounded
                     this.isGrounded = true;
                     this.lockDelay += this.deltaTime;
-                    if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
+                    if (this.lockDelay >= this.lockDelayMax) { // 30 frames = 0.5 seconds
                         this.lockPiece();
                     }
                 } else {
@@ -3692,10 +3696,16 @@ class GameScene extends Phaser.Scene {
         }
 
         // Count lock delay continuously when grounded (increment after initial frame)
-        if (this.isGrounded && this.currentPiece && !this.areActive && this.lockDelay > 0) {
-            this.lockDelay += this.deltaTime;
-            if (this.lockDelay >= 0.5) { // 30 frames = 0.5 seconds
-                this.lockPiece();
+        if (this.isGrounded && this.currentPiece && !this.areActive) {
+            // If we just spawned onto the stack in 20G, begin timing after first grounded frame
+            if (this.lockDelayBufferedStart) {
+                this.lockDelayBufferedStart = false;
+                this.lockDelay = this.deltaTime;
+            } else if (this.lockDelay > 0) {
+                this.lockDelay += this.deltaTime;
+                if (this.lockDelay >= this.lockDelayMax) { // 30 frames = 0.5 seconds
+                    this.lockPiece();
+                }
             }
         }
         
@@ -3864,7 +3874,8 @@ class GameScene extends Phaser.Scene {
             this.currentPiece.hardDrop(this.board);
             // Set grounded state since piece is now on the ground/stack
             this.isGrounded = true;
-            this.lockDelay = this.deltaTime; // Start lock delay countdown
+            this.lockDelayBufferedStart = true; // start counting on next frame to avoid instant lock
+            this.lockDelay = 0;
             // Do NOT call lockPiece() - let normal gameplay continue
         } else {
             // Normal spawning behavior for non-20G levels

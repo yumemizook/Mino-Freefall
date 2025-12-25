@@ -194,11 +194,20 @@ class TADeathMode extends BaseMode {
             this.onTorikanStart();
         }
 
-        // T.A. Death levels up per piece, like other TGM modes
+        // Standard TGM stops: 99, 199, ..., 998
+        const atStopLevel = (level % 100 === 99) || level === 998 || level === 999;
+
         if (updateType === 'piece') {
-            return level + 1;
+            if (!atStopLevel && level < 999) {
+                return level + 1;
+            }
+            return level;
         } else if (updateType === 'lines') {
-            return level + 1;
+            const lineIncrement = Math.min(amount || 0, 4);
+            if (oldLevel === 998 && lineIncrement > 0) {
+                return 999;
+            }
+            return Math.min(level + lineIncrement, 999);
         }
 
         return level;
