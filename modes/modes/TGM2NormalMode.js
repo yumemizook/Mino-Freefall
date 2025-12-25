@@ -693,17 +693,14 @@ class TGM2NormalMode extends BaseMode {
     
     // Save best score for TGM2 Normal mode
     saveBestScore(gameScene) {
-        const key = `bestScore_${this.modeId}`;
-        const currentBest = this.getBestScore(this.modeId);
-        const newScore = {
+        const entry = {
             score: this.tgm2Score,
             level: gameScene.level,
-            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`
+            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
         };
-
-        // Update if better score
-        if (newScore.score > currentBest.score) {
-            localStorage.setItem(key, JSON.stringify(newScore));
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry(this.modeId, entry);
         }
     }
     

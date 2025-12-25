@@ -1394,7 +1394,7 @@ class MenuScene extends Phaser.Scene {
 
     // Leaderboard title - create as separate text object
     this.leaderboardTitle = this.add
-      .text(centerX + 220, centerY - 60, "BEST SCORES", {
+      .text(centerX + 220, centerY - 80, "BEST SCORES", {
         fontSize: "20px",
         fill: "#ffffff",
         fontFamily: "Courier New",
@@ -1637,73 +1637,100 @@ class MenuScene extends Phaser.Scene {
   }
 
   updateLeaderboardDisplay() {
-    // Clear existing leaderboard entries by destroying old text objects
     if (this.leaderboardEntries && this.leaderboardEntries.length > 0) {
       this.leaderboardEntries.forEach((entry) => {
-        if (entry.gradeText) entry.gradeText.destroy();
-        if (entry.levelText) entry.levelText.destroy();
-        if (entry.timeText) entry.timeText.destroy();
+        Object.values(entry).forEach((t) => t && t.destroy && t.destroy());
       });
     }
     this.leaderboardEntries = [];
 
-    // Only show the best score for the currently selected submode
     const currentModeType = this.modeTypes[this.currentModeTypeIndex];
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+    const modeId = currentSubmode.id;
+    const isPuzzleMode = this.isPuzzleMode(modeId);
+    const leaderboard = this.getLeaderboard(modeId);
 
-    const bestScore = this.getBestScore(currentSubmode.id);
+    if (isPuzzleMode) {
+      const entry = leaderboard[0] || {};
+      const placeholders = {
+        stage: entry.stage || "—",
+        completion: entry.completionRate != null ? `${entry.completionRate}%` : "—",
+        time: entry.time || "0:00.00",
+      };
 
-    // Create single leaderboard entry for the selected submode
-    // Grade text (large, left-aligned)
-    const gradeText = this.add
-      .text(
-        this.leaderboardContainer.x - 60,
-        this.leaderboardContainer.y,
-        bestScore.grade || "9",
-        {
-          fontSize: "32px",
+      const baseX = this.leaderboardContainer.x;
+      const baseY = this.leaderboardContainer.y;
+
+      const stageText = this.add
+        .text(baseX, baseY - 20, `Best Stage: ${placeholders.stage}`, {
+          fontSize: "24px",
           fill: "#ffff00",
           fontFamily: "Courier New",
           fontStyle: "bold",
-        },
-      )
-      .setOrigin(1, 0.5);
+        })
+        .setOrigin(0.5, 0.5);
 
-    // Level (top-right)
-    const levelText = this.add
-      .text(
-        this.leaderboardContainer.x + 60,
-        this.leaderboardContainer.y - 12,
-        `L${bestScore.level || 0}`,
-        {
+      const completionText = this.add
+        .text(baseX, baseY + 10, `Completion Rate: ${placeholders.completion}`, {
+          fontSize: "18px",
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0.5);
+
+      const timeText = this.add
+        .text(baseX, baseY + 40, `Time Taken: ${placeholders.time}`, {
+          fontSize: "18px",
+          fill: "#cccccc",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5, 0.5);
+
+      this.leaderboardEntries.push({ stageText, completionText, timeText });
+      return;
+    }
+
+    const maxEntries = 5;
+    const padded = [...leaderboard];
+    while (padded.length < maxEntries) padded.push(null);
+
+    const rowHeight = 28;
+    const startY = this.leaderboardContainer.y - ((maxEntries - 1) * rowHeight) / 2;
+
+    padded.slice(0, maxEntries).forEach((entry, index) => {
+      const y = startY + index * rowHeight;
+
+      const formatted = this.formatLeaderboardEntry(modeId, entry);
+      const leftText = this.add
+        .text(this.leaderboardContainer.x - 80, y, formatted.left, {
+          fontSize: "24px",
+          fill: "#ffff00",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        })
+        .setOrigin(1, 0.5);
+
+      const middleText = this.add
+        .text(this.leaderboardContainer.x - 10, y, formatted.middle, {
           fontSize: "16px",
           fill: "#00ffff",
           fontFamily: "Courier New",
           fontStyle: "bold",
-        },
-      )
-      .setOrigin(0, 0.5);
+        })
+        .setOrigin(1, 0.5);
 
-    // Time (bottom-right)
-    const timeText = this.add
-      .text(
-        this.leaderboardContainer.x + 60,
-        this.leaderboardContainer.y + 12,
-        bestScore.time || "0:00.00",
-        {
+      const rightText = this.add
+        .text(this.leaderboardContainer.x + 70, y, formatted.right, {
           fontSize: "16px",
           fill: "#cccccc",
           fontFamily: "Courier New",
           fontStyle: "bold",
-        },
-      )
-      .setOrigin(0, 0.5);
+        })
+        .setOrigin(1, 0.5);
 
-    // Store references for cleanup
-    this.leaderboardEntries.push({
-      gradeText: gradeText,
-      levelText: levelText,
-      timeText: timeText,
+      this.leaderboardEntries.push({ leftText, middleText, rightText });
     });
   }
 
@@ -1764,6 +1791,234 @@ class MenuScene extends Phaser.Scene {
       mode: currentSubmode.id,
       gameMode: gameMode,
     });
+  }
+
+  isPuzzleMode(modeId) {
+    return modeId === "tgm3_sakura";
+  }
+
+  getLeaderboard(modeId) {
+    const key = `leaderboard_${modeId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.warn("Failed to parse leaderboard", modeId, e);
+      }
+    }
+
+    // Fallback: migrate legacy single best score if present
+    const legacyKey = `bestScore_${modeId}`;
+    const legacyStored = localStorage.getItem(legacyKey);
+    if (legacyStored && this.getBestScore) {
+      const legacy = this.getBestScore(modeId);
+      const migrated = [legacy];
+      localStorage.setItem(key, JSON.stringify(migrated));
+      return migrated;
+    }
+    return [];
+  }
+
+  saveLeaderboardEntry(modeId, entry) {
+    const key = `leaderboard_${modeId}`;
+    const list = this.getLeaderboard(modeId);
+    list.push(entry);
+    const sorted = list
+      .filter(Boolean)
+      .sort((a, b) => this.compareEntries(modeId, a, b))
+      .slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
+    localStorage.setItem(key, JSON.stringify(sorted));
+  }
+
+  getGradeValue(grade) {
+    const gradeValues = {
+      9: 0,
+      8: 1,
+      7: 2,
+      6: 3,
+      5: 4,
+      4: 5,
+      3: 6,
+      2: 7,
+      1: 8,
+      S1: 9,
+      S2: 10,
+      S3: 11,
+      S4: 12,
+      S5: 13,
+      S6: 14,
+      S7: 15,
+      S8: 16,
+      S9: 17,
+      M: 18,
+      GM: 19,
+    };
+    return gradeValues[grade] || 0;
+  }
+
+  compareEntries(modeId, a, b) {
+    const getVal = (val) => (val === undefined || val === null ? 0 : val);
+    const parseNumTime = (t) => {
+      if (!t || typeof t !== "string") return Number.POSITIVE_INFINITY;
+      const parts = t.split(":");
+      if (parts.length !== 2) return Number.POSITIVE_INFINITY;
+      const [m, s] = parts;
+      const sec = parseFloat(s);
+      if (Number.isNaN(sec)) return Number.POSITIVE_INFINITY;
+      const minutes = parseInt(m, 10);
+      if (Number.isNaN(minutes)) return Number.POSITIVE_INFINITY;
+      return minutes * 60 + sec;
+    };
+
+    const byGrade = () =>
+      this.getGradeValue(getVal(b.grade)) - this.getGradeValue(getVal(a.grade));
+    const byDesc = (x, y) => getVal(y) - getVal(x);
+    const byAsc = (x, y) => getVal(x) - getVal(y);
+
+    switch (modeId) {
+      case "tgm2_normal": // Normal
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "easy_easy": // Easy
+        return (
+          byDesc(a.hanabi, b.hanabi) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "sprint_40":
+      case "sprint_100": // Sprint
+        return (
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.score, b.score) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "ultra": // Ultra
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "marathon": // Marathon
+        return (
+          byDesc(a.lines, b.lines) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "konoha_easy":
+      case "konoha_hard": // All Clear
+        return (
+          byDesc(a.allClears, b.allClears) ||
+          byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tgm1":
+      case "tgm2":
+      case "tgm_plus":
+      case "tgm3":
+      case "tgm4":
+      case "20g":
+      case "tadeath":
+      case "shirase":
+      case "master20g":
+      case "asuka_easy":
+      case "asuka_normal":
+      case "asuka_hard": // Master, 20G, Race
+        return (
+          byGrade() ||
+          byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tgm3_sakura": // Puzzle
+        return (
+          byDesc(a.stage, b.stage) ||
+          byDesc(a.completionRate, b.completionRate) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      default:
+        // Generic: prefer score desc, time asc
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+    }
+  }
+
+  formatLeaderboardEntry(modeId, entry) {
+    if (!entry) {
+      return { left: "—", middle: "—", right: "—" };
+    }
+
+    const fmtTime = (t) => t || "0:00.00";
+    const fmtNum = (n) => (n === undefined || n === null ? "—" : n.toString());
+    const fmtPps = (n) =>
+      n === undefined || n === null ? "—" : Number(n).toFixed(2);
+
+    switch (modeId) {
+      case "tgm2_normal": // Normal
+        return {
+          left: fmtNum(entry.score),
+          middle: fmtTime(entry.time),
+          right: "",
+        };
+      case "easy_easy": // Easy (Hanabi not yet implemented)
+        return {
+          left: fmtNum(entry.hanabi || "—"),
+          middle: fmtTime(entry.time),
+          right: "",
+        };
+      case "sprint_40":
+      case "sprint_100": // Sprint
+        return {
+          left: fmtTime(entry.time),
+          middle: fmtNum(entry.score),
+          right: fmtPps(entry.pps),
+        };
+      case "ultra": // Ultra
+        return {
+          left: fmtNum(entry.score),
+          middle: fmtTime(entry.time),
+          right: fmtPps(entry.pps),
+        };
+      case "marathon": // Marathon
+        return {
+          left: fmtNum(entry.lines),
+          middle: fmtPps(entry.pps),
+          right: fmtTime(entry.time),
+        };
+      case "konoha_easy":
+      case "konoha_hard": // All Clear
+        return {
+          left: fmtNum(entry.allClears),
+          middle: fmtNum(entry.level),
+          right: fmtTime(entry.time),
+        };
+      case "tgm1":
+      case "tgm2":
+      case "tgm_plus":
+      case "tgm3":
+      case "tgm4":
+      case "20g":
+      case "tadeath":
+      case "shirase":
+      case "master20g":
+      case "asuka_easy":
+      case "asuka_normal":
+      case "asuka_hard": // Master, 20G, Race
+        return {
+          left: entry.grade || "9",
+          middle: `L${fmtNum(entry.level)}`,
+          right: fmtTime(entry.time),
+        };
+      default:
+        return {
+          left: fmtNum(entry.score),
+          middle: fmtNum(entry.level || ""),
+          right: fmtTime(entry.time),
+        };
+    }
   }
 
   getBestScore(mode) {
@@ -2797,6 +3052,7 @@ class SettingsScene extends Phaser.Scene {
     modeTypes.forEach((modeType) => {
       modeType.modes.forEach((mode) => {
         localStorage.removeItem(`bestScore_${mode.id}`);
+        localStorage.removeItem(`leaderboard_${mode.id}`);
       });
     });
 
@@ -6757,9 +7013,8 @@ class GameScene extends Phaser.Scene {
 
   saveBestScore() {
     if (!this.selectedMode) return;
-    const key = `bestScore_${this.selectedMode}`;
-    const currentBest = this.getBestScore(this.selectedMode);
-    const newScore = {
+    // Fallback generic entry; mode-specific handlers should prefer saveLeaderboardEntry directly.
+    const entry = {
       score: this.score,
       level: this.level,
       grade: this.grade,
@@ -6770,20 +7025,9 @@ class GameScene extends Phaser.Scene {
         .padStart(2, "0")}.${Math.floor((this.currentTime % 1) * 100)
         .toString()
         .padStart(2, "0")}`,
+      pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
     };
-
-    // Update if better score, or same score but higher level, or same level but better grade
-    if (
-      newScore.score > currentBest.score ||
-      (newScore.score === currentBest.score &&
-        newScore.level > currentBest.level) ||
-      (newScore.score === currentBest.score &&
-        newScore.level === currentBest.level &&
-        this.getGradeValue(newScore.grade) >
-          this.getGradeValue(currentBest.grade))
-    ) {
-      localStorage.setItem(key, JSON.stringify(newScore));
-    }
+    this.saveLeaderboardEntry(this.selectedMode, entry);
   }
 
   getBestScore(mode) {

@@ -72,19 +72,17 @@ class UltraMode extends BaseMode {
     }
 
     onGameOver(gameScene) {
-        // Save score
-        const key = `bestScore_ultra`;
-        const currentBest = gameScene.getBestScore('ultra');
         const timeString = `${Math.floor(this.timeLimit / 60)}:${Math.floor(this.timeLimit % 60).toString().padStart(2, '0')}.00`;
 
-        if (gameScene.score > currentBest.score) {
-            const newScore = {
-                score: gameScene.score,
-                level: gameScene.level,
-                grade: 'N/A',
-                time: timeString
-            };
-            localStorage.setItem(key, JSON.stringify(newScore));
+        const entry = {
+            score: gameScene.score,
+            level: gameScene.level,
+            grade: 'N/A',
+            time: timeString,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
+        };
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry('ultra', entry);
         }
     }
 

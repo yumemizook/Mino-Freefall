@@ -94,19 +94,16 @@ class MarathonMode extends BaseMode {
     }
 
     onGameOver(gameScene) {
-        // Save score with lines cleared
-        const key = `bestScore_marathon`;
-        const currentBest = gameScene.getBestScore('marathon');
-        const newScore = {
+        const entry = {
             score: gameScene.score,
             level: this.linesCleared,
+            lines: this.linesCleared,
             grade: 'N/A',
-            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`
+            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
         };
-
-        if (newScore.score > currentBest.score ||
-            (newScore.score === currentBest.score && newScore.level > currentBest.level)) {
-            localStorage.setItem(key, JSON.stringify(newScore));
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry('marathon', entry);
         }
     }
 

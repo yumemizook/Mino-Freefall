@@ -30,11 +30,11 @@ All Clear (both Konoha Easy and Hard):
 
 Puzzle (only display 1 best score):
     Display format:
-    "   <Best stage>
+    "   Best stage
 
 
-        <Completion Rate>
+        Completion Rate
 
 
 
-        <Time taken>"
+        Time taken"

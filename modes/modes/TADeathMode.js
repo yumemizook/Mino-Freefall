@@ -427,22 +427,19 @@ class TADeathMode extends BaseMode {
     
     // Save best score for T.A. Death mode
     saveBestScore(gameScene) {
-        const key = `bestScore_${this.modeId}`;
-        const currentBest = this.getBestScore(this.modeId);
-        const newScore = {
+        const entry = {
             score: this.deathScore,
             level: gameScene.level,
             grade: this.displayedGrade,
             time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined,
             torikanPassed: this.torikanPassed,
             timingPhase: this.currentTimingPhase,
             mGrade: this.isMGrade,
             gmGrade: this.isGMGrade
         };
-        
-        // Update if better score or new grade achieved
-        if (newScore.score > currentBest.score || this.isHigherGrade(newScore.grade, currentBest.grade)) {
-            localStorage.setItem(key, JSON.stringify(newScore));
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry(this.modeId, entry);
         }
     }
     
@@ -456,15 +453,11 @@ class TADeathMode extends BaseMode {
     
     // Get best score for this mode
     getBestScore(modeId) {
-        const key = `bestScore_${modeId}`;
-        const stored = localStorage.getItem(key);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-        return { 
-            score: 0, 
-            level: 0, 
-            grade: '9', 
+        // Legacy compatibility; MenuScene reads leaderboard_* instead.
+        return {
+            score: 0,
+            level: 0,
+            grade: '9',
             time: '0:00.00',
             torikanPassed: false,
             timingPhase: 1,

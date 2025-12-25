@@ -88,23 +88,16 @@ class Sprint40Mode extends BaseMode {
 
     onGameOver(gameScene) {
         if (this.finishTime) {
-            // Save time-based score
-            const key = `bestScore_${gameScene.selectedMode}`;
-            const currentBest = gameScene.getBestScore(gameScene.selectedMode);
             const timeString = `${Math.floor(this.finishTime / 60)}:${Math.floor(this.finishTime % 60).toString().padStart(2, '0')}.${Math.floor((this.finishTime % 1) * 100).toString().padStart(2, '0')}`;
-
-            // Compare times (lower is better)
-            const currentTime = this.finishTime;
-            const bestTime = this.parseTime(currentBest.time);
-
-            if (!bestTime || currentTime < bestTime) {
-                const newScore = {
-                    score: gameScene.score,
-                    level: this.linesCleared,
-                    grade: 'N/A',
-                    time: timeString
-                };
-                localStorage.setItem(key, JSON.stringify(newScore));
+            const entry = {
+                score: gameScene.score,
+                level: this.linesCleared,
+                grade: 'N/A',
+                time: timeString,
+                pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
+            };
+            if (typeof gameScene.saveLeaderboardEntry === 'function') {
+                gameScene.saveLeaderboardEntry(gameScene.selectedMode, entry);
             }
         }
     }

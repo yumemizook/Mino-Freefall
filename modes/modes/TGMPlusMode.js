@@ -436,49 +436,36 @@ class TGMPlusMode extends BaseMode {
     
     // Handle game over
     onGameOver(gameScene) {
-        // Save best score
         this.saveBestScore(gameScene);
-        
         console.log(`TGM+ Mode: Game Over - Score: ${this.tgmPlusScore}, Level: ${gameScene.level}`);
     }
-    
-    // Save best score for TGM+ mode
+
     saveBestScore(gameScene) {
-        const key = `bestScore_${this.modeId}`;
-        const currentBest = this.getBestScore(this.modeId);
-        const newScore = {
+        const entry = {
             score: this.tgmPlusScore,
             level: gameScene.level,
-            grade: 'N/A', // No grading in TGM+
+            grade: 'N/A',
             time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined,
             garbageRows: this.rowsWithGarbage
         };
-        
-        // Update if better score
-        if (newScore.score > currentBest.score) {
-            localStorage.setItem(key, JSON.stringify(newScore));
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry(this.modeId, entry);
         }
     }
-    
-    // Get best score for this mode
+
     getBestScore(modeId) {
-        const key = `bestScore_${modeId}`;
-        const stored = localStorage.getItem(key);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-        return { 
-            score: 0, 
-            level: 0, 
-            grade: 'N/A', 
+        return {
+            score: 0,
+            level: 0,
+            grade: 'N/A',
             time: '0:00.00',
             garbageRows: 0
         };
     }
-    
-    // Get garbage counter for UI display
+
     getGarbageProgress() {
-        const threshold = this.getGarbageThreshold(0); // Use level 0 for display
+        const threshold = this.getGarbageThreshold(0);
         return {
             counter: this.garbageCounter,
             threshold: threshold,

@@ -50,18 +50,15 @@ class ZenMode extends BaseMode {
     }
 
     onGameOver(gameScene) {
-        // Zen mode doesn't really "end" but if game over occurs, save progress
-        const key = `bestScore_zen`;
-        const currentBest = gameScene.getBestScore('zen');
-
-        if (this.linesCleared > currentBest.level) {
-            const newScore = {
-                score: gameScene.score,
-                level: this.linesCleared,
-                grade: 'N/A',
-                time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`
-            };
-            localStorage.setItem(key, JSON.stringify(newScore));
+        const entry = {
+            score: gameScene.score,
+            level: this.linesCleared,
+            grade: 'N/A',
+            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
+        };
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry('zen', entry);
         }
     }
 
