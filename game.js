@@ -2974,6 +2974,7 @@ class GameScene extends Phaser.Scene {
     this.gradeDisplay = null;
     this.gradeText = null;
     this.gradePointsText = null;
+    this.nextGradeText = null;
     this.levelDisplay = null;
     this.playfieldBorder = null;
     this.gameOver = false;
@@ -3091,6 +3092,9 @@ class GameScene extends Phaser.Scene {
       stage1: true,
       stage2: true,
     };
+
+    // Re-apply mode timing configuration in case restart reset defaults
+    this.applyModeConfiguration();
 
     // Credits system
     this.creditsActive = false;
@@ -3289,6 +3293,16 @@ class GameScene extends Phaser.Scene {
     );
     console.log(`Gravity Level Cap: ${this.gravityLevelCap}`);
     console.log(`Rotation System: ${this.rotationSystem} (from settings)`);
+
+    if (this.gameMode.getName && this.gameMode.getName() === 'Sprint') {
+      console.log('Sprint mode timings debug', {
+        das: this.dasDelay,
+        arr: this.arrDelay,
+        are: this.areDelay,
+        lineARE: this.lineAREDelay,
+        lineClearDelay: this.lineClearDelayDuration,
+      });
+    }
   }
 
   calculateLayout() {
@@ -3367,6 +3381,7 @@ class GameScene extends Phaser.Scene {
         .setOrigin(0.5);
       if (this.gradePointsText) {
         this.gradePointsText.destroy();
+        this.gradePointsText = null;
       }
       this.gradePointsText = this.add
         .text(gradeX + gradeWidth / 2, gradeY + 90, "0", {
@@ -3377,6 +3392,26 @@ class GameScene extends Phaser.Scene {
           align: "center",
         })
         .setOrigin(0.5, 0);
+      if (this.nextGradeText) {
+        this.nextGradeText.destroy();
+        this.nextGradeText = null;
+      }
+      this.nextGradeText = this.add
+        .text(
+          gradeX + gradeWidth / 2,
+          gradeY + 130,
+          "Next grade at 400 points",
+          {
+            fontSize: `${uiFontSize - 2}px`,
+            fill: "#cccccc",
+            fontFamily: "Courier New",
+            fontStyle: "normal",
+            align: "center",
+          },
+        )
+        .setOrigin(0.5, 0);
+      this.nextGradeText.setWordWrapWidth(gradeWidth * 1.5);
+      this.updateNextGradeText();
     }
 
     // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
@@ -4751,6 +4786,21 @@ class GameScene extends Phaser.Scene {
     // Create piece with default rotation first
     this.currentPiece = new Piece(type, this.rotationSystem, 0);
 
+    if (this.isFirstSpawn && this.gameMode) {
+      this.dasDelay =
+        this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
+          ? this.gameMode.getDAS()
+          : this.dasDelay;
+      this.arrDelay =
+        this.gameMode.getARR && typeof this.gameMode.getARR === "function"
+          ? this.gameMode.getARR()
+          : this.arrDelay;
+      this.areDelay =
+        this.gameMode.getARE && typeof this.gameMode.getARE === "function"
+          ? this.gameMode.getARE()
+          : this.areDelay;
+    }
+
     console.log(
       `[SPAWN] Starting spawn for piece ${type}, ARE active: ${this.areActive}, rotation direction: ${this.areRotationDirection}, hold pressed: ${this.areHoldPressed}`,
     );
@@ -5165,8 +5215,12 @@ class GameScene extends Phaser.Scene {
       const clearSound = this.sound.add("clear", { volume: 0.7 });
       clearSound.play();
     } else {
-      // Start normal ARE (0.5 seconds)
-      this.areDelay = 30 / 60;
+      // Start normal ARE (use mode timing if available)
+      const normalARE =
+        this.gameMode && this.gameMode.getARE
+          ? this.gameMode.getARE()
+          : 30 / 60;
+      this.areDelay = normalARE;
       this.areTimer = 0;
       this.areActive = true;
       this.lineClearPhase = false;
@@ -5334,13 +5388,26 @@ class GameScene extends Phaser.Scene {
     }
 
     // Determine scoring system based on mode
-    const isStandardMode = [
+    const guidelineModes = new Set([
       "marathon",
       "sprint_40",
       "sprint_100",
       "ultra",
       "zen",
-    ].includes(this.selectedMode);
+    ]);
+
+    const selectedModeKey =
+      typeof this.selectedMode === "string"
+        ? this.selectedMode
+        : this.selectedModeId || "";
+
+    const isTwentyGMode =
+      (this.gameMode && typeof this.gameMode.isTwentyGMode === "function"
+        ? this.gameMode.isTwentyGMode()
+        : false) || selectedModeKey === "20g";
+
+    const isStandardMode =
+      !isTwentyGMode && guidelineModes.has(selectedModeKey);
 
     if (isStandardMode) {
       this.updateGuidelineScore(lines, pieceType, isTSpin);
@@ -5807,7 +5874,7 @@ class GameScene extends Phaser.Scene {
       GM: Infinity,
     };
     const nextThreshold = gradeThresholds[this.grade];
-    if (nextThreshold === Infinity) {
+    if (nextThreshold === Infinity) { // Infinity is used for GM grade, so display this at S9
       this.nextGradeText.setText("Next grade at ?????? points");
     } else {
       this.nextGradeText.setText(`Next grade at  ${nextThreshold} points`);
@@ -6585,7 +6652,10 @@ class GameScene extends Phaser.Scene {
       this.gradeText.setText(this.grade);
       if (this.gradePointsText && this.gameMode && typeof this.gameMode.getGradePoints === "function") {
         const gradePoints = this.gameMode.getGradePoints();
-        this.gradePointsText.setText(`Points: ${gradePoints}`);
+        this.gradePointsText.setText(gradePoints != null ? gradePoints.toString() : "0");
+      }
+      if (this.nextGradeText) {
+        this.updateNextGradeText();
       }
     }
 

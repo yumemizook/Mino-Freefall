@@ -39,12 +39,12 @@ class MarathonMode extends BaseMode {
     }
 
     // Timing getter methods
-    getDAS() { return this.getModeConfig().das; }
-    getARR() { return this.getModeConfig().arr; }
-    getARE() { return this.getModeConfig().are; }
-    getLineARE() { return this.getModeConfig().lineAre; } // Same as ARE for Marathon
-    getLockDelay() { return this.getModeConfig().lockDelay; }
-    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
+    getDAS() { return this.getConfig().das; }
+    getARR() { return this.getConfig().arr; }
+    getARE() { return this.getConfig().are; }
+    getLineARE() { return this.getConfig().lineAre; } // Same as ARE for Marathon
+    getLockDelay() { return this.getConfig().lockDelay; }
+    getLineClearDelay() { return this.getConfig().lineClearDelay; }
 
     // Marathon gravity curve based on standardtimings.md
     getMarathonGravity(level) {

@@ -30,6 +30,8 @@ class TGM2NormalMode extends BaseMode {
 
         // TGM2 scoring (no grading)
         this.tgm2Score = 0;
+        this.finishTimeBonusApplied = false;
+        this.finishTimeBonus = 0;
         
         // Item block system
         this.itemBlockSpawned = {
@@ -559,8 +561,9 @@ class TGM2NormalMode extends BaseMode {
         const speed = Math.max(0, lockDelay - activeTime);
         const speedBonus = speed * 7;
         
-        const baseScore = (base + soft + (2 * sonic)) * linesCleared * combo * bravo;
-        const totalScore = baseScore + levelBonus + speedBonus;
+        const lineScore = (base + soft + (2 * sonic)) * linesCleared * combo * bravo;
+        const lineScoreWithMultiplier = lineScore * 6; // Normal mode multiplies line clear score by 6
+        const totalScore = lineScoreWithMultiplier + levelBonus + speedBonus;
         
         this.tgm2Score += totalScore;
         
@@ -616,6 +619,9 @@ class TGM2NormalMode extends BaseMode {
     
     // Handle game over
     onGameOver(gameScene) {
+        // Apply Normal mode finish time bonus before recording score
+        this.applyFinishTimeBonus(gameScene);
+
         // Check for final rankings
         this.checkFinalRankings(gameScene);
         
@@ -623,6 +629,23 @@ class TGM2NormalMode extends BaseMode {
         this.saveBestScore(gameScene);
     }
     
+    // Apply the Normal mode finish time bonus (up to 300 seconds)
+    applyFinishTimeBonus(gameScene) {
+        if (this.finishTimeBonusApplied) {
+            return;
+        }
+
+        const seconds = Math.max(0, gameScene.currentTime || 0);
+        const remaining = Math.max(0, Math.ceil(300 - seconds));
+        this.finishTimeBonus = 1253 * remaining;
+        this.tgm2Score += this.finishTimeBonus;
+        this.finishTimeBonusApplied = true;
+
+        if (gameScene.scoreText) {
+            gameScene.scoreText.setText(this.tgm2Score.toString());
+        }
+    }
+
     // Check final rankings
     checkFinalRankings(gameScene) {
         const finalGrade = this.displayedGrade;
@@ -677,6 +700,8 @@ class TGM2NormalMode extends BaseMode {
         // Reset credit roll
         this.creditsStarted = false;
         this.creditsTimer = 0;
+        this.finishTimeBonusApplied = false;
+        this.finishTimeBonus = 0;
     }
 }
 

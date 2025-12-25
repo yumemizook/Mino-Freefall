@@ -36,13 +36,17 @@ class Sprint40Mode extends BaseMode {
         };
     }
 
+
+
     // Timing getter methods
-    getDAS() { return this.getModeConfig().das; }
-    getARR() { return this.getModeConfig().arr; }
-    getARE() { return this.getModeConfig().are; }
-    getLineARE() { return this.getModeConfig().lineAre; } // Same as ARE for Sprint
-    getLockDelay() { return this.getModeConfig().lockDelay; }
-    getLineClearDelay() { return this.getModeConfig().lineClearDelay; }
+    getDAS() { return this.getConfig().das; }
+    getARR() { return this.getConfig().arr; }
+    getARE() { return this.getConfig().are; }
+    getLineARE() { return this.getConfig().lineAre; } // Same as ARE for Sprint
+    getLockDelay() { return this.getConfig().lockDelay; }
+    getLineClearDelay() { return this.getConfig().lineClearDelay; }
+    getTargetLines() { return this.targetLines; }
+
 
     initializeForGameScene(gameScene) {
         // Set target lines based on mode
