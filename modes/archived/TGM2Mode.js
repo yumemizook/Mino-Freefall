@@ -21,7 +21,9 @@ class TGM2Mode extends BaseMode {
             das: 16/60,                    // TGM2 DAS (16 frames)
             arr: 1/60,                     // ARR is always 1/60
             are: 27/60,                    // TGM2 ARE timing (27 frames)
+            lineAre: 27/60,                // Line ARE matches ARE per tgm2modes.md
             lockDelay: 30/60,              // Lock delay (30 frames)
+            lineClearDelay: 40/60,         // Line clear delay (40 frames)
             nextPieces: 4,                 // Standard next queue
             holdEnabled: true,             // TGM2 supports hold
             ghostEnabled: true,            // Ghost piece enabled
@@ -67,9 +69,9 @@ class TGM2Mode extends BaseMode {
     getDAS() { return this.config.das; }
     getARR() { return this.config.arr; }
     getARE() { return this.config.are; }
-    getLineARE() { return this.config.are; } // Same as ARE for TGM2
+    getLineARE() { return this.config.lineAre; }
     getLockDelay() { return this.config.lockDelay; }
-    getLineClearDelay() { return this.config.are; } // Use ARE for line clear delay
+    getLineClearDelay() { return this.config.lineClearDelay; }
     
     // Get mode name
     getName() {

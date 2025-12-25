@@ -13,6 +13,7 @@ class TGM2NormalMode extends BaseMode {
             das: 16/60,                    // TGM2 Normal DAS (16 frames)
             arr: 1/60,                     // ARR is always 1/60
             are: 27/60,                    // TGM2 Normal ARE (27 frames)
+            lineAre: 27/60,                // Line ARE mirrors ARE (official table lacks separate value)
             lockDelay: 30/60,              // Lock delay (30 frames)
             lineClearDelay: 40/60,         // Line clear delay (40 frames)
             nextPieces: 4,                 // Standard next queue
@@ -53,6 +54,7 @@ class TGM2NormalMode extends BaseMode {
             das: 14/60,                    // TGM2 Normal DAS (14 frames)
             arr: 1/60,                     // ARR is always 1/60
             are: 25/60,                    // TGM2 Normal ARE (25 frames)
+            lineAre: 25/60,                // Mirror ARE (table lacks line ARE column)
             lockDelay: 30/60,              // Lock delay (30 frames)
             nextPieces: 4,                 // Standard next queue
             holdEnabled: true,             // TGM2 supports hold
@@ -141,7 +143,7 @@ class TGM2NormalMode extends BaseMode {
     }
     
     getLineARE() {
-        return this.config.are; // TGM2 Normal doesn't have separate Line ARE
+        return this.config.lineAre;
     }
     
     getLockDelay() {

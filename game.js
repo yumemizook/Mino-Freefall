@@ -764,6 +764,13 @@ class Board {
     this.grid = Array.from({ length: this.rows }, () =>
       Array(this.cols).fill(0),
     );
+
+    this.fadeGrid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+  }
+
+  clear() {
+    this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+    this.fadeGrid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
   }
 
   isValidPosition(piece, x, y) {
@@ -819,6 +826,17 @@ class Board {
     for (let r = startRow; r < endRow; r++) {
       for (let c = 0; c < this.cols; c++) {
         if (this.grid[r][c]) {
+          if (
+            scene.fadingRollActive &&
+            !scene.invisibleStackActive &&
+            this.fadeGrid[r][c] > 0 &&
+            scene.currentTime >= this.fadeGrid[r][c]
+          ) {
+            continue;
+          }
+          if (scene.invisibleStackActive) {
+            continue;
+          }
           let color = this.grid[r][c];
 
           // Apply mino fading if active
@@ -2947,6 +2965,7 @@ class GameScene extends Phaser.Scene {
     this.piecesPlaced = 0; // Track pieces for level system
     this.score = 0;
     this.grade = "9";
+    this.internalGrade = 0;
     this.gradeDisplay = null;
     this.levelDisplay = null;
     this.playfieldBorder = null;
@@ -2978,6 +2997,9 @@ class GameScene extends Phaser.Scene {
     this.areDelay = 30 / 60; // seconds until next piece appears
     this.areTimer = 0;
     this.areActive = false;
+    this.lineClearDelayActive = false;
+    this.lineClearDelayDuration = 0;
+    this.pendingLineAREDelay = 0;
 
     // Line clear animation tracking
     this.clearedLines = []; // Lines being cleared for animation
@@ -3013,6 +3035,11 @@ class GameScene extends Phaser.Scene {
     this.bestTime = null;
     this.gradeHistory = [];
     this.sectionTimes = {}; // Track time for each 100-level section
+
+    this.sectionStartTime = 0;
+    this.currentSection = 0;
+    this.sectionTetrises = {};
+    this.currentSectionTetrisCount = 0;
 
     // Piece per second tracking
     this.totalPiecesPlaced = 0; // Total pieces that have entered the playfield
@@ -3068,6 +3095,9 @@ class GameScene extends Phaser.Scene {
     this.congratulationsActive = false;
     this.gameComplete = false;
     this.level999Reached = false; // Track when level 999 is reached for TGM behavior
+
+    this.invisibleStackActive = false;
+    this.fadingRollActive = false;
 
     // Mino fading system
     this.minoFadeActive = false;
@@ -3329,17 +3359,10 @@ class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       // Next grade requirement below, wrapped to 1.5x grade width, right-aligned
-      const nextGradeWidth = gradeWidth * 1.75;
-      this.nextGradeText = this.add
-        .text(gradeX + gradeWidth, gradeY + 90, "Next: 400 pts", {
-          fontSize: `${uiFontSize}px`,
-          fill: "#ccc",
-          fontFamily: "Courier New",
-          wordWrap: { width: nextGradeWidth },
-          align: "right",
-          fontStyle: "normal",
-        })
-        .setOrigin(1, 0);
+      if (this.nextGradeText) {
+        this.nextGradeText.destroy();
+      }
+      this.nextGradeText = null;
     }
 
     // Level display - next to matrix on left, right-aligned, moved 60px up and 20px right
@@ -3533,6 +3556,10 @@ class GameScene extends Phaser.Scene {
     this.startTime = Date.now();
     this.gameStartTime = this.startTime;
     this.currentTime = 0;
+
+    this.sectionStartTime = 0;
+    this.currentSection = Math.floor(this.level / 100);
+    this.currentSectionTetrisCount = 0;
     this.totalPausedTime = 0;
     this.isPaused = false;
     this.pauseStartTime = null;
@@ -3647,6 +3674,11 @@ class GameScene extends Phaser.Scene {
         if (this.nextPieces.length < 6) {
           this.generateNextPieces();
         }
+
+        this.sectionStartTime = this.currentTime;
+        this.currentSection = Math.floor(this.level / 100);
+        this.currentSectionTetrisCount = 0;
+
         this.spawnPiece();
         // Start BGM after GO
         this.startInitialBGM();
@@ -4589,7 +4621,14 @@ class GameScene extends Phaser.Scene {
     if (this.areActive) {
       this.areTimer += this.deltaTime;
       if (this.areTimer >= this.areDelay) {
-        if (this.lineClearPhase) {
+        if (this.lineClearDelayActive) {
+          // Line clear delay completed, enter line ARE
+          this.lineClearDelayActive = false;
+          this.lineClearPhase = true;
+          this.areDelay = this.pendingLineAREDelay || 41 / 60;
+          this.areTimer = 0;
+          console.log(`[ARE] Line clear delay ended, entering line ARE: ${this.areDelay}s`);
+        } else if (this.lineClearPhase) {
           // Line clear ARE completed, now actually clear the lines
           this.clearStoredLines();
 
@@ -4622,7 +4661,21 @@ class GameScene extends Phaser.Scene {
     const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
     const hasGrading = modeConfig.hasGrading !== false;
     if (hasGrading) {
-      this.updateGrade();
+      if (this.gameMode && typeof this.gameMode.getDisplayedGrade === "function") {
+        const displayedGrade = this.gameMode.getDisplayedGrade();
+        if (displayedGrade) {
+          this.grade = displayedGrade;
+        }
+
+        if (this.gameMode && typeof this.gameMode.getInternalGrade === "function") {
+          const internalGrade = this.gameMode.getInternalGrade();
+          if (typeof internalGrade === "number") {
+            this.internalGrade = internalGrade;
+          }
+        }
+      } else {
+        this.updateGrade();
+      }
     }
 
     // Calculate piece per second rates (skip during credits)
@@ -4775,37 +4828,43 @@ class GameScene extends Phaser.Scene {
     this.pieceSpawnTime = this.time.now;
     this.pieceActiveTime = 0;
 
-    // Reset ARE rotation tracking
+    // Preserve ARE input states so we can apply IRS/IHS correctly after swapping
+    const rotationDirectionAtSpawn = this.areRotationDirection;
+    const holdPressedAtSpawn = this.areHoldPressed;
+
+    // Reset ARE rotation and hold tracking for the next cycle
     this.areRotationDirection = 0;
+    this.areHoldPressed = false;
 
     console.log(
-      `[IHS] Before IHS application: current piece ${this.currentPiece.type}, hold piece ${this.holdPiece ? this.holdPiece.type : "none"}, areHoldPressed ${this.areHoldPressed}`,
+      `[IHS] Before IHS application: current piece ${this.currentPiece?.type ?? "none"}, hold piece ${this.holdPiece ? this.holdPiece.type : "none"}, areHoldPressed ${holdPressedAtSpawn}`,
     );
 
     // Handle ARE hold (Initial Hold System) for modes that support hold
-    if (this.holdEnabled && this.areHoldPressed) {
+    if (this.holdEnabled && holdPressedAtSpawn) {
       console.log(
-        `[IHS] ARE Hold pressed: ${this.areHoldPressed}, Hold enabled: ${this.holdEnabled}`,
+        `[IHS] ARE Hold pressed: ${holdPressedAtSpawn}, Hold enabled: ${this.holdEnabled}`,
       );
       this.hold();
-      this.areHoldPressed = false;
     }
 
     console.log(
       `[IHS] After IHS application: current piece ${this.currentPiece.type}, hold piece ${this.holdPiece ? this.holdPiece.type : "none"}`,
     );
 
+    const irsRotationDirection = rotationDirectionAtSpawn;
+
     // Apply IRS to the spawning piece (which may have been swapped by IHS)
-    if (this.areRotationDirection === 1) {
+    if (irsRotationDirection === 1) {
       console.log(
-        `[IRS] ARE Rotation CW pressed: ${this.areRotationDirection === 1}, Hold pressed: ${this.areHoldPressed}`,
+        `[IRS] ARE Rotation CW held at spawn: ${irsRotationDirection === 1}, Hold pressed: ${holdPressedAtSpawn}`,
       );
       this.currentPiece.rotation = 1; // Clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
-    } else if (this.areRotationDirection === -1) {
+    } else if (irsRotationDirection === -1) {
       console.log(
-        `[IRS] ARE Rotation CCW pressed: ${this.areRotationDirection === -1}, Hold pressed: ${this.areHoldPressed}`,
+        `[IRS] ARE Rotation CCW held at spawn: ${irsRotationDirection === -1}, Hold pressed: ${holdPressedAtSpawn}`,
       );
       this.currentPiece.rotation = 3; // Counter-clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
@@ -4949,6 +5008,17 @@ class GameScene extends Phaser.Scene {
           const boardX = this.currentPiece.x + c;
           const boardY = this.currentPiece.y + r;
           this.trackPlacedMino(boardX, boardY, this.currentPiece.color);
+
+          if (
+            this.fadingRollActive &&
+            !this.invisibleStackActive &&
+            boardY >= 0 &&
+            boardY < this.board.rows &&
+            boardX >= 0 &&
+            boardX < this.board.cols
+          ) {
+            this.board.fadeGrid[boardY][boardX] = this.currentTime + 4;
+          }
         }
       }
     }
@@ -4974,6 +5044,13 @@ class GameScene extends Phaser.Scene {
     // Store cleared lines for animation
     this.clearedLines = linesToClear;
 
+    if (!this.creditsActive && linesToClear.length === 4) {
+      const sectionIndex = Math.floor(this.level / 100);
+      if (sectionIndex === this.currentSection) {
+        this.currentSectionTetrisCount++;
+      }
+    }
+
     // Update score with enhanced system
     this.updateScore(linesToClear.length, this.currentPiece.type, isTSpin);
     this.updateLevel("lines", linesToClear.length);
@@ -4991,19 +5068,28 @@ class GameScene extends Phaser.Scene {
     this.currentPiece = null;
 
     if (linesToClear.length > 0) {
-      // Start line clear ARE phase with mode-specific delay
-      this.areDelay =
+      const lineClearDelay =
+        this.gameMode && this.gameMode.getLineClearDelay
+          ? this.gameMode.getLineClearDelay()
+          : 40 / 60;
+      const lineAREDelay =
         this.gameMode && this.gameMode.getLineARE
           ? this.gameMode.getLineARE()
           : 41 / 60;
+      this.lineClearDelayDuration = lineClearDelay;
+      this.pendingLineAREDelay = lineAREDelay;
+      this.areDelay = lineClearDelay;
       this.areTimer = 0;
       this.areActive = true;
-      this.lineClearPhase = true;
+      this.lineClearDelayActive = true;
+      this.lineClearPhase = false;
       this.isClearingLines = true;
       // Reset ARE input state when ARE starts
       this.areRotationDirection = 0;
       this.areHoldPressed = false;
-      console.log(`[ARE] Starting line clear ARE, delay: ${this.areDelay}s`);
+      console.log(
+        `[ARE] Starting line clear delay: ${lineClearDelay}s, upcoming line ARE: ${lineAREDelay}s`,
+      );
 
       // Play clear sound
       const clearSound = this.sound.add("clear", { volume: 0.7 });
@@ -5015,6 +5101,9 @@ class GameScene extends Phaser.Scene {
       this.areActive = true;
       this.lineClearPhase = false;
       this.isClearingLines = false;
+      this.lineClearDelayActive = false;
+      this.lineClearDelayDuration = 0;
+      this.pendingLineAREDelay = 0;
       // Reset ARE input state when ARE starts
       this.areRotationDirection = 0;
       this.areHoldPressed = false;
@@ -5027,16 +5116,29 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // Reset piece to its default orientation (used when moving into hold)
+  resetPieceToDefaultRotation(piece) {
+    const rotations =
+      this.rotationSystem === "ARS"
+        ? SEGA_ROTATIONS[piece.type].rotations
+        : TETROMINOES[piece.type].rotations;
+    piece.rotation = 0;
+    piece.shape = rotations[0].map((row) => [...row]);
+  }
+
   // Hold functionality for modes that support it
   hold() {
-    if (!this.canHold || !this.holdEnabled) return;
+    if (!this.canHold || !this.holdEnabled || !this.currentPiece) return;
 
+    const currentType = this.currentPiece?.type ?? "none";
+    const holdType = this.holdPiece ? this.holdPiece.type : "none";
     console.log(
-      `[IHS] Hold function called, current piece: ${this.currentPiece.type}, hold piece: ${this.holdPiece ? this.holdPiece.type : "none"}`,
+      `[IHS] Hold function called, current piece: ${currentType}, hold piece: ${holdType}`,
     );
 
     if (this.holdPiece) {
       // Swap current piece with hold piece
+      this.resetPieceToDefaultRotation(this.currentPiece);
       const oldCurrent = this.currentPiece.type;
       const oldHold = this.holdPiece.type;
       [this.currentPiece, this.holdPiece] = [this.holdPiece, this.currentPiece];
@@ -5054,6 +5156,7 @@ class GameScene extends Phaser.Scene {
       );
     } else {
       // Move current piece to hold
+      this.resetPieceToDefaultRotation(this.currentPiece);
       this.holdPiece = this.currentPiece;
       console.log(
         `[IHS] Moved ${this.currentPiece.type} to hold, spawning new piece`,
@@ -5081,12 +5184,14 @@ class GameScene extends Phaser.Scene {
     if (this.clearedLines.length > 0) {
       // Create a new grid without the cleared lines
       const newGrid = [];
+      const newFadeGrid = [];
       const clearedSet = new Set(this.clearedLines);
 
       // Add all non-cleared rows to new grid
       for (let r = 0; r < this.board.rows; r++) {
         if (!clearedSet.has(r)) {
           newGrid.push(this.board.grid[r]);
+          newFadeGrid.push(this.board.fadeGrid[r]);
         }
       }
 
@@ -5094,10 +5199,12 @@ class GameScene extends Phaser.Scene {
       const emptyRowsNeeded = this.clearedLines.length;
       for (let i = 0; i < emptyRowsNeeded; i++) {
         newGrid.unshift(Array(this.board.cols).fill(0));
+        newFadeGrid.unshift(Array(this.board.cols).fill(0));
       }
 
       // Replace the entire grid
       this.board.grid = newGrid;
+      this.board.fadeGrid = newFadeGrid;
       this.clearedLines = [];
     }
 
@@ -5112,20 +5219,24 @@ class GameScene extends Phaser.Scene {
     // Clear any additional lines that became complete
     if (additionalLines.length > 0) {
       const newGrid = [];
+      const newFadeGrid = [];
       const clearedSet = new Set(additionalLines);
 
       for (let r = 0; r < this.board.rows; r++) {
         if (!clearedSet.has(r)) {
           newGrid.push(this.board.grid[r]);
+          newFadeGrid.push(this.board.fadeGrid[r]);
         }
       }
 
       const emptyRowsNeeded = additionalLines.length;
       for (let i = 0; i < emptyRowsNeeded; i++) {
         newGrid.unshift(Array(this.board.cols).fill(0));
+        newFadeGrid.unshift(Array(this.board.cols).fill(0));
       }
 
       this.board.grid = newGrid;
+      this.board.fadeGrid = newFadeGrid;
     }
   }
 
@@ -5348,9 +5459,37 @@ class GameScene extends Phaser.Scene {
     const milestones = [100, 200, 300, 500, maxLevel];
     if (milestones.includes(this.level) && this.level !== oldLevel) {
       if (this.level === maxLevel) {
+        const lastSectionIndex = Math.floor(oldLevel / 100);
+        if (
+          typeof this.sectionTimes[lastSectionIndex] !== "number" &&
+          lastSectionIndex === this.currentSection
+        ) {
+          this.sectionTimes[lastSectionIndex] = this.currentTime - this.sectionStartTime;
+          this.sectionTetrises[lastSectionIndex] = this.currentSectionTetrisCount;
+        }
+
         // Start credits when reaching max level
         this.level999Reached = true;
+
+        if (this.selectedMode && this.selectedMode.startsWith("tgm2") && maxLevel === 999) {
+          this.board.clear();
+          this.placedMinos = [];
+          this.placedMinoRows = [];
+          this.clearedLines = [];
+          this.isClearingLines = false;
+          this.lineClearPhase = false;
+          this.lineClearDelayActive = false;
+          this.lineClearDelayDuration = 0;
+          this.pendingLineAREDelay = 0;
+          this.invisibleStackActive = false;
+          this.fadingRollActive = false;
+        }
+
         this.startCredits();
+
+        if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
+          this.gameMode.onCreditsStart(this);
+        }
       }
     }
 
@@ -5360,6 +5499,15 @@ class GameScene extends Phaser.Scene {
 
   handleSectionTransition(section) {
     this.sectionTransition = true;
+
+    const completedSection = section - 1;
+    if (completedSection >= 0) {
+      this.sectionTimes[completedSection] = this.currentTime - this.sectionStartTime;
+      this.sectionTetrises[completedSection] = this.currentSectionTetrisCount;
+      this.sectionStartTime = this.currentTime;
+      this.currentSection = section;
+      this.currentSectionTetrisCount = 0;
+    }
 
     // Play section change sound
     const sectionChangeSound = this.sound.add("sectionchange", { volume: 0.6 });
@@ -5646,6 +5794,7 @@ class GameScene extends Phaser.Scene {
     this.piecesPlaced = 0; // Reset piece counter
     this.score = 0;
     this.grade = "9";
+    this.internalGrade = 0;
     this.gameOver = false;
     this.sectionCap = 99;
     this.sectionTransition = false;
@@ -5657,6 +5806,10 @@ class GameScene extends Phaser.Scene {
     this.lastClearType = null;
     this.gradeHistory = [];
     this.sectionTimes = {};
+    this.sectionStartTime = 0;
+    this.currentSection = Math.floor(this.level / 100);
+    this.sectionTetrises = {};
+    this.currentSectionTetrisCount = 0;
 
     // Reset piece active time tracking
     this.pieceActiveTime = 0;
@@ -5697,6 +5850,9 @@ class GameScene extends Phaser.Scene {
     this.minoFadeActive = false;
     this.fadingComplete = false;
     this.showGameOverText = false;
+
+    this.invisibleStackActive = false;
+    this.fadingRollActive = false;
 
     // Reset loading phases
     this.loadingPhase = true;
@@ -6359,8 +6515,6 @@ class GameScene extends Phaser.Scene {
     // Update grade display only for modes that use grading
     if (hasGrading) {
       this.gradeText.setText(this.grade);
-      // Update next grade requirement
-      this.updateNextGradeText();
     }
 
     // Update piece per second displays

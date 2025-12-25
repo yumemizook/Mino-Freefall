@@ -32,6 +32,7 @@ class TGM2MasterMode extends BaseMode {
         
         // TGM2 grade display
         this.displayedGrade = '9';
+        this.lastDisplayedGrade = '9';
         
         // TGM2 scoring
         this.tgm2Score = 0;
@@ -49,15 +50,29 @@ class TGM2MasterMode extends BaseMode {
         this.currentTimingPhase = 1; // 1-6 phases based on level
         this.timingPhases = [
             { minLevel: 0, maxLevel: 499, are: 27/60, lineAre: 27/60, das: 16/60, arr: 1/60, lock: 30/60, lineClear: 40/60 },
-            { minLevel: 500, maxLevel: 600, are: 27/60, lineAre: 27/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 25/60 },
-            { minLevel: 601, maxLevel: 700, are: 27/60, lineAre: 18/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 16/60 },
-            { minLevel: 701, maxLevel: 800, are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
-            { minLevel: 801, maxLevel: 900, are: 14/60, lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 30/60, lineClear: 6/60 },
-            { minLevel: 901, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 }
+            { minLevel: 500, maxLevel: 599, are: 27/60, lineAre: 27/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 25/60 },
+            { minLevel: 600, maxLevel: 699, are: 27/60, lineAre: 18/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 16/60 },
+            { minLevel: 700, maxLevel: 799, are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
+            { minLevel: 800, maxLevel: 899, are: 14/60, lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 30/60, lineClear: 6/60 },
+            { minLevel: 900, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 }
         ];
         
         // Initialize TGM2 grading system
         this.tgm2Grading = new TGM2GradingSystem();
+    }
+    
+    onCreditsStart(gameScene) {
+        this.fadingRollActive = true;
+        if (gameScene) {
+            gameScene.fadingRollActive = true;
+            gameScene.invisibleStackActive = false;
+        }
+
+        this.checkMRollConditions(gameScene);
+    }
+
+    getInternalGrade() {
+        return this.tgm2Grading ? this.tgm2Grading.internalGrade : 0;
     }
     
     // Get mode configuration
@@ -246,18 +261,20 @@ class TGM2MasterMode extends BaseMode {
             const isTetris = linesCleared === 4;
             
             // Award grade points
-            const gradePoints = this.tgm2Grading.awardPoints(linesCleared, comboSize, gameScene.level, isTetris);
-            
+            this.tgm2Grading.awardPoints(linesCleared, comboSize, gameScene.level, isTetris);
+
+            const newDisplayedGrade = this.tgm2Grading.getDisplayedGrade();
+            const displayedGradeChanged = newDisplayedGrade !== this.displayedGrade;
+
             // Update displayed grade
-            this.displayedGrade = this.tgm2Grading.getDisplayedGrade();
+            this.displayedGrade = newDisplayedGrade;
             
             // Update grade display in game
             if (gameScene.gradeText) {
                 gameScene.gradeText.setText(this.displayedGrade);
             }
             
-            // Trigger grade up animation if needed
-            if (this.tgm2Grading.getGradeUpAnimationState()) {
+            if (displayedGradeChanged) {
                 this.triggerGradeUpAnimation(gameScene);
             }
         }
@@ -346,27 +363,68 @@ class TGM2MasterMode extends BaseMode {
     checkCreditRoll(gameScene) {
         if (gameScene.level >= 999 && !this.creditsStarted) {
             this.creditsStarted = true;
-            
-            // Start credits
-            gameScene.startCredits();
-            
-            // Check for M-Roll unlock
-            this.checkMRollConditions(gameScene);
-            
-            console.log('TGM2 Master: Started credit roll with Fading Roll');
+
+            console.log('TGM2 Master: Credits started');
         }
     }
     
     // Check M-Roll unlock conditions
     checkMRollConditions(gameScene) {
-        // M-Roll unlocks at level 999 with certain time requirements
         const currentTime = gameScene.currentTime;
-        
-        // Simplified M-Roll unlock conditions (actual TGM2 has complex section-based requirements)
-        if (currentTime <= 525) { // 8:45.00
+        const sectionTimes = gameScene.sectionTimes || {};
+        const sectionTetrises = gameScene.sectionTetrises || {};
+
+        const globalTimeOk = currentTime <= 525;
+        const gradeOk = this.displayedGrade === 'S9';
+
+        const firstFiveSections = [0, 1, 2, 3, 4];
+        const firstFiveTimes = firstFiveSections
+            .map((s) => sectionTimes[s])
+            .filter((t) => typeof t === 'number');
+        const firstFiveComplete = firstFiveTimes.length === 5;
+        const averageFirstFive = firstFiveComplete
+            ? Math.floor(firstFiveTimes.reduce((a, b) => a + b, 0) / 5)
+            : null;
+
+        const section0to4Ok = firstFiveSections.every(
+            (s) => typeof sectionTimes[s] === 'number' && sectionTimes[s] <= 65,
+        );
+        const tetrises0to4Ok = firstFiveSections.every(
+            (s) => (sectionTetrises[s] || 0) >= 2,
+        );
+
+        const time500Ok =
+            typeof sectionTimes[5] === 'number' &&
+            averageFirstFive !== null &&
+            sectionTimes[5] <= averageFirstFive + 2;
+        const tetris500Ok = (sectionTetrises[5] || 0) >= 1;
+
+        const chainSections = [6, 7, 8];
+        const chainTimesOk = chainSections.every((s) => {
+            const prev = s - 1;
+            if (typeof sectionTimes[s] !== 'number' || typeof sectionTimes[prev] !== 'number') {
+                return false;
+            }
+            return sectionTimes[s] <= sectionTimes[prev] + 2;
+        });
+        const chainTetrisesOk = chainSections.every((s) => (sectionTetrises[s] || 0) >= 1);
+
+        const section900Ok =
+            typeof sectionTimes[9] === 'number' &&
+            typeof sectionTimes[8] === 'number' &&
+            sectionTimes[9] <= sectionTimes[8] + 2;
+
+        const sectionTimeOk =
+            section0to4Ok &&
+            time500Ok &&
+            chainTimesOk &&
+            section900Ok;
+        const sectionTetrisOk = tetrises0to4Ok && tetris500Ok && chainTetrisesOk;
+
+        if (globalTimeOk && gradeOk && sectionTimeOk && sectionTetrisOk) {
             this.mRollUnlocked = true;
             console.log('TGM2 Master: M-Roll unlocked!');
-            
+
             // Start M-Roll after a brief delay
             gameScene.time.delayedCall(3000, () => {
                 this.startMRoll(gameScene);
@@ -382,6 +440,13 @@ class TGM2MasterMode extends BaseMode {
         this.linesClearedInMRoll = 0;
         
         console.log('TGM2 Master: M-Roll started - pieces will be invisible');
+
+        if (gameScene) {
+            gameScene.invisibleStackActive = true;
+            gameScene.fadingRollActive = false;
+        }
+
+        this.fadingRollActive = false;
         
         // Set pieces to invisible in M-Roll
         // This would require integration with the piece rendering system

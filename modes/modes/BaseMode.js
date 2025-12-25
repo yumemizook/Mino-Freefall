@@ -19,7 +19,10 @@ class BaseMode {
             das: 16/60,      // Delayed Auto Shift (seconds)
             arr: 1/60,       // Auto Repeat Rate (seconds)
             are: 30/60,      // Appearance Delay (seconds)
+            lineAre: 30/60,  // Line ARE (seconds)
             lockDelay: 0.5,  // Lock Delay (seconds)
+            lineClearDelay: 41/60, // Line clear delay (seconds)
+
             nextPieces: 1,   // Number of next pieces to show
             holdEnabled: false,
             ghostEnabled: true,
@@ -49,7 +52,10 @@ class BaseMode {
             das: 16/60,
             arr: 1/60,
             are: 30/60,
+            lineAre: 30/60,
             lockDelay: 0.5,
+            lineClearDelay: 41/60,
+
             nextPieces: 1,
             holdEnabled: false,
             ghostEnabled: true,
@@ -135,12 +141,16 @@ class BaseMode {
         return this.getConfig().are;
     }
 
+    getLineARE() {
+        return this.getConfig().lineAre;
+    }
+
     getLockDelay() {
         return this.getConfig().lockDelay;
     }
 
-    getLineARE() {
-        return 41/60; // Default line clear ARE (41 frames for TGM)
+    getLineClearDelay() {
+        return this.getConfig().lineClearDelay;
     }
 
     getNextPiecesCount() {

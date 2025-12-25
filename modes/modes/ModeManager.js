@@ -247,16 +247,6 @@ class ModeManager {
                     }
                     break;
                     
-                case 'TGM2Mode':
-                    // Dynamically import or create TGM2Mode
-                    if (typeof TGM2Mode !== 'undefined') {
-                        modeInstance = new TGM2Mode();
-                    } else {
-                        console.warn('TGM2Mode not loaded, using BaseMode fallback');
-                        modeInstance = new BaseMode();
-                    }
-                    break;
-
                 case 'TGM2MasterMode':
                     if (typeof TGM2MasterMode !== 'undefined') {
                         modeInstance = new TGM2MasterMode();
