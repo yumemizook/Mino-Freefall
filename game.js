@@ -2090,11 +2090,10 @@ class AssetLoaderScene extends Phaser.Scene {
         this.load.audio('clear', 'sfx/clear.wav');
         this.load.audio('fall', 'sfx/fall.wav');
         this.load.audio('sectionchange', 'sfx/sectionchange.wav');
+
         this.load.audio('IRS', 'sfx/IRS.wav');
         this.load.audio('ground', 'sfx/ground.wav');
         this.load.audio('lock', 'sfx/lock.wav');
-
-        // Load tetromino sound effects
         this.load.audio('sound_s', 'sfx/s.wav');
         this.load.audio('sound_z', 'sfx/z.wav');
         this.load.audio('sound_t', 'sfx/t.wav');
@@ -2110,7 +2109,8 @@ class AssetLoaderScene extends Phaser.Scene {
             this.loadingText.destroy();
         }
 
-        this.scene.start('GameScene', {
+        // Proceed to loading/ready-go scene
+        this.scene.start('LoadingScreenScene', {
             mode: this.selectedMode,
             gameMode: this.gameMode
         });
@@ -2136,62 +2136,19 @@ class LoadingScreenScene extends Phaser.Scene {
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
 
-        // Add loading text
-        this.add.text(centerX, centerY, 'LOADING...', {
+        // Show loading text briefly, then proceed directly to GameScene
+        const loading = this.add.text(centerX, centerY, 'LOADING...', {
             fontSize: '48px',
             fill: '#ffffff',
             fontFamily: 'Courier New',
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        // Start the READY/GO sequence after 1 second
-        this.time.delayedCall(1000, () => {
-            this.showReadyGoSequence();
-        });
-    }
-
-    showReadyGoSequence() {
-        const centerX = this.cameras.main.width / 2;
-        const centerY = this.cameras.main.height / 2;
-
-        // Show READY text with sound
-        const readyText = this.add.text(centerX, centerY, 'READY', {
-            fontSize: '64px',
-            fill: '#ffff00',
-            fontFamily: 'Courier New',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-
-        // Play ready sound
-        const readySound = this.sound.add('ready', { volume: 0.7 });
-        readySound.play();
-
-        // Show GO text with sound after 1 second
-        this.time.delayedCall(1000, () => {
-            readyText.destroy();
-            
-            const goText = this.add.text(centerX, centerY, 'GO', {
-                fontSize: '64px',
-                fill: '#00ff00',
-                fontFamily: 'Courier New',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
-
-            // Play go sound
-            const goSound = this.sound.add('go', { volume: 0.7 });
-            goSound.play();
-
-            // Start game after 1 more second
-            this.time.delayedCall(1000, () => {
-                console.log('LoadingScreenScene: Starting GameScene with:', {
-                    mode: this.selectedMode,
-                    hasGameMode: !!this.gameMode
-                });
-
-                this.scene.start('GameScene', {
-                    mode: this.selectedMode,
-                    gameMode: this.gameMode  // Pass gameMode through!
-                });
+        this.time.delayedCall(300, () => {
+            if (loading) loading.destroy();
+            this.scene.start('GameScene', {
+                mode: this.selectedMode,
+                gameMode: this.gameMode
             });
         });
     }
@@ -2675,10 +2632,8 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Initialize game elements here
+        // Initialize game elements here (spawn deferred until after READY/GO)
         this.gameGroup = this.add.group();
-        this.generateNextPieces();
-        this.spawnPiece();
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys({
             space: Phaser.Input.Keyboard.KeyCodes.SPACE,
@@ -2718,7 +2673,7 @@ class GameScene extends Phaser.Scene {
         // UI - positioned relative to screen size
         this.setupUI();
 
-        // Initialize BGM system
+        // Initialize BGM system (playback deferred)
         this.initializeBGM();
 
         // Initialize game mode
@@ -2726,43 +2681,24 @@ class GameScene extends Phaser.Scene {
             this.gameMode.initializeForGameScene(this);
         }
 
-        // Start loading sequence
-        this.time.delayedCall(500, () => {
-            this.loadingPhase = false;
-            this.showReadyGo();
-        });
+        // Prepare next queue (but do not spawn yet)
+        if (this.nextPieces.length < 6) {
+            this.generateNextPieces();
+        }
+
+        // Show READY/GO; spawn will occur after GO
+        this.showReadyGo();
     }
     
     initializeBGM() {
-        // Initialize audio objects with error handling
+        // Initialize audio objects with error handling (no auto-play)
         try {
-            // Create audio objects with standard Phaser configuration
             this.stage1BGM = this.sound.add('stage1', { loop: true, volume: 0.5 });
             this.stage2BGM = this.sound.add('stage2', { loop: true, volume: 0.5 });
-
-            // Initialize TGM2 BGM objects
             this.tgm2_stage1 = this.sound.add('tgm2_stage1', { loop: false, volume: 0.5 });
             this.tgm2_stage2 = this.sound.add('tgm2_stage2', { loop: false, volume: 0.5 });
             this.tgm2_stage3 = this.sound.add('tgm2_stage3', { loop: false, volume: 0.5 });
             this.tgm2_stage4 = this.sound.add('tgm2_stage4', { loop: false, volume: 0.5 });
-
-            // Start with appropriate BGM based on mode
-            if (this.bgmEnabled) {
-                const isTGM2Mode = this.selectedMode && (
-                    this.selectedMode.startsWith('tgm2') ||
-                    this.selectedMode === 'tgm_plus'
-                );
-                const isTADeathMode = this.selectedMode === 'tadeath';
-
-                if (isTGM2Mode) {
-                    this.updateTGM2BGM();
-                } else if (isTADeathMode) {
-                    this.updateTADeathBGM();
-                } else {
-                    this.stage1BGM.play();
-                    this.currentBGM = this.stage1BGM;
-                }
-            }
         } catch (error) {
             console.warn('BGM initialization failed, disabling background music:', error);
             this.bgmEnabled = false;
@@ -2787,6 +2723,7 @@ class GameScene extends Phaser.Scene {
             fontFamily: 'Courier New',
             fontStyle: 'bold'
         }).setOrigin(0.5);
+        this.children.bringToTop(readyText);
         this.gameGroup.add(readyText);
 
         // Play ready sound
@@ -2803,6 +2740,7 @@ class GameScene extends Phaser.Scene {
                 fontFamily: 'Courier New',
                 fontStyle: 'bold'
             }).setOrigin(0.5);
+            this.children.bringToTop(goText);
             this.gameGroup.add(goText);
 
             // Play go sound
