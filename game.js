@@ -1973,13 +1973,13 @@ class MenuScene extends Phaser.Scene {
 
       const formatted = this.formatLeaderboardEntry(modeId, entry);
       const leftText = this.add
-        .text(this.leaderboardContainer.x - 80, y, formatted.left, {
+        .text(this.leaderboardContainer.x - 110, y, formatted.left, {
           fontSize: "24px",
           fill: "#ffff00",
           fontFamily: "Courier New",
           fontStyle: "bold",
         })
-        .setOrigin(1, 0.5);
+        .setOrigin(0, 0.5);
 
       // Stack secondary fields (middle/right) in one column
       const secondaryX = this.leaderboardContainer.x + 40;
@@ -2117,6 +2117,7 @@ class MenuScene extends Phaser.Scene {
       });
     const capped = deduped.slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
     localStorage.setItem(key, JSON.stringify(capped));
+    this.leaderboardSaved = true;
   }
 
   saveLeaderboardEntry(modeId, entry) {
@@ -2392,6 +2393,7 @@ class SettingsScene extends Phaser.Scene {
       rotateCW2: "Rotate CW (Alt)",
       rotateCCW: "Rotate CCW",
       rotateCCW2: "Rotate CCW (Alt)",
+      rotate180: "Rotate 180",
       hardDrop: "Hard Drop",
       hold: "Hold",
       pause: "Pause",
@@ -2890,12 +2892,13 @@ class SettingsScene extends Phaser.Scene {
       rotateCW: Phaser.Input.Keyboard.KeyCodes.K,
       rotateCW2: Phaser.Input.Keyboard.KeyCodes.UP,
       rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
-      rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L,
+      rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L, // return L to CCW alt
+      rotate180: Phaser.Input.Keyboard.KeyCodes.I, // separate 180 bind
       hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
       hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
       pause: Phaser.Input.Keyboard.KeyCodes.ESC,
-      menu: Phaser.Input.Keyboard.KeyCodes.M,
-      restart: Phaser.Input.Keyboard.KeyCodes.ENTER,
+      menu: Phaser.Input.Keyboard.KeyCodes.ESC, // Menu and Pause share key
+      restart: Phaser.Input.Keyboard.KeyCodes.R,
     };
 
     const stored = localStorage.getItem("keybinds");
@@ -3743,6 +3746,7 @@ class GameScene extends Phaser.Scene {
     this.kKeyPressed = false;
     this.spaceKeyPressed = false;
     this.lKeyPressed = false;
+    this.rotate180Pressed = false;
     this.xKeyPressed = false;
 
     // ARE (Appearance Delay) - will be set by mode
@@ -3799,10 +3803,16 @@ class GameScene extends Phaser.Scene {
     this.areTime = 0; // Time spent in ARE phases
     this.conventionalPPS = 0; // PPS including ARE time
     this.rawPPS = 0; // PPS excluding ARE time
+    this.maxPpsRecorded = 0;
+    this.worstChoke = 0; // Longest active time (frames) for a single piece
     this.ppsHistory = [];
     this.lastPpsRecordedPieceCount = 0;
     this.ppsGraphGraphics = null;
     this.ppsGraphArea = null;
+    this.ppsSummaryText = null;
+
+    // Leaderboard tracking
+    this.leaderboardSaved = false;
 
     // Finesse tracking (SRS only)
     this.finesseEnabled = false;
@@ -3902,7 +3912,8 @@ class GameScene extends Phaser.Scene {
     };
 
     // Rotation system selection
-    this.rotationSystem = localStorage.getItem("rotationSystem") || "SRS"; // 'SRS' or 'ARS'
+    this.rotationSystem =
+      localStorage.getItem("rotationSystem") || "SRS"; // 'SRS' or 'ARS'
     this.arsMoveResetEnabled =
       (localStorage.getItem("arsMoveReset") || "false") === "true";
     this.rotationSystemDisplay = null;
@@ -4052,41 +4063,6 @@ class GameScene extends Phaser.Scene {
 
   isPuzzleMode(modeId) {
     return modeId === "tgm3_sakura";
-  }
-
-  getLeaderboard(modeId) {
-    const key = `leaderboard_${modeId}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {
-        console.warn("Failed to parse leaderboard", modeId, e);
-      }
-    }
-
-    // Fallback: migrate legacy single best score if present
-    const legacyKey = `bestScore_${modeId}`;
-    const legacyStored = localStorage.getItem(legacyKey);
-    if (legacyStored && this.getBestScore) {
-      const legacy = this.getBestScore(modeId);
-      const migrated = [legacy];
-      localStorage.setItem(key, JSON.stringify(migrated));
-      return migrated;
-    }
-    return [];
-  }
-
-  saveLeaderboardEntry(modeId, entry) {
-    const key = `leaderboard_${modeId}`;
-    const list = this.getLeaderboard(modeId);
-    list.push(entry);
-    const sorted = list
-      .filter(Boolean)
-      .sort((a, b) => this.compareEntries(modeId, a, b))
-      .slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
-    localStorage.setItem(key, JSON.stringify(sorted));
   }
 
   getGradeValue(grade) {
@@ -4265,6 +4241,20 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Rotation system + ARS reset behavior
+    const storedRotation = localStorage.getItem("rotationSystem") || "SRS";
+    const configRotation = config.rotationSystem || null;
+    this.rotationSystem = configRotation || storedRotation;
+
+    const storedArsMoveReset =
+      (localStorage.getItem("arsMoveReset") || "false") === "true";
+    const configArsMoveReset =
+      config.specialMechanics && typeof config.specialMechanics.arsMoveResetEnabled === "boolean"
+        ? config.specialMechanics.arsMoveResetEnabled
+        : null;
+    this.arsMoveResetEnabled =
+      configArsMoveReset !== null ? configArsMoveReset : storedArsMoveReset;
+
     // Apply timing configurations - use mode methods if available for progressive timings
     this.dasDelay =
       this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
@@ -4310,6 +4300,166 @@ class GameScene extends Phaser.Scene {
       this.finesseLastAccuracy = 0;
     }
 
+  }
+
+  // Leaderboard helpers (GameScene)
+  isPuzzleMode(modeId) {
+    return modeId === "tgm3_sakura";
+  }
+
+  getGradeValue(grade) {
+    const gradeValues = {
+      9: 0,
+      8: 1,
+      7: 2,
+      6: 3,
+      5: 4,
+      4: 5,
+      3: 6,
+      2: 7,
+      1: 8,
+      S1: 9,
+      S2: 10,
+      S3: 11,
+      S4: 12,
+      S5: 13,
+      S6: 14,
+      S7: 15,
+      S8: 16,
+      S9: 17,
+      M: 18,
+      GM: 19,
+    };
+    return gradeValues[grade] || 0;
+  }
+
+  compareEntries(modeId, a, b) {
+    const getVal = (val) => (val === undefined || val === null ? 0 : val);
+    const parseNumTime = (t) => {
+      if (!t || typeof t !== "string") return Number.POSITIVE_INFINITY;
+      const parts = t.split(":");
+      if (parts.length !== 2) return Number.POSITIVE_INFINITY;
+      const [m, s] = parts;
+      const sec = parseFloat(s);
+      if (Number.isNaN(sec)) return Number.POSITIVE_INFINITY;
+      const minutes = parseInt(m, 10);
+      if (Number.isNaN(minutes)) return Number.POSITIVE_INFINITY;
+      return minutes * 60 + sec;
+    };
+
+    const byGrade = () =>
+      this.getGradeValue(getVal(b.grade)) - this.getGradeValue(getVal(a.grade));
+    const byDesc = (x, y) => getVal(y) - getVal(x);
+    const byAsc = (x, y) => getVal(x) - getVal(y);
+
+    switch (modeId) {
+      case "tgm2_normal": // Normal
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "easy_easy": // Easy
+        return (
+          byDesc(a.hanabi, b.hanabi) ||
+          byDesc(a.lines, b.lines) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "easy_hard": // Hard
+        return (
+          byDesc(a.hanabi, b.hanabi) ||
+          byDesc(a.lines, b.lines) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tgm2_master":
+      case "tgmplus":
+      case "tgm2_death":
+        return (
+          byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byGrade()
+        );
+      case "marathon":
+      case "ultra":
+      case "zen":
+      case "sprint_40":
+      case "sprint_100":
+        return (
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.lines, b.lines) ||
+          byDesc(a.score, b.score)
+        );
+      default:
+        // Generic: prefer score desc, time asc
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+    }
+  }
+
+  getLeaderboard(modeId) {
+    const key = `leaderboard_${modeId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.warn("Failed to parse leaderboard", modeId, e);
+      }
+    }
+
+    // Fallback: migrate legacy single best score if present
+    const legacyKey = `bestScore_${modeId}`;
+    const legacyStored = localStorage.getItem(legacyKey);
+    if (legacyStored && this.getBestScore) {
+      const legacy = this.getBestScore(modeId);
+      const migrated = [legacy];
+      localStorage.setItem(key, JSON.stringify(migrated));
+      return migrated;
+    }
+    return [];
+  }
+
+  saveLeaderboardEntryToModeId(modeId, entry) {
+    const key = `leaderboard_${modeId}`;
+    const list = this.getLeaderboard(modeId);
+    list.push(entry);
+    const deduped = [];
+    const seen = new Set();
+    list
+      .filter(Boolean)
+      .sort((a, b) => this.compareEntries(modeId, a, b))
+      .forEach((e) => {
+        const sig = JSON.stringify({
+          time: e.time,
+          score: e.score,
+          level: e.level,
+          grade: e.grade,
+          lines: e.lines,
+          pps: e.pps,
+        });
+        if (!seen.has(sig)) {
+          seen.add(sig);
+          deduped.push(e);
+        }
+      });
+    const capped = deduped.slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
+    localStorage.setItem(key, JSON.stringify(capped));
+    this.leaderboardSaved = true;
+  }
+
+  saveLeaderboardEntry(modeId, entry) {
+    this.saveLeaderboardEntryToModeId(modeId, entry);
+
+    const selectedModeId =
+      typeof this.selectedMode === "string" && this.selectedMode !== "Mode 1"
+        ? this.selectedMode
+        : null;
+
+    if (selectedModeId && selectedModeId !== modeId) {
+      this.saveLeaderboardEntryToModeId(selectedModeId, entry);
+    }
   }
 
   calculateLayout() {
@@ -4609,8 +4759,12 @@ class GameScene extends Phaser.Scene {
         this.sectionTrackerGroup.add(header);
 
         const graphWidth = 120;
-        const graphHeight = Math.max(140, Math.floor(this.cellSize * 6));
         const graphY = sectionRowHeight + 6;
+        const graphMargin = graphY; // keep bottom margin equal to top margin
+        const graphHeight = Math.max(
+          140,
+          this.scale.height - (trackerY + graphY + graphMargin),
+        );
         this.ppsGraphArea = {
           x: 0,
           y: graphY,
@@ -4619,6 +4773,21 @@ class GameScene extends Phaser.Scene {
         };
         this.ppsGraphGraphics = this.add.graphics();
         this.sectionTrackerGroup.add(this.ppsGraphGraphics);
+
+        // Summary text under graph
+        const summaryStyle = {
+          fontSize: `${uiFontSize - 6}px`,
+          fill: "#ccc",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        };
+        this.ppsSummaryText = this.add.text(
+          0,
+          graphY + graphHeight + 6,
+          "Max PPS: -- | Worst choke: --",
+          summaryStyle,
+        );
+        this.sectionTrackerGroup.add(this.ppsSummaryText);
 
         const yLabel = this.add.text(
           graphWidth + 6,
@@ -4971,6 +5140,7 @@ class GameScene extends Phaser.Scene {
       rotateCW2: makeKey(keybinds.rotateCW2),
       rotateCCW: makeKey(keybinds.rotateCCW),
       rotateCCW2: makeKey(keybinds.rotateCCW2),
+      rotate180: makeKey(keybinds.rotate180),
       hold: makeKey(keybinds.hold),
       pause: makeKey(keybinds.pause),
       menu: makeKey(keybinds.menu),
@@ -4987,6 +5157,7 @@ class GameScene extends Phaser.Scene {
       keybinds.rotateCW2,
       keybinds.rotateCCW,
       keybinds.rotateCCW2,
+      keybinds.rotate180,
       keybinds.hold,
       keybinds.pause,
       keybinds.menu,
@@ -5519,19 +5690,23 @@ class GameScene extends Phaser.Scene {
     const isDown = (key) => !!(key && key.isDown);
     const justDown = (key) => !!(key && Phaser.Input.Keyboard.JustDown(key));
 
-    const leftDown = isDown(this.cursors.left);
-    const rightDown = isDown(this.cursors.right);
-    const downDown = isDown(this.cursors.down);
-
     // Custom key bindings (safe for modes that don't define all keys)
     const zKeyDown = isDown(this.keys.left);
     const cKeyDown = isDown(this.keys.right);
     const sKeyDown = isDown(this.keys.softDrop);
     const xKeyDown = isDown(this.keys.hardDrop);
+    const rotate180Down = isDown(this.keys.rotate180);
     const kKeyDown = isDown(this.keys.rotateCW) || isDown(this.keys.rotateCW2);
     const spaceKeyDown =
       isDown(this.keys.rotateCCW) || isDown(this.keys.rotateCCW2);
     const lKeyDown = isDown(this.keys.rotateCCW2);
+
+    const leftDown = isDown(this.cursors.left);
+    const rightDown = isDown(this.cursors.right);
+    const downDown = isDown(this.cursors.down);
+    const leftPressed = leftDown || zKeyDown;
+    const rightPressed = rightDown || cKeyDown;
+    const bothPressed = leftPressed && rightPressed;
 
     // During top-out, ignore all movement/rotation. Only allow Start/Restart to return to menu.
     if (this.gameOver) {
@@ -5580,6 +5755,22 @@ class GameScene extends Phaser.Scene {
         this.kKeyPressed = false;
       }
 
+      // 180 rotation - immediate response
+      if (rotate180Down && !this.rotate180Pressed) {
+        this.rotate180Pressed = true;
+        if (this.currentPiece) {
+          const first = this.currentPiece.rotate(this.board, 1, this.rotationSystem);
+          const second = this.currentPiece.rotate(this.board, 1, this.rotationSystem);
+          if (first || second) {
+            this.resetLockDelay();
+          } else {
+            this.isGrounded = !this.currentPiece.canMoveDown(this.board);
+          }
+        }
+      } else if (!rotate180Down && this.rotate180Pressed) {
+        this.rotate180Pressed = false;
+      }
+
       // Space key for counter-clockwise rotation - immediate response
       if (spaceKeyDown && !this.spaceKeyPressed) {
         this.spaceKeyPressed = true;
@@ -5625,7 +5816,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // Track key states for DAS using custom keys (z for left, c for right)
-      if ((leftDown || zKeyDown) && !this.leftKeyPressed) {
+      if (leftPressed && !bothPressed && !this.leftKeyPressed) {
         this.leftKeyPressed = true;
         this.leftTimer = 0;
         this.leftInRepeat = false;
@@ -5635,7 +5826,7 @@ class GameScene extends Phaser.Scene {
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
-      if ((rightDown || cKeyDown) && !this.rightKeyPressed) {
+      if (rightPressed && !bothPressed && !this.rightKeyPressed) {
         this.rightKeyPressed = true;
         this.rightTimer = 0;
         this.rightInRepeat = false;
@@ -5738,7 +5929,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Handle DAS for left key (cursors.left or z key)
-    if (this.leftKeyPressed && (leftDown || zKeyDown)) {
+    if (this.leftKeyPressed && leftPressed && !bothPressed) {
       this.leftTimer += this.deltaTime;
       if (!this.leftInRepeat) {
         // Wait for DAS delay
@@ -5773,7 +5964,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Handle DAS for right key (cursors.right or c key)
-    if (this.rightKeyPressed && (rightDown || cKeyDown)) {
+    if (this.rightKeyPressed && rightPressed && !bothPressed) {
       this.rightTimer += this.deltaTime;
       if (!this.rightInRepeat) {
         // Wait for DAS delay
@@ -5808,15 +5999,18 @@ class GameScene extends Phaser.Scene {
     }
 
     // Key release handling
-    if (!leftDown && !zKeyDown && this.leftKeyPressed) {
+    if (!leftPressed && this.leftKeyPressed) {
       this.leftKeyPressed = false;
       this.leftTimer = 0;
       this.leftInRepeat = false;
     }
-    if (!rightDown && !cKeyDown && this.rightKeyPressed) {
+    if (!rightPressed && this.rightKeyPressed) {
       this.rightKeyPressed = false;
       this.rightTimer = 0;
       this.rightInRepeat = false;
+    }
+    if (!rotate180Down && this.rotate180Pressed) {
+      this.rotate180Pressed = false;
     }
 
     // ARE input tracking - allow during loading for initial piece handling
@@ -6478,6 +6672,8 @@ class GameScene extends Phaser.Scene {
 
     // Track pieces placed for PPS calculation
     this.totalPiecesPlaced++;
+    // Track worst choke (longest active time)
+    this.worstChoke = Math.max(this.worstChoke, this.pieceActiveTime || 0);
 
     // Start lock flash effect
     this.startLockFlash();
@@ -6778,6 +6974,9 @@ class GameScene extends Phaser.Scene {
     this.rawPPS =
       this.activeTime > 0 ? this.totalPiecesPlaced / this.activeTime : 0;
 
+    // Track peak PPS
+    this.maxPpsRecorded = Math.max(this.maxPpsRecorded, this.conventionalPPS);
+
     // Track PPS history per placed piece for sprint graph
     if (this.totalPiecesPlaced > this.lastPpsRecordedPieceCount) {
       this.ppsHistory.push(this.conventionalPPS);
@@ -6804,21 +7003,34 @@ class GameScene extends Phaser.Scene {
     g.strokeRect(x - 1, y - 1, width + 2, height + 2);
 
     if (!history.length) {
+      if (this.ppsSummaryText) {
+        const chokeSec = (this.worstChoke || 0) / 60;
+        this.ppsSummaryText.setText(
+          `Max PPS: ${this.maxPpsRecorded.toFixed(2)} | Worst choke: ${chokeSec.toFixed(2)}s`,
+        );
+      }
       return;
     }
 
-    const barWidth = Math.max(2, Math.floor(width / Math.min(history.length, 60)));
-    const maxBars = Math.max(1, Math.floor(width / barWidth));
+    const maxBars = Math.max(1, Math.min(history.length, 60));
+    const barHeight = height / maxBars;
     const visibleHistory = history.slice(-maxBars);
     const maxPps = Math.max(1.5, ...visibleHistory);
 
     visibleHistory.forEach((pps, idx) => {
-      const barHeight = Math.min(height, Math.max(1, (pps / maxPps) * height));
-      const barX = x + idx * barWidth;
-      const barY = y + height - barHeight;
+      const barLength = Math.min(width, Math.max(1, (pps / maxPps) * width));
+      const barX = x;
+      const barY = y + height - (idx + 1) * barHeight;
       g.fillStyle(0x00ffd0, 0.9);
-      g.fillRect(barX, barY, Math.max(1, barWidth - 1), barHeight);
+      g.fillRect(barX, barY, barLength, Math.max(1, barHeight - 1));
     });
+
+    if (this.ppsSummaryText) {
+      const chokeSec = (this.worstChoke || 0) / 60;
+      this.ppsSummaryText.setText(
+        `Max PPS: ${this.maxPpsRecorded.toFixed(2)} | Worst choke: ${chokeSec.toFixed(2)}s`,
+      );
+    }
   }
 
   updateScore(lines, pieceType = null, isTSpin = false) {
@@ -7459,7 +7671,15 @@ class GameScene extends Phaser.Scene {
     this.areTime = 0;
     this.conventionalPPS = 0;
     this.rawPPS = 0;
+    this.maxPpsRecorded = 0;
+    this.worstChoke = 0;
+    if (this.ppsSummaryText) {
+      this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
+    }
     this.finesseActiveForPiece = false;
+
+    // Reset leaderboard saved flag so new runs can submit once
+    this.leaderboardSaved = false;
 
     // Reset TGM1 randomizer
     this.pieceHistory = ["Z", "Z", "S", "S"]; // Reset to initial state
@@ -7477,6 +7697,7 @@ class GameScene extends Phaser.Scene {
     this.kKeyPressed = false;
     this.spaceKeyPressed = false;
     this.lKeyPressed = false;
+    this.rotate180Pressed = false;
     this.xKeyPressed = false;
 
     // Reset mino fading system
@@ -7777,6 +7998,7 @@ class GameScene extends Phaser.Scene {
   }
 
   saveBestScore() {
+    if (this.leaderboardSaved) return;
     if (!this.selectedMode) return;
     if (typeof this.saveLeaderboardEntry !== "function") return;
     // Fallback generic entry; mode-specific handlers should prefer saveLeaderboardEntry directly.

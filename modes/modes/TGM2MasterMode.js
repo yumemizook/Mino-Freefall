@@ -121,12 +121,13 @@ class TGM2MasterMode extends BaseMode {
         return this.modeId;
     }
     
-    // Handle level progression with Master rules (lines only; 998 -> 999 requires a line clear)
+    // Handle level progression with Master rules (piece spawn except first piece; 998 -> 999 requires a line clear)
     onLevelUpdate(level, oldLevel, updateType, amount) {
-        // Do NOT advance on piece locks
         if (updateType === 'piece') {
-            this.updateTimingPhase(level);
-            return level;
+            // Advance on piece spawn (except first piece handled by caller), but stop at 998 to require line clear for 999
+            const nextLevel = Math.min(level + 1, 998);
+            this.updateTimingPhase(nextLevel);
+            return nextLevel;
         }
 
         if (updateType === 'lines') {

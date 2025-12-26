@@ -163,29 +163,32 @@ class TGM2NormalMode extends BaseMode {
     
     // Handle level progression and item block spawning
     onLevelUpdate(level, oldLevel, updateType, amount) {
-        // Normal mode: only stop at 299 (cap 300). +1 per piece, +1 per cleared line (up to 4).
+        // Normal mode: only stop at 299 (cap 300). +1 per piece spawn (except first piece handled by caller),
+        // +1 per cleared line (up to 4).
         const atStopLevel = level === 299 || level >= 300;
+        let newLevel = level;
 
-        // Do NOT advance on piece locks; only advance on line clears
         if (updateType === 'piece') {
-            return level;
+            if (!atStopLevel) {
+                newLevel = Math.min(level + 1, 300);
+            }
         } else if (updateType === 'lines') {
-            const lineIncrement = Math.min(amount || 0, 4);
-            return Math.min(level + lineIncrement, 300);
+            const lineIncrement = Math.min(Math.max(amount || 0, 0), 4);
+            newLevel = Math.min(level + lineIncrement, 300);
         }
 
         // Check for item block spawning
-        if (!this.itemBlockSpawned.free_fall && level >= 100) {
+        if (!this.itemBlockSpawned.free_fall && newLevel >= 100) {
             this.queueItemBlock('free_fall');
             this.itemBlockSpawned.free_fall = true;
         }
 
-        if (!this.itemBlockSpawned.del_even && level >= 200) {
+        if (!this.itemBlockSpawned.del_even && newLevel >= 200) {
             this.queueItemBlock('del_even');
             this.itemBlockSpawned.del_even = true;
         }
 
-        return level;
+        return newLevel;
     }
     
     // Queue item block for spawning
