@@ -54,8 +54,7 @@ class TADeathMode extends BaseMode {
         this.startedAtLevel500 = false;
         this.hasReachedMGrade = false;
         this.isDeathComplete = false;
-        
-        console.log('T.A. Death Mode initialized with extreme 20G timing system');
+        this.isPerfectClear = false; // New state added
     }
     
     // Get mode configuration
@@ -179,8 +178,6 @@ class TADeathMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-        
-        console.log('T.A. Death Mode initialized with 20G gravity and 6 timing phases');
     }
     
     // Handle level progression

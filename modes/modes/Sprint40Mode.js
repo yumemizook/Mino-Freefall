@@ -62,7 +62,6 @@ class Sprint40Mode extends BaseMode {
 
     onLevelUpdate(level, oldLevel, updateType, amount) {
         if (updateType === 'lines') {
-            this.linesCleared += amount;
             // Level increases by number of lines cleared
             return oldLevel + amount;
         }
@@ -70,11 +69,17 @@ class Sprint40Mode extends BaseMode {
     }
 
     handleLineClear(gameScene, linesCleared, pieceType) {
-        this.linesCleared += linesCleared;
+        this.linesCleared = Math.min(
+            this.targetLines,
+            this.linesCleared + linesCleared,
+        );
 
         // Record finish time on first completion
         if (this.linesCleared >= this.targetLines && !this.finishTime) {
             this.finishTime = gameScene.currentTime;
+            if (gameScene) {
+                gameScene.sprintCompleted = true;
+            }
             gameScene.showGameOverScreen();
         }
     }

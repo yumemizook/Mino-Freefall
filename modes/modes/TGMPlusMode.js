@@ -44,7 +44,6 @@ class TGMPlusMode extends BaseMode {
         // Game progression
         this.excellentShown = false;
         
-        console.log('TGM+ Mode initialized with rising garbage system');
     }
     
     // Get mode configuration
@@ -201,8 +200,6 @@ class TGMPlusMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-
-        console.log('TGM+ Mode initialized with rising garbage system');
     }
 
     // Handle level progression with section stops

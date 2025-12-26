@@ -225,30 +225,8 @@ class TGM2MasterMode extends BaseMode {
         // Initialize timing phase
         this.updateTimingPhase(gameScene.level);
         
-        console.log('TGM2 Master Mode initialized with progressive timing system');
-    }
-    
-    // Handle level progression with section stops
-    onLevelUpdate(level, oldLevel, updateType, amount) {
-        // Update timing phase
-        this.updateTimingPhase(level);
-
-        const atStopLevel = (level % 100 === 99) || level === 998 || level === 999;
-
-        if (updateType === 'piece') {
-            if (!atStopLevel && level < 999) {
-                return level + 1;
-            }
-            return level; // Stay at stop level
-        } else if (updateType === 'lines') {
-            const lineIncrement = Math.min(amount || 0, 4);
-            // 998->999 requires a line clear
-            if (oldLevel === 998 && lineIncrement > 0) {
-                return 999;
-            }
-            return Math.min(level + lineIncrement, 999);
-        }
-        return level;
+        // Initialize M-Roll conditions
+        this.checkMRollConditions(gameScene);
     }
     
     // Handle line clear with TGM2 grading

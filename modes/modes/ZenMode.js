@@ -17,7 +17,7 @@ class ZenMode extends BaseMode {
         return {
             gravity: {
                 type: 'static',
-                value: 5120 // 20G for fast but manageable play
+                value: 4 // 20G for fast but manageable play
             },
             das: 9/60,      // 9 frames
             arr: 1/60,       // 1 frame

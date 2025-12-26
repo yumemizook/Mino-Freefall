@@ -159,8 +159,6 @@ class TGM2NormalMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-
-        console.log('TGM2 Normal Mode initialized with item block system');
     }
     
     // Handle level progression and item block spawning

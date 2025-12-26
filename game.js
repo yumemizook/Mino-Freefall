@@ -178,6 +178,325 @@ const SEGA_ROTATIONS = {
   },
 };
 
+// Simple snapshot test for kick tables (SRS and ARS) to help verify tables in other environments.
+function runKickTableSnapshotTest() {
+  const expect = {
+    SRS_JLSTZ_CW: [
+      [
+        [0, 0],
+        [-1, 0],
+        [-1, 1],
+        [0, -2],
+        [-1, -2],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, -1],
+        [0, 2],
+        [1, 2],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, -2],
+        [1, -2],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [-1, -1],
+        [0, 2],
+        [-1, 2],
+      ],
+    ],
+    SRS_JLSTZ_CCW: [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, -2],
+        [1, -2],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [1, -1],
+        [0, 2],
+        [1, 2],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [-1, 1],
+        [0, -2],
+        [-1, -2],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [-1, -1],
+        [0, 2],
+        [-1, 2],
+      ],
+    ],
+    SRS_I_CW: [
+      [
+        [0, 0],
+        [-2, 0],
+        [1, 0],
+        [-2, 1],
+        [1, -2],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [2, 0],
+        [-1, -2],
+        [2, 1],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [-1, 0],
+        [2, -1],
+        [-1, 2],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [-2, 0],
+        [1, 2],
+        [-2, -1],
+      ],
+    ],
+    SRS_I_CCW: [
+      [
+        [0, 0],
+        [-1, 0],
+        [2, 0],
+        [-1, -2],
+        [2, 1],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [-1, 0],
+        [2, -1],
+        [-1, 2],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [-2, 0],
+        [1, 2],
+        [-2, -1],
+      ],
+      [
+        [0, 0],
+        [-2, 0],
+        [1, 0],
+        [-2, 1],
+        [1, -2],
+      ],
+    ],
+    ARS_JLSTZ_CW: [
+      [
+        [0, 0],
+        [-1, 0],
+        [0, -1],
+        [-1, -1],
+        [0, 1],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [0, -1],
+        [1, -1],
+        [0, 1],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [0, 1],
+        [-1, 1],
+        [0, -1],
+      ],
+    ],
+    ARS_JLSTZ_CCW: [
+      [
+        [0, 0],
+        [1, 0],
+        [0, -1],
+        [1, -1],
+        [0, 1],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [0, 1],
+        [-1, 1],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [0, -1],
+        [-1, -1],
+        [0, 1],
+      ],
+    ],
+    ARS_I_CW: [
+      [
+        [0, 0],
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [-2, 0],
+        [1, 2],
+      ],
+      [
+        [0, 0],
+        [0, -1],
+        [0, 1],
+        [-1, 0],
+        [1, 0],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [0, 1],
+        [0, -1],
+        [1, 0],
+        [-1, 0],
+      ],
+    ],
+    ARS_I_CCW: [
+      [
+        [0, 0],
+        [1, 0],
+        [-1, 0],
+        [0, -1],
+        [2, 0],
+        [-1, 2],
+      ],
+      [
+        [0, 0],
+        [0, -1],
+        [0, 1],
+        [1, 0],
+        [-1, 0],
+      ],
+      [
+        [0, 0],
+        [-1, 0],
+        [1, 0],
+        [0, 1],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [0, 1],
+        [0, -1],
+        [-1, 0],
+        [1, 0],
+      ],
+    ],
+  };
+
+  const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const results = {
+    srsJLSTZCW: deepEqual(SRS_KICKS.JLSTZ_CW, expect.SRS_JLSTZ_CW),
+    srsJLSTZCCW: deepEqual(SRS_KICKS.JLSTZ_CCW, expect.SRS_JLSTZ_CCW),
+    srsICW: deepEqual(SRS_KICKS.I_CW, expect.SRS_I_CW),
+    srsICCW: deepEqual(SRS_KICKS.I_CCW, expect.SRS_I_CCW),
+    arsJLSTZCW: deepEqual(ARS_KICKS.JLSTZ_CW, expect.ARS_JLSTZ_CW),
+    arsJLSTZCCW: deepEqual(ARS_KICKS.JLSTZ_CCW, expect.ARS_JLSTZ_CCW),
+    arsICW: deepEqual(ARS_KICKS.I_CW, expect.ARS_I_CW),
+    arsICCW: deepEqual(ARS_KICKS.I_CCW, expect.ARS_I_CCW),
+  };
+
+  results.all = Object.values(results).every((v) => v === true);
+  return results;
+}
+
+if (typeof window !== "undefined") {
+  window.runKickTableSnapshotTest = runKickTableSnapshotTest;
+}
+
+function getSrsMinimalRotations(type, rotation) {
+  if (type === "O") return 0;
+  if (type === "I") {
+    return rotation === 1 || rotation === 3 ? 1 : 0;
+  }
+  if (type === "S" || type === "Z") {
+    const r = rotation % 2;
+    return r === 1 ? 1 : 0;
+  }
+  // J, L, T
+  if (rotation === 0) return 0;
+  if (rotation === 2) return 2;
+  return 1; // rotation 1 or 3
+}
+
+function getSrsMinimalMoves(type, rotation, leftCol) {
+  const table = SRS_FINESSE_TABLE[type];
+  if (!table) return null;
+  const rKey =
+    type === "S" || type === "Z" ? rotation % 2 : rotation % (table ? Object.keys(table).length : 4);
+  const arr = table[rKey];
+  if (!arr || leftCol < 0 || leftCol >= arr.length) return null;
+  return arr[leftCol];
+}
+
+function isFinesseEligibleMode(selectedMode) {
+  return selectedMode === "sprint_40" || selectedMode === "sprint_100" || selectedMode === "ultra";
+}
+
+function getLeftmostColumn(piece) {
+  let minCol = Infinity;
+  for (let r = 0; r < piece.shape.length; r++) {
+    for (let c = 0; c < piece.shape[r].length; c++) {
+      if (piece.shape[r][c]) {
+        const col = piece.x + c;
+        if (col < minCol) {
+          minCol = col;
+        }
+      }
+    }
+  }
+  return Number.isFinite(minCol) ? minCol : 0;
+}
+
+function computeFinesseActual(piece) {
+  if (!piece || !piece.finesseInputs) return { moves: 0, rotations: 0 };
+  return {
+    moves: piece.finesseInputs.moves || 0,
+    rotations: piece.finesseInputs.rotations || 0,
+  };
+}
+
 // ARS (Arika Rotation System) color scheme
 const ARS_COLORS = {
   I: 0xff0000, // red
@@ -367,220 +686,12 @@ const TETROMINOES = {
   },
 };
 
-const SRS_KICKS = {
-  JLSTZ_CW: [
-    [
-      [0, 0],
-      [-1, 0],
-      [-1, 1],
-      [0, -2],
-      [-1, -2],
-      [-2, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 0->1 extended
-    [
-      [0, 0],
-      [1, 0],
-      [1, -1],
-      [0, 2],
-      [1, 2],
-      [2, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 1->2 extended
-    [
-      [0, 0],
-      [1, 0],
-      [1, 1],
-      [0, -2],
-      [1, -2],
-      [2, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 2->3 extended
-    [
-      [0, 0],
-      [-1, 0],
-      [-1, -1],
-      [0, 2],
-      [-1, 2],
-      [-2, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 3->0 extended
-  ],
-  JLSTZ_CCW: [
-    [
-      [0, 0],
-      [1, 0],
-      [1, 1],
-      [0, -2],
-      [1, -2],
-      [2, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 0->3 extended
-    [
-      [0, 0],
-      [1, 0],
-      [1, -1],
-      [0, 2],
-      [1, 2],
-      [2, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 3->2 extended
-    [
-      [0, 0],
-      [-1, 0],
-      [-1, 1],
-      [0, -2],
-      [-1, -2],
-      [-2, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 2->1 extended
-    [
-      [0, 0],
-      [-1, 0],
-      [-1, -1],
-      [0, 2],
-      [-1, 2],
-      [-2, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-    ], // 1->0 extended
-  ],
-  I_CW: [
-    [
-      [0, 0],
-      [-2, 0],
-      [1, 0],
-      [-2, -1],
-      [1, 2],
-      [-1, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 0->1 extended
-    [
-      [0, 0],
-      [-1, 0],
-      [2, 0],
-      [-1, 2],
-      [2, -1],
-      [1, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 1->2 extended
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, 1],
-      [-1, -2],
-      [-2, 0],
-      [1, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 2->3 extended
-    [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, -2],
-      [-2, 1],
-      [0, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 3->0 extended
-  ],
-  I_CCW: [
-    [
-      [0, 0],
-      [-1, 0],
-      [2, 0],
-      [-1, 2],
-      [2, -1],
-      [1, 0],
-      [-2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 0->3 extended
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, 1],
-      [-1, -2],
-      [-2, 0],
-      [1, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 3->2 extended
-    [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, -2],
-      [-2, 1],
-      [0, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 2->1 extended
-    [
-      [0, 0],
-      [-2, 0],
-      [1, 0],
-      [-2, -1],
-      [1, 2],
-      [-1, 0],
-      [2, 0],
-      [0, 1],
-      [0, -1],
-      [0, -2],
-      [-1, -1],
-      [1, -1],
-    ], // 1->0 extended
-  ],
-};
+// OLD (commented out) extended kick tables used previously; retained for fallback/debugging.
+// const SRS_KICKS = { ...extended tables... };
+// const ARS_KICKS = { ...extended tables... };
 
-// ARS (Arika Rotation System) kick tables - Used in TGM series
-// More generous kicks than SRS, particularly for I-piece
-const ARS_KICKS = {
+// Official Guideline SRS kick tables (5 tests each). O-piece has no kicks.
+const SRS_KICKS = {
   JLSTZ_CW: [
     [
       [0, 0],
@@ -641,119 +752,235 @@ const ARS_KICKS = {
       [-1, 2],
     ], // 1->0
   ],
-  // ARS I-piece kicks are more generous than SRS
+  // TGM3 World (SRS) I-piece kicks
   I_CW: [
     [
       [0, 0],
       [-2, 0],
       [1, 0],
-      [-2, -1],
-      [1, 2],
-      [-1, 0],
-      [2, 0],
-    ], // 0->1 (extended)
-    [
-      [0, 0],
-      [-1, 0],
-      [2, 0],
-      [-1, 2],
-      [2, -1],
-      [1, 0],
-      [-2, 0],
-    ], // 1->2 (extended)
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, 1],
-      [-1, -2],
-      [-2, 0],
-      [1, 0],
-    ], // 2->3 (extended)
-    [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, -2],
       [-2, 1],
+      [1, -2],
+    ], // 0->1
+    [
+      [0, 0],
+      [-1, 0],
+      [2, 0],
+      [-1, -2],
+      [2, 1],
+    ], // 1->2
+    [
       [0, 0],
       [2, 0],
-    ], // 3->0 (extended)
+      [-1, 0],
+      [2, -1],
+      [-1, 2],
+    ], // 2->3
+    [
+      [0, 0],
+      [1, 0],
+      [-2, 0],
+      [1, 2],
+      [-2, -1],
+    ], // 3->0
   ],
   I_CCW: [
     [
       [0, 0],
       [-1, 0],
       [2, 0],
-      [-1, 2],
-      [2, -1],
-      [1, 0],
-      [-2, 0],
-    ], // 0->3 (extended)
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, 1],
       [-1, -2],
-      [-2, 0],
-      [1, 0],
-    ], // 3->2 (extended)
+      [2, 1],
+    ], // 0->3
     [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, -2],
-      [-2, 1],
       [0, 0],
       [2, 0],
-    ], // 2->1 (extended)
+      [-1, 0],
+      [2, -1],
+      [-1, 2],
+    ], // 3->2
     [
       [0, 0],
-      [-2, 0],
       [1, 0],
-      [-2, -1],
+      [-2, 0],
       [1, 2],
+      [-2, -1],
+    ], // 2->1
+    [
+      [0, 0],
+      [-2, 0],
+      [1, 0],
+      [-2, 1],
+      [1, -2],
+    ], // 1->0
+  ],
+};
+
+// Minimal-input SRS finesse tables (leftmost column reference, rotations count per final orientation)
+// Columns 0-9, rotation index per SRS (0=spawn/up for J/L/S/Z/T, 0=horizontal for I)
+const SRS_FINESSE_TABLE = {
+  O: {
+    0: [1, 1, 2, 1, 0, 1, 2, 1, 1, 1], // moves only, rotation=0 always
+  },
+  I: {
+    // Flat (spawn, rotation 0 or 2 equivalent)
+    0: [1, 1, 2, 1, 0, 1, 2, 1, 1, 1],
+    // Vertical (rotation 1 or 3 equivalent) includes one rotation
+    1: [2, 2, 2, 1, 1, 1, 2, 2, 2, 2], // minMoves (with DAS/taps) + 1 rotation counted separately
+    2: [1, 1, 2, 1, 0, 1, 2, 1, 1, 1],
+    3: [2, 2, 2, 1, 1, 1, 2, 2, 2, 2],
+  },
+  T: {
+    0: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    1: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+    2: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    3: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+  },
+  L: {
+    0: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    1: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+    2: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    3: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+  },
+  J: {
+    0: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    1: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+    2: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    3: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+  },
+  S: {
+    0: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    1: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+  },
+  Z: {
+    0: [2, 1, 1, 1, 0, 1, 1, 1, 2, 2],
+    1: [2, 1, 1, 1, 1, 1, 1, 1, 2, 2],
+  },
+};
+
+// ARS (Arika Rotation System) kick tables - TGM3 Classic (TGM2 + extra T and I floor kicks), with vertical I wall kicks.
+// O-piece has no kicks; JLSTZ share a single table per direction; I has its own.
+const ARS_KICKS = {
+  JLSTZ_CW: [
+    [
+      [0, 0],
       [-1, 0],
+      [0, -1],
+      [-1, -1],
+      [0, 1], // extra floor kick for TGM3 (T only benefits in practice)
+    ], // 0->1
+    [
+      [0, 0],
+      [1, 0],
+      [0, -1],
+      [1, -1],
+      [0, 1],
+    ], // 1->2
+    [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+      [0, -1],
+    ], // 2->3
+    [
+      [0, 0],
+      [-1, 0],
+      [0, 1],
+      [-1, 1],
+      [0, -1],
+    ], // 3->0
+  ],
+  JLSTZ_CCW: [
+    [
+      [0, 0],
+      [1, 0],
+      [0, -1],
+      [1, -1],
+      [0, 1],
+    ], // 0->3
+    [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+      [0, -1],
+    ], // 3->2
+    [
+      [0, 0],
+      [-1, 0],
+      [0, 1],
+      [-1, 1],
+      [0, -1],
+    ], // 2->1
+    [
+      [0, 0],
+      [-1, 0],
+      [0, -1],
+      [-1, -1],
+      [0, 1],
+    ], // 1->0
+  ],
+  I_CW: [
+    [
+      [0, 0],
+      [-1, 0], // vertical wall kick left
+      [1, 0], // vertical wall kick right
+      [0, -1], // floor kick (TGM3)
+      [-2, 0], // legacy ARS side kick
+      [1, 2], // legacy ARS upward/right
+    ], // 0->1 (horizontal->vertical)
+    [
+      [0, 0],
+      [0, -1], // floor kick
+      [0, 1], // soft floor
+      [-1, 0],
+      [1, 0],
+    ], // 1->2 (vertical->horizontal)
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ], // 2->3 (horizontal->vertical)
+    [
+      [0, 0],
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+    ], // 3->0 (vertical->horizontal)
+  ],
+  I_CCW: [
+    [
+      [0, 0],
+      [1, 0], // vertical wall kick right
+      [-1, 0], // vertical wall kick left
+      [0, -1], // floor kick
       [2, 0],
-    ], // 1->0 (extended)
-  ],
-  // Additional ARS-specific kicks for special cases
-  JLSTZ_180: [
+      [-1, 2],
+    ], // 0->3 (horizontal->vertical)
     [
       [0, 0],
       [0, -1],
       [0, 1],
-      [0, -2],
-      [0, 2],
-    ], // 180-degree rotation for JLSTZ
-    [
-      [0, 0],
-      [0, -1],
-      [0, 1],
-      [0, -2],
-      [0, 2],
-    ],
-  ],
-  I_180: [
+      [1, 0],
+      [-1, 0],
+    ], // 3->2
     [
       [0, 0],
       [-1, 0],
       [1, 0],
-      [-1, -1],
-      [1, 1],
-      [-1, 1],
-      [1, -1],
-    ], // I-piece 180-degree rotation
+      [0, 1],
+      [0, -1],
+    ], // 2->1
     [
       [0, 0],
-      [0, -1],
       [0, 1],
-      [-1, -1],
-      [-1, 1],
-      [1, -1],
-      [1, 1],
-    ],
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+    ], // 1->0
   ],
 };
 
@@ -901,6 +1128,11 @@ class Piece {
     this.y = 1; // Spawn at rows 18-19 from bottom (equivalent to rows 1-2 from top) - will be overridden in spawnPiece
     this.fractionalY = 0; // For fractional gravity movement
     this.rotation = initialRotation;
+    // Finesse tracking (per piece)
+    this.finesseInputs = {
+      moves: 0, // horizontal moves (DAS start counts as 1, each tap as 1)
+      rotations: 0, // rotation key presses
+    };
   }
 
   getRotatedShape() {
@@ -933,7 +1165,7 @@ class Piece {
 
   rotateARS(board, direction, newRotation, newShape) {
     if (this.type === "I") {
-      // I-piece uses special ARS kick table with wall and floor kicks
+      // I-piece uses special ARS kick table with wall and floor kicks (TGM3 Classic)
       const isCW = direction === 1;
       const kickTable = isCW ? ARS_KICKS.I_CW : ARS_KICKS.I_CCW;
       const kickTableIndex = this.rotation;
@@ -950,16 +1182,20 @@ class Piece {
           return true;
         }
       }
+    } else if (this.type === "O") {
+      // O-piece: no kicks in ARS
+      if (board.isValidPosition({ shape: newShape }, this.x, this.y)) {
+        this.shape = newShape.map((row) => [...row]);
+        this.rotation = newRotation;
+        return true;
+      }
     } else {
-      // Other pieces use simple wall kicks: basic, right, left
-      const kicks = [
-        [0, 0],
-        [1, 0],
-        [-1, 0],
-      ]; // Basic, right, left
-
-      for (let i = 0; i < kicks.length; i++) {
-        const kick = kicks[i];
+      // JLSTZ use ARS kick tables (TGM3 Classic ordering)
+      const isCW = direction === 1;
+      const kickTable = isCW ? ARS_KICKS.JLSTZ_CW : ARS_KICKS.JLSTZ_CCW;
+      const table = kickTable[this.rotation];
+      for (let i = 0; i < table.length; i++) {
+        const kick = table[i];
         const newX = this.x + kick[0];
         const newY = this.y + kick[1];
         if (board.isValidPosition({ shape: newShape }, newX, newY)) {
@@ -978,9 +1214,17 @@ class Piece {
   rotateSRS(board, direction, newRotation, newShape) {
     const isCW = direction === 1;
 
-    // Select kick tables based on rotation system and piece type
-    let kicks;
-    kicks =
+    // Select kick tables based on piece type; O-piece has no kicks
+    if (this.type === "O") {
+      if (board.isValidPosition({ shape: newShape }, this.x, this.y)) {
+        this.shape = newShape.map((row) => [...row]);
+        this.rotation = newRotation;
+        return true;
+      }
+      return false;
+    }
+
+    const kicks =
       this.type === "I"
         ? isCW
           ? SRS_KICKS.I_CW
@@ -1390,11 +1634,23 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // Best scores leaderboard (right side)
-    this.leaderboardContainer = this.add.container(centerX + 220, centerY - 40);
+    const leaderboardBaseX = centerX + 270;
+    const leaderboardBaseY = centerY - 80;
+    const leaderboardOffsetX = 30;
+    const leaderboardOffsetY = 100;
+    const leaderboardTitleExtraY = -100;
+    this.leaderboardContainer = this.add.container(
+      leaderboardBaseX + leaderboardOffsetX,
+      leaderboardBaseY + leaderboardOffsetY,
+    );
 
-    // Leaderboard title - create as separate text object
+    // Leaderboard title - anchored relative to the container, pushed further down
     this.leaderboardTitle = this.add
-      .text(centerX + 220, centerY - 80, "BEST SCORES", {
+      .text(
+        leaderboardBaseX + leaderboardOffsetX,
+        leaderboardBaseY + leaderboardOffsetY + leaderboardTitleExtraY,
+        "BEST SCORES",
+      {
         fontSize: "20px",
         fill: "#ffffff",
         fontFamily: "Courier New",
@@ -1509,12 +1765,24 @@ class MenuScene extends Phaser.Scene {
       this.modeTypeListContainer.setPosition(centerX - 350, centerY - 50);
     }
 
-    // Update leaderboard container (right side)
+    // Update leaderboard container (right side) - keep consistent with creation offsets
+    const leaderboardBaseX = centerX + 270;
+    const leaderboardBaseY = centerY - 80;
+    const leaderboardOffsetX = 30;
+    const leaderboardOffsetY = 100;
+    const leaderboardTitleOffsetX = 15;
+    const leaderboardTitleExtraY = -100;
     if (this.leaderboardContainer) {
-      this.leaderboardContainer.setPosition(centerX + 220, centerY - 50);
+      this.leaderboardContainer.setPosition(
+        leaderboardBaseX + leaderboardOffsetX,
+        leaderboardBaseY + leaderboardOffsetY,
+      );
     }
     if (this.leaderboardTitle) {
-      this.leaderboardTitle.setPosition(centerX + 220, centerY - 70);
+      this.leaderboardTitle.setPosition(
+        leaderboardBaseX + leaderboardTitleOffsetX,
+        leaderboardBaseY + leaderboardOffsetY + leaderboardTitleExtraY,
+      );
     }
 
     // Update start button (bottom center)
@@ -1655,7 +1923,7 @@ class MenuScene extends Phaser.Scene {
       const placeholders = {
         stage: entry.stage || "—",
         completion: entry.completionRate != null ? `${entry.completionRate}%` : "—",
-        time: entry.time || "0:00.00",
+        time: entry.time || "--:--.--",
       };
 
       const baseX = this.leaderboardContainer.x;
@@ -1696,8 +1964,9 @@ class MenuScene extends Phaser.Scene {
     const padded = [...leaderboard];
     while (padded.length < maxEntries) padded.push(null);
 
-    const rowHeight = 28;
-    const startY = this.leaderboardContainer.y - ((maxEntries - 1) * rowHeight) / 2;
+    const rowHeight = 48;
+    const startY =
+      this.leaderboardContainer.y - ((maxEntries - 1) * rowHeight) / 2 + 30;
 
     padded.slice(0, maxEntries).forEach((entry, index) => {
       const y = startY + index * rowHeight;
@@ -1712,23 +1981,25 @@ class MenuScene extends Phaser.Scene {
         })
         .setOrigin(1, 0.5);
 
+      // Stack secondary fields (middle/right) in one column
+      const secondaryX = this.leaderboardContainer.x + 40;
       const middleText = this.add
-        .text(this.leaderboardContainer.x - 10, y, formatted.middle, {
+        .text(secondaryX, y - rowHeight * 0.2, formatted.middle, {
           fontSize: "16px",
           fill: "#00ffff",
           fontFamily: "Courier New",
           fontStyle: "bold",
         })
-        .setOrigin(1, 0.5);
+        .setOrigin(0.5, 0.5);
 
       const rightText = this.add
-        .text(this.leaderboardContainer.x + 70, y, formatted.right, {
+        .text(secondaryX, y + rowHeight * 0.2, formatted.right, {
           fontSize: "16px",
           fill: "#cccccc",
           fontFamily: "Courier New",
           fontStyle: "bold",
         })
-        .setOrigin(1, 0.5);
+        .setOrigin(0.5, 0.5);
 
       this.leaderboardEntries.push({ leftText, middleText, rightText });
     });
@@ -1821,15 +2092,44 @@ class MenuScene extends Phaser.Scene {
     return [];
   }
 
-  saveLeaderboardEntry(modeId, entry) {
+  saveLeaderboardEntryToModeId(modeId, entry) {
     const key = `leaderboard_${modeId}`;
     const list = this.getLeaderboard(modeId);
     list.push(entry);
-    const sorted = list
+    const deduped = [];
+    const seen = new Set();
+    list
       .filter(Boolean)
       .sort((a, b) => this.compareEntries(modeId, a, b))
-      .slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
-    localStorage.setItem(key, JSON.stringify(sorted));
+      .forEach((e) => {
+        const sig = JSON.stringify({
+          time: e.time,
+          score: e.score,
+          level: e.level,
+          grade: e.grade,
+          lines: e.lines,
+          pps: e.pps,
+        });
+        if (!seen.has(sig)) {
+          seen.add(sig);
+          deduped.push(e);
+        }
+      });
+    const capped = deduped.slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
+    localStorage.setItem(key, JSON.stringify(capped));
+  }
+
+  saveLeaderboardEntry(modeId, entry) {
+    this.saveLeaderboardEntryToModeId(modeId, entry);
+
+    const selectedModeId =
+      typeof this.selectedMode === "string" && this.selectedMode !== "Mode 1"
+        ? this.selectedMode
+        : null;
+
+    if (selectedModeId && selectedModeId !== modeId) {
+      this.saveLeaderboardEntryToModeId(selectedModeId, entry);
+    }
   }
 
   getGradeValue(grade) {
@@ -1951,7 +2251,7 @@ class MenuScene extends Phaser.Scene {
       return { left: "—", middle: "—", right: "—" };
     }
 
-    const fmtTime = (t) => t || "0:00.00";
+    const fmtTime = (t) => t || "--:--.--";
     const fmtNum = (n) => (n === undefined || n === null ? "—" : n.toString());
     const fmtPps = (n) =>
       n === undefined || n === null ? "—" : Number(n).toFixed(2);
@@ -2032,13 +2332,13 @@ class MenuScene extends Phaser.Scene {
           score: parsed.score || 0,
           level: parsed.level || 0,
           grade: parsed.grade || "9",
-          time: parsed.time || "0:00.00",
+          time: parsed.time || "--:--.--",
         };
       } catch (error) {
         console.warn(`Failed to parse stored score for mode ${mode}:`, error);
       }
     }
-    return { score: 0, level: 0, grade: "9", time: "0:00.00" };
+    return { score: 0, level: 0, grade: "9", time: "--:--.--" };
   }
 
   // Get difficulty color for a mode type
@@ -3224,10 +3524,7 @@ class AssetLoaderScene extends Phaser.Scene {
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null; // Store gameMode from data
 
-    console.log("AssetLoaderScene.init() - received:", {
-      mode: this.selectedMode,
-      hasGameMode: !!this.gameMode,
-    });
+
   }
 
   preload() {
@@ -3368,10 +3665,6 @@ class LoadingScreenScene extends Phaser.Scene {
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null; // Store gameMode from data
 
-    console.log("LoadingScreenScene.init() - received:", {
-      mode: this.selectedMode,
-      hasGameMode: !!this.gameMode,
-    });
   }
 
   create() {
@@ -3407,6 +3700,7 @@ class GameScene extends Phaser.Scene {
     this.canHold = true;
     this.nextPieces = []; // Initialize next pieces array
     this.gravityTimer = 0.0;
+    this.gravityAccum = 0.0;
     // lockDelay is a timer; lockDelayMax is the per-mode limit
     this.lockDelay = 0;
     this.lockDelayMax = 0.5;
@@ -3505,6 +3799,24 @@ class GameScene extends Phaser.Scene {
     this.areTime = 0; // Time spent in ARE phases
     this.conventionalPPS = 0; // PPS including ARE time
     this.rawPPS = 0; // PPS excluding ARE time
+    this.ppsHistory = [];
+    this.lastPpsRecordedPieceCount = 0;
+    this.ppsGraphGraphics = null;
+    this.ppsGraphArea = null;
+
+    // Finesse tracking (SRS only)
+    this.finesseEnabled = false;
+    this.finesseErrors = 0;
+    this.finessePieces = 0;
+    this.finesseStreak = 0;
+    this.finesseCurrentInputs = { moves: 0, rotations: 0 };
+    this.finesseTexts = {
+      header: null,
+      streakAcc: null,
+      errors: null,
+    };
+    this.finesseActiveForPiece = false;
+    this.finesseLastAccuracy = 0;
 
     // Sections and level caps
     this.sectionCap = 99; // Start at first section cap
@@ -3573,6 +3885,7 @@ class GameScene extends Phaser.Scene {
     this.minoRowFadeAlpha = {}; // Row -> alpha during fading
     this.gameOverFadeDoneTime = null;
     this.showGameOverText = false;
+    this.gameOverMessage = "GAME OVER";
 
     this.gameOverTextDelay = 3; // seconds until GAME OVER text appears
     this.gameOverTextTimer = 0;
@@ -3633,29 +3946,274 @@ class GameScene extends Phaser.Scene {
     return 0xffffff; // Default white
   }
 
-  init(data) {
-    console.log("GameScene.init() - received data:", {
-      mode: data.mode,
-      hasGameMode: !!data.gameMode,
-    });
+  formatTimeValue(seconds) {
+    if (seconds === null || seconds === undefined) return "--:--.--";
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const cs = Math.floor((seconds % 1) * 100);
+    return `${minutes}:${secs.toString().padStart(2, "0")}.${cs
+      .toString()
+      .padStart(2, "0")}`;
+  }
 
+  getSectionLength() {
+    return this.selectedMode === "marathon" ? 10 : 100;
+  }
+
+  getSectionBasisValue() {
+    return this.selectedMode === "marathon" ? this.totalLines : this.level;
+  }
+
+  // Finesse tracking helpers
+  incrementFinesseMove() {
+    if (
+      !this.finesseEnabled ||
+      !this.finesseActiveForPiece ||
+      !this.currentPiece ||
+      !this.currentPiece.finesseInputs
+    ) {
+      return;
+    }
+    this.currentPiece.finesseInputs.moves += 1;
+  }
+
+  incrementFinesseRotation() {
+    if (
+      !this.finesseEnabled ||
+      !this.finesseActiveForPiece ||
+      !this.currentPiece ||
+      !this.currentPiece.finesseInputs
+    ) {
+      return;
+    }
+    this.currentPiece.finesseInputs.rotations += 1;
+  }
+
+  resetFinessePieceInputs(piece) {
+    if (!piece || !this.finesseEnabled) return;
+    piece.finesseInputs = { moves: 0, rotations: 0 };
+    this.finesseActiveForPiece = true;
+  }
+
+  evaluateFinesseOnLock(piece) {
+    if (!this.finesseEnabled || !piece) return;
+    const leftCol = getLeftmostColumn(piece);
+    const minimalMoves = getSrsMinimalMoves(piece.type, piece.rotation, leftCol);
+    const minimalRotations = getSrsMinimalRotations(piece.type, piece.rotation);
+    if (minimalMoves === null || minimalRotations === null) {
+      return;
+    }
+    const actual = computeFinesseActual(piece);
+    const isError = actual.moves > minimalMoves || actual.rotations > minimalRotations;
+    this.finessePieces += 1;
+    if (isError) {
+      this.finesseErrors += 1;
+      this.finesseStreak = 0;
+    } else {
+      this.finesseStreak += 1;
+    }
+    const clean = Math.max(0, this.finessePieces - this.finesseErrors);
+    this.finesseLastAccuracy =
+      this.finessePieces > 0 ? (clean / this.finessePieces) * 100 : 100;
+    this.updateFinesseUI();
+  }
+
+  updateFinesseUI() {
+    const { header, streakAcc, errors } = this.finesseTexts;
+    const visible = this.finesseEnabled && header && streakAcc && errors;
+    if (!header || !streakAcc || !errors) return;
+    header.setVisible(visible);
+    streakAcc.setVisible(visible);
+    errors.setVisible(visible);
+    if (!visible) return;
+    const streakVal = this.finesseStreak;
+    const accVal =
+      this.finessePieces > 0
+        ? Math.max(0, Math.min(100, this.finesseLastAccuracy))
+        : 100;
+    const errorVal = this.finesseErrors;
+    streakAcc.setText(`${streakVal.toString()}   ${accVal.toFixed(1)}%`);
+    errors.setText(`${errorVal} errors`);
+  }
+
+  getMaxSectionsForTracker() {
+    if (this.selectedMode === "marathon") {
+      const targetLines =
+        this.gameMode && typeof this.gameMode.targetLines === "number"
+          ? this.gameMode.targetLines
+          : 999;
+      return Math.ceil(targetLines / this.getSectionLength());
+    }
+    return 10;
+  }
+
+  isPuzzleMode(modeId) {
+    return modeId === "tgm3_sakura";
+  }
+
+  getLeaderboard(modeId) {
+    const key = `leaderboard_${modeId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.warn("Failed to parse leaderboard", modeId, e);
+      }
+    }
+
+    // Fallback: migrate legacy single best score if present
+    const legacyKey = `bestScore_${modeId}`;
+    const legacyStored = localStorage.getItem(legacyKey);
+    if (legacyStored && this.getBestScore) {
+      const legacy = this.getBestScore(modeId);
+      const migrated = [legacy];
+      localStorage.setItem(key, JSON.stringify(migrated));
+      return migrated;
+    }
+    return [];
+  }
+
+  saveLeaderboardEntry(modeId, entry) {
+    const key = `leaderboard_${modeId}`;
+    const list = this.getLeaderboard(modeId);
+    list.push(entry);
+    const sorted = list
+      .filter(Boolean)
+      .sort((a, b) => this.compareEntries(modeId, a, b))
+      .slice(0, this.isPuzzleMode(modeId) ? 1 : 5);
+    localStorage.setItem(key, JSON.stringify(sorted));
+  }
+
+  getGradeValue(grade) {
+    const gradeValues = {
+      9: 0,
+      8: 1,
+      7: 2,
+      6: 3,
+      5: 4,
+      4: 5,
+      3: 6,
+      2: 7,
+      1: 8,
+      S1: 9,
+      S2: 10,
+      S3: 11,
+      S4: 12,
+      S5: 13,
+      S6: 14,
+      S7: 15,
+      S8: 16,
+      S9: 17,
+      M: 18,
+      GM: 19,
+    };
+    return gradeValues[grade] || 0;
+  }
+
+  compareEntries(modeId, a, b) {
+    const getVal = (val) => (val === undefined || val === null ? 0 : val);
+    const parseNumTime = (t) => {
+      if (!t || typeof t !== "string") return Number.POSITIVE_INFINITY;
+      const parts = t.split(":");
+      if (parts.length !== 2) return Number.POSITIVE_INFINITY;
+      const [m, s] = parts;
+      const sec = parseFloat(s);
+      if (Number.isNaN(sec)) return Number.POSITIVE_INFINITY;
+      const minutes = parseInt(m, 10);
+      if (Number.isNaN(minutes)) return Number.POSITIVE_INFINITY;
+      return minutes * 60 + sec;
+    };
+
+    const byGrade = () =>
+      this.getGradeValue(getVal(b.grade)) - this.getGradeValue(getVal(a.grade));
+    const byDesc = (x, y) => getVal(y) - getVal(x);
+    const byAsc = (x, y) => getVal(x) - getVal(y);
+
+    switch (modeId) {
+      case "tgm2_normal": // Normal
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "easy_easy": // Easy
+        return (
+          byDesc(a.hanabi, b.hanabi) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "sprint_40":
+      case "sprint_100": // Sprint
+        return (
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.score, b.score) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "ultra": // Ultra
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "marathon": // Marathon
+        return (
+          byDesc(a.lines, b.lines) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time)) ||
+          byDesc(a.pps, b.pps)
+        );
+      case "konoha_easy":
+      case "konoha_hard": // All Clear
+        return (
+          byDesc(a.allClears, b.allClears) ||
+          byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tgm1":
+      case "tgm2":
+      case "tgm_plus":
+      case "tgm3":
+      case "tgm4":
+      case "20g":
+      case "tadeath":
+      case "shirase":
+      case "master20g":
+      case "asuka_easy":
+      case "asuka_normal":
+      case "asuka_hard": // Master, 20G, Race
+        return (
+          byGrade() ||
+          byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tgm3_sakura": // Puzzle
+        return (
+          byDesc(a.stage, b.stage) ||
+          byDesc(a.completionRate, b.completionRate) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      default:
+        // Generic: prefer score desc, time asc
+        return (
+          byDesc(a.score, b.score) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+    }
+  }
+
+  init(data) {
+ 
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null;
 
-    console.log("GameScene.init() - after assignment:", {
-      selectedMode: this.selectedMode,
-      hasGameMode: !!this.gameMode,
-    });
+ 
 
     // Load mode if not provided
     if (!this.gameMode && typeof getModeManager !== "undefined") {
-      console.log("GameScene: Loading mode from ModeManager...");
       const modeManager = getModeManager();
       this.gameMode = modeManager.getMode(this.selectedMode);
-      console.log(
-        "GameScene: Loaded mode:",
-        this.gameMode ? this.gameMode.getName() : "null",
-      );
+    } else if (this.gameMode === null) {
+      const modeManager = getModeManager();
+      this.gameMode = modeManager.getMode(this.selectedMode);
     }
 
     // Fallback to default if no mode loaded
@@ -3730,37 +4288,25 @@ class GameScene extends Phaser.Scene {
     this.levelUpType = config.levelUpType || "piece";
     this.lineClearBonus = config.lineClearBonus || 1;
     this.gravityLevelCap = config.gravityLevelCap || 999;
+    this.nextPiecesCount = config.nextPieces || 1; // Number of next pieces to show
 
-    // Rotation system is handled by global settings, not mode configuration
-    // Get from localStorage (already set in constructor)
-    this.rotationSystem = localStorage.getItem("rotationSystem") || "SRS";
+    // Store modeId for easy reference
+    this.modeId = this.gameMode.modeId || null;
 
-    console.log(`Applied mode configuration for: ${this.gameMode.getName()}`);
-    console.log(`Config:`, config);
-    console.log(
-      `DAS: ${this.dasDelay}s, ARR: ${this.arrDelay}s, ARE: ${this.areDelay}s`,
-    );
-    console.log(
-      `Lock Delay: ${this.lockDelayMax}s, Next Pieces: ${this.nextPiecesCount}`,
-    );
-    console.log(
-      `Hold Enabled: ${this.holdEnabled}, Ghost Enabled: ${this.ghostEnabled}`,
-    );
-    console.log(
-      `Level Up Type: ${this.levelUpType}, Line Clear Bonus: ${this.lineClearBonus}`,
-    );
-    console.log(`Gravity Level Cap: ${this.gravityLevelCap}`);
-    console.log(`Rotation System: ${this.rotationSystem} (from settings)`);
-
-    if (this.gameMode.getName && this.gameMode.getName() === 'Sprint') {
-      console.log('Sprint mode timings debug', {
-        das: this.dasDelay,
-        arr: this.arrDelay,
-        are: this.areDelay,
-        lineARE: this.lineAREDelay,
-        lineClearDelay: this.lineClearDelayDuration,
-      });
+    // Enable finesse tracking only for SRS and sprint/ultra modes
+    const isSprintMode =
+      this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100";
+    const isUltraMode = this.selectedMode === "ultra";
+    this.finesseEnabled = this.rotationSystem === "SRS" && (isSprintMode || isUltraMode);
+    if (!this.finesseEnabled) {
+      this.finesseErrors = 0;
+      this.finessePieces = 0;
+      this.finesseStreak = 0;
+      this.finesseCurrentInputs = { moves: 0, rotations: 0 };
+      this.finesseActiveForPiece = false;
+      this.finesseLastAccuracy = 0;
     }
+
   }
 
   calculateLayout() {
@@ -3787,7 +4333,7 @@ class GameScene extends Phaser.Scene {
       Math.floor((windowHeight - this.playfieldHeight) / 2) - 30; // Adjusted for better centering
 
     // Move the matrix to the right within the border
-    this.matrixOffsetX = this.borderOffsetX + 19; // Slightly smaller offset for better space usage
+    this.matrixOffsetX = this.borderOffsetX + 17; // Shifted 2px left to align with border
     this.matrixOffsetY = this.borderOffsetY + 20;
 
     // Store window dimensions for UI positioning
@@ -3930,7 +4476,7 @@ class GameScene extends Phaser.Scene {
     // For Marathon mode, add separate level display above
     if (isMarathonMode) {
       this.levelDisplayLabel = this.add
-        .text(uiX + 135, levelBottomY - 4.5 * levelRowHeight - 43, "LEVEL", {
+        .text(uiX + 135, levelBottomY - 4.5 * levelRowHeight - 83, "LEVEL", {
           fontSize: `${uiFontSize - 4}px`,
           fill: "#fff",
           fontFamily: "Courier New",
@@ -3938,7 +4484,7 @@ class GameScene extends Phaser.Scene {
         })
         .setOrigin(1, 0);
       this.levelDisplayText = this.add
-        .text(uiX + 140, levelBottomY - 4 * levelRowHeight - 43, "0", {
+        .text(uiX + 140, levelBottomY - 4 * levelRowHeight - 83, "1", {
           fontSize: `${levelFontSize}px`,
           fill: "#fff",
           fontFamily: "Courier New",
@@ -4023,6 +4569,185 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
+    const shouldShowSectionTracker = !(isUltraMode || isZenMode);
+    if (this.sectionTrackerGroup) {
+      this.sectionTrackerGroup.destroy(true);
+      this.sectionTrackerGroup = null;
+    }
+
+    if (!shouldShowSectionTracker) {
+      this.halfTimeTexts = null;
+      this.sectionSectionLabels = null;
+      this.sectionTimeTexts = null;
+      this.sectionTotalTexts = null;
+      this.sectionTallyTexts = null;
+    }
+
+    if (shouldShowSectionTracker) {
+      const trackerX = Math.max(20, this.borderOffsetX - 430);
+      const trackerWidth = 240;
+      const gradePanelLeftX = hasGrading ? uiX + 25 : uiX;
+      const shouldShiftTrackerDown = trackerX + trackerWidth >= gradePanelLeftX - 10;
+      const trackerY = shouldShiftTrackerDown
+        ? this.borderOffsetY + 170
+        : this.borderOffsetY - 10;
+      const sectionRowHeight = Math.max(16, Math.floor(this.cellSize * 0.6));
+      this.sectionTrackerGroup = this.add.container(trackerX, trackerY);
+
+      const isTgm2Normal = modeId === "tgm2_normal";
+
+      if (isSprintMode) {
+        const header = this.add.text(0, 0, "PPS GRAPH", {
+          fontSize: `${uiFontSize}px`,
+          fill: "#fff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        });
+        this.sectionTrackerGroup.add(header);
+
+        const graphWidth = 120;
+        const graphHeight = Math.max(140, Math.floor(this.cellSize * 6));
+        const graphY = sectionRowHeight + 6;
+        this.ppsGraphArea = {
+          x: 0,
+          y: graphY,
+          width: graphWidth,
+          height: graphHeight,
+        };
+        this.ppsGraphGraphics = this.add.graphics();
+        this.sectionTrackerGroup.add(this.ppsGraphGraphics);
+
+        const yLabel = this.add.text(
+          graphWidth + 6,
+          graphY - 6,
+          "PPS",
+          {
+            fontSize: `${uiFontSize - 6}px`,
+            fill: "#ccc",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          },
+        );
+        this.sectionTrackerGroup.add(yLabel);
+      } else {
+        const header = this.add.text(0, 0, "SECTIONS", {
+          fontSize: `${uiFontSize}px`,
+          fill: "#fff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        });
+        this.sectionTrackerGroup.add(header);
+
+        const sectionLabelFontSize = Math.max(10, uiFontSize - 6);
+        const sectionTimeFontSize = Math.max(12, uiFontSize - 4);
+        const rowLineHeight = Math.max(12, Math.floor(sectionLabelFontSize * 1.1));
+        const rowHeight = rowLineHeight +
+          Math.max(14, Math.floor(sectionTimeFontSize * 1.1));
+
+        this.halfTimeTexts = null;
+        let tableStartY = sectionRowHeight;
+        if (!isTgm2Normal && !isMarathonMode) {
+          const colWidth = 120;
+          const labelStyle = {
+            fontSize: `${sectionLabelFontSize}px`,
+            fill: "#ccc",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          };
+          const timeStyle = {
+            fontSize: `${sectionTimeFontSize}px`,
+            fill: "#fff",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          };
+
+          const half1Label = this.add.text(
+            0,
+            sectionRowHeight,
+            "1ST HALF",
+            labelStyle,
+          );
+          const half1Time = this.add.text(
+            0,
+            sectionRowHeight + rowLineHeight,
+            "--:--.--",
+            timeStyle,
+          );
+          const half2Label = this.add
+            .text(colWidth, sectionRowHeight, "2ND HALF", labelStyle)
+            .setVisible(false);
+          const half2Time = this.add
+            .text(colWidth, sectionRowHeight + rowLineHeight, "--:--.--", timeStyle)
+            .setVisible(false);
+
+          this.sectionTrackerGroup.add([half1Label, half1Time, half2Label, half2Time]);
+          this.halfTimeTexts = [
+            { label: half1Label, time: half1Time },
+            { label: half2Label, time: half2Time },
+          ];
+
+          tableStartY = sectionRowHeight + rowHeight + 6;
+        }
+
+        this.sectionSectionLabels = [];
+        this.sectionTimeTexts = [];
+        this.sectionTotalTexts = [];
+
+        this.sectionTallyTexts = [];
+        const sectionLength = this.getSectionLength();
+        const maxSections = this.getMaxSectionsForTracker();
+        for (let i = 0; i < maxSections; i++) {
+          const sectionStart = i * sectionLength;
+          const sectionEnd = sectionStart + sectionLength - 1;
+          const y = tableStartY + i * rowHeight;
+
+          const label = this.add.text(
+            0,
+            y,
+            `${sectionStart.toString().padStart(3, "0")}-${sectionEnd
+              .toString()
+              .padStart(3, "0")}`,
+            {
+              fontSize: `${sectionLabelFontSize}px`,
+              fill: "#ccc",
+              fontFamily: "Courier New",
+              fontStyle: "bold",
+            },
+          );
+          const timeText = this.add.text(0, y + rowLineHeight, "--:--.--", {
+            fontSize: `${sectionTimeFontSize}px`,
+            fill: "#fff",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          });
+
+          const tallyText = this.add.text(140, y, "", {
+            fontSize: `${sectionLabelFontSize}px`,
+            fill: "#fff",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          });
+          const totalText = this.add.text(140, y + rowLineHeight, "--:--.--", {
+            fontSize: `${sectionTimeFontSize}px`,
+            fill: "#fff",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+          });
+
+          label.setVisible(false);
+          timeText.setVisible(false);
+          tallyText.setVisible(false);
+          totalText.setVisible(false);
+
+          this.sectionTrackerGroup.add([label, timeText, tallyText, totalText]);
+          this.sectionSectionLabels.push(label);
+          this.sectionTimeTexts.push(timeText);
+          this.sectionTallyTexts.push(tallyText);
+          this.sectionTotalTexts.push(totalText);
+        }
+      }
+    }
+
     // Time - centered below border, larger font, bold
     if (this.timeText && !this.timeText.scene) {
       this.timeText = null;
@@ -4090,7 +4815,7 @@ class GameScene extends Phaser.Scene {
     this.lastPieceType = null;
 
     this.level = this.startingLevel != null ? this.startingLevel : getStartingLevel();
-    this.currentSection = Math.floor(this.level / 100);
+    this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.sectionStartTime = 0;
     this.sectionTimes = {};
     this.sectionTetrises = {};
@@ -4125,6 +4850,7 @@ class GameScene extends Phaser.Scene {
     this.creditsTimer = 0;
     this.congratulationsActive = false;
     this.gameComplete = false;
+    this.sprintCompleted = false;
 
     this.gameOver = false;
     this.gameOverTimer = 0;
@@ -4268,7 +4994,7 @@ class GameScene extends Phaser.Scene {
     this.currentTime = 0;
 
     this.sectionStartTime = 0;
-    this.currentSection = Math.floor(this.level / 100);
+    this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.currentSectionTetrisCount = 0;
     this.totalPausedTime = 0;
     this.isPaused = false;
@@ -4386,7 +5112,7 @@ class GameScene extends Phaser.Scene {
         }
 
         this.sectionStartTime = this.currentTime;
-        this.currentSection = Math.floor(this.level / 100);
+        this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
         this.currentSectionTetrisCount = 0;
 
         this.spawnPiece();
@@ -4719,9 +5445,6 @@ class GameScene extends Phaser.Scene {
     }
 
     if (targetBGM && this.currentBGM !== targetBGM) {
-      console.log(
-        `T.A.Death BGM switching to ${bgmKey} at level ${this.level}`,
-      );
       if (this.currentBGM) {
         this.currentBGM.stop();
       }
@@ -4761,7 +5484,6 @@ class GameScene extends Phaser.Scene {
 
         // Continue with normal looping - Phaser will handle the loop seamlessly
         // The effect is that we get full track first, then continuous looping
-        console.log(`${bgmType} completed first play, entering loop mode`);
       }
     }
   }
@@ -4772,34 +5494,37 @@ class GameScene extends Phaser.Scene {
     return null;
   }
 
-  update() {
-    // Limit to 60fps by skipping updates if too fast
-    const now = this.time.now;
-    if (this.lastUpdateTime > 0) {
-      const delta = now - this.lastUpdateTime;
-      if (delta < 1000 / 60) {
-        return; // Skip this update
-      }
-      // Store delta time in seconds for timing calculations
-      this.deltaTime = delta / 1000;
-    } else {
-      this.deltaTime = 1 / 60; // Default to 60fps if first frame
+  update(time, delta) {
+    // Track delta time in seconds for consistency
+    this.deltaTime = delta / 1000;
+
+    // If loading or not fully initialized, skip update
+    if (this.loadingPhase) {
+      return;
     }
-    this.lastUpdateTime = now;
 
-    // Input handling
-    const leftDown = this.cursors.left.isDown;
-    const rightDown = this.cursors.right.isDown;
-    const downDown = this.cursors.down.isDown;
+    // Safety: ensure input keys are initialized before use
+    if (!this.keys || !this.cursors) {
+      return;
+    }
 
-    // Custom key bindings
-    const zKeyDown = this.keys.left.isDown;
-    const cKeyDown = this.keys.right.isDown;
-    const sKeyDown = this.keys.softDrop.isDown;
-    const xKeyDown = this.keys.hardDrop.isDown;
-    const kKeyDown = this.keys.rotateCW.isDown || this.keys.rotateCW2.isDown;
-    const spaceKeyDown = this.keys.rotateCCW.isDown || this.keys.rotateCCW2.isDown;
-    const lKeyDown = this.keys.rotateCCW2.isDown;
+    // Input handling (null-safe)
+    const isDown = (key) => !!(key && key.isDown);
+    const justDown = (key) => !!(key && Phaser.Input.Keyboard.JustDown(key));
+
+    const leftDown = isDown(this.cursors.left);
+    const rightDown = isDown(this.cursors.right);
+    const downDown = isDown(this.cursors.down);
+
+    // Custom key bindings (safe for modes that don't define all keys)
+    const zKeyDown = isDown(this.keys.left);
+    const cKeyDown = isDown(this.keys.right);
+    const sKeyDown = isDown(this.keys.softDrop);
+    const xKeyDown = isDown(this.keys.hardDrop);
+    const kKeyDown = isDown(this.keys.rotateCW) || isDown(this.keys.rotateCW2);
+    const spaceKeyDown =
+      isDown(this.keys.rotateCCW) || isDown(this.keys.rotateCCW2);
+    const lKeyDown = isDown(this.keys.rotateCCW2);
 
     // During top-out, ignore all movement/rotation. Only allow Start/Restart to return to menu.
     if (this.gameOver) {
@@ -4813,7 +5538,7 @@ class GameScene extends Phaser.Scene {
       this.spaceKeyPressed = false;
       this.lKeyPressed = false;
       this.xKeyPressed = false;
-      if (this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+      if (justDown(this.restartKey)) {
         this.scene.start("MenuScene");
         return;
       }
@@ -5103,37 +5828,26 @@ class GameScene extends Phaser.Scene {
       if (kKeyDown) {
         this.areRotationDirection = 1;
         if (!this.irsActivated) {
-          console.log(
-            `[IRS] Rotation key K held during ARE, activating CW rotation`,
-          );
           this.irsActivated = true;
         }
       } else if (spaceKeyDown || lKeyDown) {
         this.areRotationDirection = -1;
         if (!this.irsActivated) {
-          console.log(
-            `[IRS] Rotation key ${spaceKeyDown ? "Space" : "L"} held during ARE, activating CCW rotation`,
-          );
           this.irsActivated = true;
         }
       } else {
         this.areRotationDirection = 0;
         if (this.irsActivated) {
-          console.log(
-            `[IRS] Rotation keys released during ARE, deactivating IRS`,
-          );
           this.irsActivated = false;
         }
       }
 
       // Hold functionality for ARE - check if hold key is currently held during ARE
-      const holdCurrentlyHeld = this.holdEnabled && this.keys.shift.isDown;
+      const holdCurrentlyHeld = this.holdEnabled && isDown(this.keys.hold);
       if (holdCurrentlyHeld && !this.areHoldPressed) {
         this.areHoldPressed = true;
-        console.log(`[IHS] Hold key held during ARE, activating IHS`);
       } else if (!holdCurrentlyHeld && this.areHoldPressed) {
         this.areHoldPressed = false;
-        console.log(`[IHS] Hold key released during ARE, deactivating IHS`);
       }
     } else {
       // Reset ARE rotation tracking when not in ARE and piece exists
@@ -5177,7 +5891,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Pause/unpause with ESC - handle BEFORE early return
-    if (Phaser.Input.Keyboard.JustDown(this.keys.pause) && !this.gameOver) {
+    if (justDown(this.keys.pause) && !this.gameOver) {
       this.togglePause();
     }
 
@@ -5215,7 +5929,7 @@ class GameScene extends Phaser.Scene {
 
     // Skip ALL game logic if paused or game over
     if (this.isPaused) {
-      if (this.keys.menu && Phaser.Input.Keyboard.JustDown(this.keys.menu)) {
+      if (justDown(this.keys.menu)) {
         this.scene.start("MenuScene");
         return;
       }
@@ -5263,7 +5977,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // Single press actions (keep JustDown for these)
-      if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+      if (justDown(this.cursors.down)) {
         if (this.currentPiece.move(this.board, 0, 1)) {
           this.resetLockDelay();
         } else if (!this.isGrounded) {
@@ -5283,79 +5997,46 @@ class GameScene extends Phaser.Scene {
         // If piece was already grounded, don't increment lock delay
       }
       // Hold functionality for modes that support it
-      if (this.holdEnabled && Phaser.Input.Keyboard.JustDown(this.keys.shift)) {
+      if (this.holdEnabled && justDown(this.keys.hold)) {
         this.hold();
       }
     }
 
     // Pause/unpause with ESC
-    if (Phaser.Input.Keyboard.JustDown(this.keys.pause) && !this.gameOver) {
+    if (justDown(this.keys.pause) && !this.gameOver) {
       this.togglePause();
     }
 
-    // Gravity (TGM-style curve)
+    // Gravity (TGM-style curve, time-based to be FPS independent)
     if (!this.areActive) {
       // Only apply gravity when not in ARE
-      const internalGravity = this.getTGMGravitySpeed(this.level);
-
-      // Mixed gravity system:
-      // - For internalGravity >= 256 (1G+): New row-by-row system
-      // - For internalGravity < 256 (sub-1G): Original timer-based system
-
+      const internalGravity = Math.max(1, this.getTGMGravitySpeed(this.level));
       if (!this.currentPiece) return;
-      if (internalGravity >= 256) {
-        // New row-by-row gravity system for 1G and above:
-        // This means:
-        // - internalGravity 256 (1G) = 1 row per frame
-        // - internalGravity 512 (2G) = 2 rows per frame
-        // - internalGravity 5120 (20G) = 20 rows per frame
-        const rowsPerFrame = Math.max(1, Math.floor(internalGravity / 256));
 
-        // Move piece down by the calculated rows per frame
-        let moved = false;
-        for (let i = 0; i < rowsPerFrame; i++) {
+      // rowsPerSecond derived from internalGravity (1/256G units) assuming 60 fps baseline
+      const rowsPerSecond = (internalGravity / 256) * 60;
+      this.gravityAccum += rowsPerSecond * this.deltaTime; // deltaTime in seconds
+
+      const rowsToFall = Math.floor(this.gravityAccum);
+      if (rowsToFall > 0) {
+        let movedRows = 0;
+        for (let i = 0; i < rowsToFall; i++) {
           if (this.currentPiece.move(this.board, 0, 1)) {
-            moved = true;
+            movedRows++;
+            this.isGrounded = false;
+            this.resetLockDelay();
           } else {
             // Piece can't move down anymore
             if (!this.isGrounded) {
-              // Piece just became grounded - start lock delay immediately
               this.isGrounded = true;
               this.lockDelay = this.deltaTime; // Start counting from current delta time
-              // Play ground sound
               this.currentPiece.playGroundSound(this);
             }
             break;
           }
         }
-
-        if (moved) {
-          this.isGrounded = false;
-          this.resetLockDelay();
-        }
-      } else {
-        // Original timer-based gravity system for sub-1G values
-        // Internal gravity represents 1/256 G, so frames per row = 256 / internalGravity
-        this.gravityTimer += 1;
-        const framesPerRow = Math.ceil(256 / internalGravity); // Round up to ensure at least 1 frame
-
-        // Apply gravity when timer exceeds frames per row threshold
-        if (this.gravityTimer >= framesPerRow) {
-          if (!this.currentPiece) return;
-          if (this.currentPiece.move(this.board, 0, 1)) {
-            this.isGrounded = false;
-            this.resetLockDelay();
-          } else {
-            if (!this.isGrounded) {
-              // Piece just became grounded - start lock delay immediately
-              this.isGrounded = true;
-              this.lockDelay = this.deltaTime; // Start counting from current delta time
-              // Play ground sound
-              this.currentPiece.playGroundSound(this);
-            }
-          }
-          this.gravityTimer = 0; // Reset timer for next drop
-        }
+        // retain fractional remainder only if we moved; if blocked, drop any accumulated
+        this.gravityAccum = movedRows > 0 ? this.gravityAccum - movedRows : 0;
       }
     }
 
@@ -5384,7 +6065,6 @@ class GameScene extends Phaser.Scene {
           this.lineClearPhase = true;
           this.areDelay = this.pendingLineAREDelay || 41 / 60;
           this.areTimer = 0;
-          console.log(`[ARE] Line clear delay ended, entering line ARE: ${this.areDelay}s`);
 
           // Now clear lines and play fall sound at the beginning of line ARE
           this.clearStoredLines();
@@ -5397,11 +6077,9 @@ class GameScene extends Phaser.Scene {
           // Line ARE completed, spawn next piece
           this.lineClearPhase = false;
           this.areActive = false;
-          console.log(`[ARE] Line ARE completed, spawning piece`);
           this.spawnPiece();
         } else {
           // Normal ARE completed, spawn next piece
-          console.log(`[ARE] ARE completed, spawning piece`);
           this.areActive = false;
           this.spawnPiece();
         }
@@ -5506,13 +6184,6 @@ class GameScene extends Phaser.Scene {
           : this.areDelay;
     }
 
-    console.log(
-      `[SPAWN] Starting spawn for piece ${type}, ARE active: ${this.areActive}, rotation direction: ${this.areRotationDirection}, hold pressed: ${this.areHoldPressed}`,
-    );
-
-    console.log(
-      `[SPAWN] Starting spawn for piece ${type}, ARE active: ${this.areActive}, rotation direction: ${this.areRotationDirection}, hold pressed: ${this.areHoldPressed}`,
-    );
 
     // Track if piece will be pre-rotated for spawn validation
     let wasPreRotated = false;
@@ -5616,36 +6287,21 @@ class GameScene extends Phaser.Scene {
     this.areRotationDirection = 0;
     this.areHoldPressed = false;
 
-    console.log(
-      `[IHS] Before IHS application: current piece ${this.currentPiece?.type ?? "none"}, hold piece ${this.holdPiece ? this.holdPiece.type : "none"}, areHoldPressed ${holdPressedAtSpawn}`,
-    );
 
     // Handle ARE hold (Initial Hold System) for modes that support hold
     if (this.holdEnabled && holdPressedAtSpawn) {
-      console.log(
-        `[IHS] ARE Hold pressed: ${holdPressedAtSpawn}, Hold enabled: ${this.holdEnabled}`,
-      );
       this.hold();
     }
 
-    console.log(
-      `[IHS] After IHS application: current piece ${this.currentPiece.type}, hold piece ${this.holdPiece ? this.holdPiece.type : "none"}`,
-    );
 
     const irsRotationDirection = rotationDirectionAtSpawn;
 
     // Apply IRS to the spawning piece (which may have been swapped by IHS)
     if (irsRotationDirection === 1) {
-      console.log(
-        `[IRS] ARE Rotation CW held at spawn: ${irsRotationDirection === 1}, Hold pressed: ${holdPressedAtSpawn}`,
-      );
       this.currentPiece.rotation = 1; // Clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
     } else if (irsRotationDirection === -1) {
-      console.log(
-        `[IRS] ARE Rotation CCW held at spawn: ${irsRotationDirection === -1}, Hold pressed: ${holdPressedAtSpawn}`,
-      );
       this.currentPiece.rotation = 3; // Counter-clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
@@ -5698,25 +6354,16 @@ class GameScene extends Phaser.Scene {
     }
 
     // Log IRS+IHS combination
-    if (wasPreRotated && this.holdEnabled && this.holdPiece) {
-      console.log(
-        `[IRS+IHS] Both IRS and IHS applied: piece ${this.currentPiece.type} rotated to ${this.currentPiece.rotation}, hold contains previous piece`,
-      );
-    }
-
     // Play IRS sound if piece was pre-rotated
     if (wasPreRotated) {
-      console.log(
-        `[IRS] Playing IRS sound for pre-rotated piece: ${this.currentPiece.type}, rotation: ${this.currentPiece.rotation}`,
-      );
       const irsSound = this.sound.add("IRS", { volume: 0.5 });
       irsSound.play();
     }
 
+    // Reset finesse tracking for the freshly active piece
+    this.resetFinessePieceInputs(this.currentPiece);
+
     // Log final piece state after spawn
-    console.log(
-      `[SPAWN] Final piece after spawn: type ${this.currentPiece.type}, rotation ${this.currentPiece.rotation}, hold: ${this.holdPiece ? this.holdPiece.type : "none"}`,
-    );
     if (this.areLeftHeld) {
       this.leftKeyPressed = true;
       this.leftTimer = this.dasDelay;
@@ -5855,6 +6502,10 @@ class GameScene extends Phaser.Scene {
       this.currentPiece.y,
     );
 
+    // Finesse evaluation on lock (SRS sprint/ultra only)
+    this.evaluateFinesseOnLock(this.currentPiece);
+    this.finesseActiveForPiece = false;
+
     // Check for T-spin before clearing lines
     const isTSpin = this.detectTSpin(this.currentPiece, this.board);
 
@@ -5871,7 +6522,7 @@ class GameScene extends Phaser.Scene {
     this.clearedLines = linesToClear;
 
     if (!this.creditsActive && linesToClear.length === 4) {
-      const sectionIndex = Math.floor(this.level / 100);
+      const sectionIndex = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
       if (sectionIndex === this.currentSection) {
         this.currentSectionTetrisCount++;
       }
@@ -5913,9 +6564,6 @@ class GameScene extends Phaser.Scene {
       // Reset ARE input state when ARE starts
       this.areRotationDirection = 0;
       this.areHoldPressed = false;
-      console.log(
-        `[ARE] Starting line clear delay: ${lineClearDelay}s, upcoming line ARE: ${lineAREDelay}s`,
-      );
 
       // Play clear sound
       const clearSound = this.sound.add("clear", { volume: 0.7 });
@@ -5937,7 +6585,6 @@ class GameScene extends Phaser.Scene {
       // Reset ARE input state when ARE starts
       this.areRotationDirection = 0;
       this.areHoldPressed = false;
-      console.log(`[ARE] Starting normal ARE, delay: ${this.areDelay}s`);
     }
 
     // If item animation is active (e.g., powerup activation), delay ARE start by 2 seconds
@@ -5962,9 +6609,6 @@ class GameScene extends Phaser.Scene {
 
     const currentType = this.currentPiece?.type ?? "none";
     const holdType = this.holdPiece ? this.holdPiece.type : "none";
-    console.log(
-      `[IHS] Hold function called, current piece: ${currentType}, hold piece: ${holdType}`,
-    );
 
     if (this.holdPiece) {
       // Swap current piece with hold piece
@@ -5981,16 +6625,10 @@ class GameScene extends Phaser.Scene {
           ? SEGA_ROTATIONS[this.currentPiece.type].rotations
           : TETROMINOES[this.currentPiece.type].rotations;
       this.currentPiece.shape = rotations[0].map((row) => [...row]);
-      console.log(
-        `[IHS] Swapped pieces: ${oldCurrent} -> hold, ${oldHold} -> current`,
-      );
     } else {
       // Move current piece to hold
       this.resetPieceToDefaultRotation(this.currentPiece);
       this.holdPiece = this.currentPiece;
-      console.log(
-        `[IHS] Moved ${this.currentPiece.type} to hold, spawning new piece`,
-      );
       this.spawnPiece();
     }
 
@@ -6002,7 +6640,6 @@ class GameScene extends Phaser.Scene {
     if (this.sound && this.sound.get("lock")) {
       const holdSound = this.sound.add("lock", { volume: 0.4 });
       holdSound.play();
-      console.log(`[IHS] Played hold sound`);
     }
   }
 
@@ -6132,6 +6769,48 @@ class GameScene extends Phaser.Scene {
     // Calculate raw PPS (excluding ARE time)
     this.rawPPS =
       this.activeTime > 0 ? this.totalPiecesPlaced / this.activeTime : 0;
+
+    // Track PPS history per placed piece for sprint graph
+    if (this.totalPiecesPlaced > this.lastPpsRecordedPieceCount) {
+      this.ppsHistory.push(this.conventionalPPS);
+      this.lastPpsRecordedPieceCount = this.totalPiecesPlaced;
+      // Keep history reasonable
+      if (this.ppsHistory.length > 200) {
+        this.ppsHistory.shift();
+      }
+    }
+  }
+
+  drawSprintPpsGraph() {
+    if (!this.ppsGraphGraphics || !this.ppsGraphArea) {
+      return;
+    }
+    const history = this.ppsHistory || [];
+    const { x, y, width, height } = this.ppsGraphArea;
+    const g = this.ppsGraphGraphics;
+
+    g.clear();
+    g.fillStyle(0x0a0a0a, 0.6);
+    g.fillRect(x, y, width, height);
+    g.lineStyle(1, 0xffffff, 0.5);
+    g.strokeRect(x - 1, y - 1, width + 2, height + 2);
+
+    if (!history.length) {
+      return;
+    }
+
+    const barWidth = Math.max(2, Math.floor(width / Math.min(history.length, 60)));
+    const maxBars = Math.max(1, Math.floor(width / barWidth));
+    const visibleHistory = history.slice(-maxBars);
+    const maxPps = Math.max(1.5, ...visibleHistory);
+
+    visibleHistory.forEach((pps, idx) => {
+      const barHeight = Math.min(height, Math.max(1, (pps / maxPps) * height));
+      const barX = x + idx * barWidth;
+      const barY = y + height - barHeight;
+      g.fillStyle(0x00ffd0, 0.9);
+      g.fillRect(barX, barY, Math.max(1, barWidth - 1), barHeight);
+    });
   }
 
   updateScore(lines, pieceType = null, isTSpin = false) {
@@ -6226,6 +6905,12 @@ class GameScene extends Phaser.Scene {
 
     this.score += points;
     this.totalLines += lines;
+    const isSprintMode =
+      this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100";
+    if (isSprintMode) {
+      const sprintTarget = this.selectedMode === "sprint_100" ? 100 : 40;
+      this.totalLines = Math.min(this.totalLines, sprintTarget);
+    }
     this.lastClearType = clearType;
 
     // Track piece for potential T-spin detection next time
@@ -6277,6 +6962,9 @@ class GameScene extends Phaser.Scene {
 
     this.score += points;
     this.totalLines += lines;
+    if (this.selectedMode === "sprint_40") {
+      this.totalLines = Math.min(this.totalLines, 40);
+    }
     this.lastClearType = clearType;
 
     // Track piece for potential T-spin detection next time
@@ -6338,8 +7026,16 @@ class GameScene extends Phaser.Scene {
     }
 
     // Check for section transitions
-    const oldSection = Math.floor(oldLevel / 100);
-    const newSection = Math.floor(this.level / 100);
+    const sectionLength = this.getSectionLength();
+    const newBasis = this.getSectionBasisValue();
+    const oldBasis =
+      this.selectedMode === "marathon"
+        ? type === "lines"
+          ? Math.max(0, newBasis - amount)
+          : newBasis
+        : oldLevel;
+    const oldSection = Math.floor(oldBasis / sectionLength);
+    const newSection = Math.floor(newBasis / sectionLength);
 
     if (newSection > oldSection && this.level < maxLevel) {
       this.handleSectionTransition(newSection);
@@ -6349,7 +7045,13 @@ class GameScene extends Phaser.Scene {
     const milestones = [100, 200, 300, 500, maxLevel];
     if (milestones.includes(this.level) && this.level !== oldLevel) {
       if (this.level === maxLevel) {
-        const lastSectionIndex = Math.floor(oldLevel / 100);
+        const sectionLength = this.getSectionLength();
+        const basisAtMax = this.getSectionBasisValue();
+        const oldBasisForMax =
+          this.selectedMode === "marathon" && type === "lines"
+            ? Math.max(0, basisAtMax - amount)
+            : oldLevel;
+        const lastSectionIndex = Math.floor(oldBasisForMax / sectionLength);
         if (
           typeof this.sectionTimes[lastSectionIndex] !== "number" &&
           lastSectionIndex === this.currentSection
@@ -6415,9 +7117,13 @@ class GameScene extends Phaser.Scene {
         */
 
     // Adjust section cap based on mode (default to Normal mode)
-    this.sectionCap = (section + 1) * 100;
-    if (section >= 9) {
-      this.sectionCap = 999;
+    if (this.selectedMode === "marathon") {
+      this.sectionCap = (section + 1) * 10;
+    } else {
+      this.sectionCap = (section + 1) * 100;
+      if (section >= 9) {
+        this.sectionCap = 999;
+      }
     }
   }
 
@@ -6702,6 +7408,7 @@ class GameScene extends Phaser.Scene {
     this.canHold = true;
     this.nextPieces = [];
     this.gravityTimer = 0.0;
+    this.gravityAccum = 0.0;
     this.lockDelay = 0;
     this.isGrounded = false;
     this.level = this.startingLevel || 0; // Use preserved starting level or default to 0
@@ -6721,7 +7428,7 @@ class GameScene extends Phaser.Scene {
     this.gradeHistory = [];
     this.sectionTimes = {};
     this.sectionStartTime = 0;
-    this.currentSection = Math.floor(this.level / 100);
+    this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.sectionTetrises = {};
     this.currentSectionTetrisCount = 0;
 
@@ -6739,6 +7446,7 @@ class GameScene extends Phaser.Scene {
     this.areTime = 0;
     this.conventionalPPS = 0;
     this.rawPPS = 0;
+    this.finesseActiveForPiece = false;
 
     // Reset TGM1 randomizer
     this.pieceHistory = ["Z", "Z", "S", "S"]; // Reset to initial state
@@ -6829,7 +7537,7 @@ class GameScene extends Phaser.Scene {
     }
     // Reset Marathon mode separate level display
     if (isMarathonMode && this.levelDisplayText) {
-      this.levelDisplayText.setText("0");
+      this.levelDisplayText.setText("1");
     }
     this.timeText.setText("0:00.00");
     this.ppsText.setText("0.00");
@@ -7013,6 +7721,7 @@ class GameScene extends Phaser.Scene {
 
   saveBestScore() {
     if (!this.selectedMode) return;
+    if (typeof this.saveLeaderboardEntry !== "function") return;
     // Fallback generic entry; mode-specific handlers should prefer saveLeaderboardEntry directly.
     const entry = {
       score: this.score,
@@ -7036,12 +7745,27 @@ class GameScene extends Phaser.Scene {
     if (stored) {
       return JSON.parse(stored);
     }
-    return { score: 0, level: 0, grade: "9", time: "0:00.00" };
+    return { score: 0, level: 0, grade: "9", time: "--:--.--" };
   }
 
   showGameOverScreen() {
     this.gameOver = true;
     this.gameOverTimer = 0; // Start timer for 10 seconds
+    this.gameOverMessage = this.sprintCompleted ? "CONGRATULATIONS" : "GAME OVER";
+    this.finesseActiveForPiece = false;
+
+    // Freeze section tracking so the losing section remains counted and displayed.
+    if (
+      this.sectionTimes &&
+      typeof this.currentSection === "number" &&
+      typeof this.sectionStartTime === "number" &&
+      typeof this.sectionTimes[this.currentSection] !== "number"
+    ) {
+      this.sectionTimes[this.currentSection] = this.currentTime - this.sectionStartTime;
+      if (this.sectionTetrises) {
+        this.sectionTetrises[this.currentSection] = this.currentSectionTetrisCount;
+      }
+    }
 
     // Clear any held input state so pieces cannot keep moving during game over.
     this.leftKeyPressed = false;
@@ -7282,7 +8006,7 @@ class GameScene extends Phaser.Scene {
 
     // For Marathon mode, update separate level display
     if (isMarathonMode && this.levelDisplayText) {
-      this.levelDisplayText.setText(this.level.toString());
+      this.levelDisplayText.setText((this.level + 1).toString());
     }
 
     // For Zen/Ultra modes, only show lines cleared, no level bar or cap
@@ -7345,14 +8069,20 @@ class GameScene extends Phaser.Scene {
       this.currentLevelText.setText(currentValue);
     }
 
-    // Bar - middle row, white background with red fill (skip for Marathon)
-    if (!isMarathonMode) {
+    // Bar - middle row, white background with red fill
+    {
       const barY = levelBottomY - 2 * levelRowHeight;
       const barWidth = 60;
       const barHeight = 4;
       const barX = rightX - barWidth;
       const internalGravity = this.getTGMGravitySpeed(this.level);
-      const gravityRatio = Math.min(internalGravity / 2560, 1); // 0 to 1, 5120 is 20G
+      // Green bar: percentage of sub-1G gravity (0–256)
+      const greenRatio = Math.min(internalGravity / 256, 1);
+      // Red overlay: gravity beyond 1G, scaled up to 20G (5120)
+      const redRatio =
+        internalGravity > 256
+          ? Math.min((internalGravity - 256) / (5120 - 256), 1)
+          : 0;
 
       if (!this.levelBar) {
         this.levelBar = this.add.graphics();
@@ -7361,14 +8091,24 @@ class GameScene extends Phaser.Scene {
       // White background
       this.levelBar.fillStyle(0xffffff);
       this.levelBar.fillRect(barX + 14, barY - 15, barWidth, barHeight);
-      // Red fill from left
-      this.levelBar.fillStyle(0xff0000);
+      // Green fill for sub-1G portion
+      this.levelBar.fillStyle(0x00ff00);
       this.levelBar.fillRect(
         barX + 14,
         barY - 15,
-        barWidth * gravityRatio,
+        barWidth * greenRatio,
         barHeight,
       );
+      // Red overlay for gravity beyond 1G
+      if (redRatio > 0) {
+        this.levelBar.fillStyle(0xff0000);
+        this.levelBar.fillRect(
+          barX + 14,
+          barY - 15,
+          barWidth * redRatio,
+          barHeight,
+        );
+      }
     }
 
     // Cap level - bottom row
@@ -7540,6 +8280,14 @@ class GameScene extends Phaser.Scene {
     // Update piece per second displays
     this.ppsText.setText(this.conventionalPPS.toFixed(2));
     this.rawPpsText.setText(this.rawPPS.toFixed(2));
+    if (
+      this.ppsGraphGraphics &&
+      this.ppsGraphArea &&
+      this.selectedMode &&
+      (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100")
+    ) {
+      this.drawSprintPpsGraph();
+    }
 
     // Draw level bar
     this.drawLevelBar();
@@ -7566,6 +8314,118 @@ class GameScene extends Phaser.Scene {
     if (this.timeText) {
       this.timeText.setText(timeString);
     } else {
+    }
+
+    if (
+      this.sectionTrackerGroup &&
+      this.sectionTimeTexts &&
+      this.sectionTotalTexts &&
+      this.sectionSectionLabels
+    ) {
+      const modeId =
+        this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode;
+      const isTgm2Normal = modeId === "tgm2_normal";
+      const isMarathonMode = this.selectedMode === "marathon";
+      const maxLevel =
+        this.gameMode && typeof this.gameMode.getGravityLevelCap === "function"
+          ? this.gameMode.getGravityLevelCap()
+          : this.gravityLevelCap || 999;
+
+      const sectionLength = this.getSectionLength();
+      const maxSections = this.getMaxSectionsForTracker();
+      const basis = this.getSectionBasisValue();
+      const lastSectionIndex = Math.min(
+        maxSections - 1,
+        Math.max(0, Math.floor(Math.max(0, basis - 1) / sectionLength)),
+      );
+      const displayedCurrentSection = Math.min(this.currentSection, lastSectionIndex);
+
+      const sectionTimesArray = [];
+      const sectionTetrisesArray = [];
+      for (let i = 0; i < maxSections; i++) {
+        if (i > lastSectionIndex) {
+          sectionTimesArray.push(null);
+          sectionTetrisesArray.push(null);
+          continue;
+        }
+
+        const storedTime = this.sectionTimes ? this.sectionTimes[i] : undefined;
+        const storedTetrises = this.sectionTetrises ? this.sectionTetrises[i] : undefined;
+        const isCurrent =
+          i === displayedCurrentSection &&
+          !this.gameOver &&
+          (!isMarathonMode ? this.level < maxLevel : true) &&
+          typeof storedTime !== "number";
+        const currentElapsed = this.currentTime - this.sectionStartTime;
+        const timeValue =
+          typeof storedTime === "number" ? storedTime : isCurrent ? currentElapsed : null;
+        sectionTimesArray.push(timeValue);
+
+        const tetrisValue =
+          typeof storedTetrises === "number"
+            ? storedTetrises
+            : isCurrent
+              ? this.currentSectionTetrisCount || 0
+              : null;
+        sectionTetrisesArray.push(tetrisValue);
+      }
+
+      let runningTotal = 0;
+      for (let i = 0; i < this.sectionTimeTexts.length; i++) {
+        const shouldShow = i <= displayedCurrentSection && i <= lastSectionIndex;
+        this.sectionSectionLabels[i].setVisible(shouldShow);
+        this.sectionTimeTexts[i].setVisible(shouldShow);
+        if (this.sectionTallyTexts && this.sectionTallyTexts[i]) {
+          this.sectionTallyTexts[i].setVisible(shouldShow);
+        }
+
+        const storedTime = this.sectionTimes ? this.sectionTimes[i] : undefined;
+        const hasCompletedTime = typeof storedTime === "number";
+        this.sectionTotalTexts[i].setVisible(shouldShow && hasCompletedTime);
+
+        if (!shouldShow) {
+          continue;
+        }
+
+        const val = sectionTimesArray[i];
+        this.sectionTimeTexts[i].setText(this.formatTimeValue(val));
+
+        const tVal = sectionTetrisesArray[i];
+        if (this.sectionTallyTexts && this.sectionTallyTexts[i]) {
+          this.sectionTallyTexts[i].setText(
+            typeof tVal === "number" && tVal > 0 ? "x".repeat(tVal) : "",
+          );
+        }
+
+        if (hasCompletedTime) {
+          runningTotal += storedTime;
+          this.sectionTotalTexts[i].setText(this.formatTimeValue(runningTotal));
+        }
+      }
+
+      if (!isTgm2Normal && !isMarathonMode && this.halfTimeTexts && this.halfTimeTexts.length === 2) {
+        const firstHalf = sectionTimesArray
+          .slice(0, 5)
+          .reduce(
+            (sum, t) => (t !== null && t !== undefined ? sum + t : sum),
+            0,
+          );
+        const secondHalf = sectionTimesArray
+          .slice(5)
+          .reduce(
+            (sum, t) => (t !== null && t !== undefined ? sum + t : sum),
+            0,
+          );
+
+        this.halfTimeTexts[0].time.setText(this.formatTimeValue(firstHalf || 0));
+        this.halfTimeTexts[1].time.setText(this.formatTimeValue(secondHalf || 0));
+
+        const showSecondHalf = displayedCurrentSection >= 5;
+        this.halfTimeTexts[1].label.setVisible(showSecondHalf);
+        this.halfTimeTexts[1].time.setVisible(showSecondHalf);
+      }
     }
 
     // Draw NEXT label - positioned to the right of border
@@ -7715,18 +8575,18 @@ class GameScene extends Phaser.Scene {
     if (this.showGameOverText) {
       const gameOverFontSize = Math.max(
         48,
-        Math.min(72, Math.floor(this.cellSize * 2.4)),
+        Math.min(72, Math.floor(this.cellSize * 1.5)),
       );
 
       const centerY = this.windowHeight / 2;
       const centerX = this.windowWidth / 2;
 
       const gameOverText = this.add
-        .text(centerX, centerY, "GAME OVER", {
+        .text(centerX, centerY, this.gameOverMessage || "GAME OVER", {
           fontSize: `${gameOverFontSize}px`,
-          fill: "#ff0000",
+          fill: this.sprintCompleted ? "#00ff88" : "#ff0000",
           stroke: "#000",
-          strokeThickness: 2,
+          strokeThickness: 6,
           fontFamily: "Courier New",
           fontStyle: "bold",
         })
