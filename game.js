@@ -3870,9 +3870,10 @@ class GameScene extends Phaser.Scene {
     this.congratulationsActive = false;
     this.gameComplete = false;
     this.level999Reached = false; // Track when level 999 is reached for TGM behavior
+    this.creditsFinalized = false;
+    this.rollFailedDuringRoll = false;
 
     this.invisibleStackActive = false;
-    this.fadingRollActive = false;
     this.fadingRollActive = false;
     this.minoFadeActive = false;
     this.minoFadeProgress = 0;
@@ -3883,6 +3884,8 @@ class GameScene extends Phaser.Scene {
     this.placedMinoRows = []; // Track rows containing minos for row-by-row fading
     this.fadingComplete = false; // Track when fading is complete
     this.minoRowFadeAlpha = {}; // Row -> alpha during fading
+    this.rollType = null; // 'fading' or 'mroll'
+    this.rollLinesCleared = 0;
     this.gameOverFadeDoneTime = null;
     this.showGameOverText = false;
     this.gameOverMessage = "GAME OVER";
@@ -4846,8 +4849,11 @@ class GameScene extends Phaser.Scene {
     this.gameOverFadeDoneTime = null;
     this.showGameOverText = false;
     this.gameOverTextTimer = 0;
+    this.creditsPending = false;
     this.creditsActive = false;
     this.creditsTimer = 0;
+    this.creditsDuration = 61.6;
+    this.gradeLineColor = "none";
     this.congratulationsActive = false;
     this.gameComplete = false;
     this.sprintCompleted = false;
@@ -5127,7 +5133,8 @@ class GameScene extends Phaser.Scene {
       this.startTime &&
       !this.isPaused &&
       !this.level999Reached &&
-      !this.gameOver
+      !this.gameOver &&
+      !this.creditsActive
     ) {
       this.currentTime = (Date.now() - this.startTime) / 1000;
     }
@@ -5868,6 +5875,13 @@ class GameScene extends Phaser.Scene {
         if (this.gameOverFadeDoneTime === null) {
           this.gameOverFadeDoneTime = this.time.now;
         }
+        if (this.creditsPending) {
+          this.creditsPending = false;
+          this.startCredits();
+          if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
+            this.gameMode.onCreditsStart(this);
+          }
+        }
       } else if (this.minoFadeProgress < totalRows) {
         const rowIndex = this.minoFadeProgress;
         const rowToFade = this.placedMinoRows[rowIndex];
@@ -6094,26 +6108,28 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update grade based on performance (only for modes with grading)
-    const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
-    const hasGrading = modeConfig.hasGrading !== false;
-    if (hasGrading) {
-      if (this.gameMode && typeof this.gameMode.getDisplayedGrade === "function") {
-        const displayedGrade = this.gameMode.getDisplayedGrade();
-        if (displayedGrade) {
-          this.grade = displayedGrade;
-        }
-
-        if (this.gameMode && typeof this.gameMode.getInternalGrade === "function") {
-          const internalGrade = this.gameMode.getInternalGrade();
-          if (typeof internalGrade === "number") {
-            this.internalGrade = internalGrade;
+    if (!this.creditsActive) {
+      const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+      const hasGrading = modeConfig.hasGrading !== false;
+      if (hasGrading) {
+        if (this.gameMode && typeof this.gameMode.getDisplayedGrade === "function") {
+          const displayedGrade = this.gameMode.getDisplayedGrade();
+          if (displayedGrade) {
+            this.grade = displayedGrade;
           }
+
+          if (this.gameMode && typeof this.gameMode.getInternalGrade === "function") {
+            const internalGrade = this.gameMode.getInternalGrade();
+            if (typeof internalGrade === "number") {
+              this.internalGrade = internalGrade;
+            }
+          }
+          this.updateGradeUIVisibility();
+        } else {
+          this.updateGrade();
         }
         this.updateGradeUIVisibility();
-      } else {
-        this.updateGrade();
       }
-      this.updateGradeUIVisibility();
     }
 
     // Calculate piece per second rates (skip during credits)
@@ -6140,15 +6156,7 @@ class GameScene extends Phaser.Scene {
 
       // End credits after duration
       if (this.creditsTimer >= this.creditsDuration) {
-        this.creditsActive = false;
-
-        // Stop credits BGM when credits end
-        if (this.creditsBGM) {
-          this.creditsBGM.stop();
-          this.creditsBGM = null;
-        }
-
-        this.showGameOverScreen();
+        this.finalizeCreditsRoll();
       }
     }
 
@@ -6816,6 +6824,12 @@ class GameScene extends Phaser.Scene {
   updateScore(lines, pieceType = null, isTSpin = false) {
     // Don't update score during credits roll
     if (this.creditsActive) {
+      if (this.rollType) {
+        this.rollLinesCleared += lines;
+        if (lines > 0) {
+          this.lastClearDuringRoll = { lines, time: this.currentTime };
+        }
+      }
       return;
     }
 
@@ -6972,6 +6986,9 @@ class GameScene extends Phaser.Scene {
   }
 
   updateLevel(type, amount = 1) {
+    if (this.creditsActive) {
+      return;
+    }
     const oldLevel = this.level;
 
     if (type === "piece") {
@@ -7063,24 +7080,20 @@ class GameScene extends Phaser.Scene {
         // Start credits when reaching max level
         this.level999Reached = true;
 
-        if (this.selectedMode && this.selectedMode.startsWith("tgm2") && maxLevel === 999) {
-          this.board.clear();
-          this.placedMinos = [];
-          this.placedMinoRows = [];
-          this.clearedLines = [];
-          this.isClearingLines = false;
-          this.lineClearPhase = false;
-          this.lineClearDelayActive = false;
-          this.lineClearDelayDuration = 0;
-          this.pendingLineAREDelay = 0;
+        const isTGM2Mode =
+          this.selectedMode && this.selectedMode.startsWith("tgm2") && maxLevel === 999;
+
+        // TGM2: run 2s stack fade before credits; credits start once fade completes
+        if (isTGM2Mode) {
+          this.creditsPending = true;
           this.invisibleStackActive = false;
           this.fadingRollActive = false;
-        }
-
-        this.startCredits();
-
-        if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
-          this.gameMode.onCreditsStart(this);
+          this.startMinoFading();
+        } else {
+          this.startCredits();
+          if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
+            this.gameMode.onCreditsStart(this);
+          }
         }
       }
     }
@@ -7584,9 +7597,29 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  startCredits() {
+  startCredits(creditsDurationSec = null) {
     this.creditsActive = true;
     this.creditsTimer = 0;
+    if (creditsDurationSec != null) {
+      this.creditsDuration = creditsDurationSec;
+    }
+    this.rollLinesCleared = 0;
+    this.rollFailedDuringRoll = false;
+    this.creditsFinalized = false;
+
+    // Determine roll type based on mode flags
+    this.rollType = null;
+    if (this.gameMode) {
+      if (this.gameMode.mRollStarted) {
+        this.rollType = "mroll";
+        this.invisibleStackActive = true;
+        this.fadingRollActive = false;
+      } else if (this.gameMode.fadingRollActive) {
+        this.rollType = "fading";
+        this.fadingRollActive = true;
+        this.invisibleStackActive = false;
+      }
+    }
 
     // Play completion sound if GM grade achieved
     if (this.grade === "GM") {
@@ -7615,6 +7648,30 @@ class GameScene extends Phaser.Scene {
       this.currentBGM.stop();
       this.currentBGM = null;
     }
+  }
+
+  finalizeCreditsRoll() {
+    if (this.creditsFinalized) return;
+    this.creditsFinalized = true;
+    this.creditsActive = false;
+
+    // Stop credits BGM if still playing
+    if (this.creditsBGM) {
+      this.creditsBGM.stop();
+      this.creditsBGM = null;
+    }
+
+    // Default to green line on roll completion; modes can override with higher priority (orange)
+    this.setGradeLineColor("green");
+
+    // Delegate to mode-specific finish if available
+    if (this.gameMode && typeof this.gameMode.finishCreditRoll === "function") {
+      this.gameMode.finishCreditRoll(this);
+      return;
+    }
+
+    // Fallback: end the game normally
+    this.showGameOverScreen();
   }
 
   trackPlacedMino(x, y, color) {
@@ -7749,6 +7806,11 @@ class GameScene extends Phaser.Scene {
   }
 
   showGameOverScreen() {
+    if (this.creditsActive) {
+      this.rollFailedDuringRoll = true;
+      // Topping out during credits is a fail: set to at least green line
+      this.setGradeLineColor("green");
+    }
     this.gameOver = true;
     this.gameOverTimer = 0; // Start timer for 10 seconds
     this.gameOverMessage = this.sprintCompleted ? "CONGRATULATIONS" : "GAME OVER";

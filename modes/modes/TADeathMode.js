@@ -54,7 +54,6 @@ class TADeathMode extends BaseMode {
         this.startedAtLevel500 = false;
         this.hasReachedMGrade = false;
         this.isDeathComplete = false;
-        this.isPerfectClear = false; // New state added
     }
     
     // Get mode configuration
@@ -342,7 +341,12 @@ class TADeathMode extends BaseMode {
         if (gameScene.level >= 999) {
             // GM grade: Reach level 999 regardless of time
             this.awardGMGrade();
+            // Start 30s credits roll with stack intact
+            gameScene.startCredits(30);
+            console.log('T.A. Death: Credits started at level 999');
+            return true;
         }
+        return false;
     }
     
     // Award GM grade
@@ -407,8 +411,9 @@ class TADeathMode extends BaseMode {
             // Set grade to empty to indicate no grade was achieved
             this.displayedGrade = '';
             
-            // End game immediately
-            gameScene.showGameOverScreen();
+            // Start 30s credits roll at level 500 failure per spec
+            gameScene.startCredits(30);
+            console.log('T.A. Death: Credits started at torikan failure (level 500)');
         }
     }
     
@@ -420,6 +425,12 @@ class TADeathMode extends BaseMode {
         this.saveBestScore(gameScene);
         
         console.log(`T.A. Death Mode: Game Over - Score: ${this.deathScore}, Level: ${gameScene.level}, Grade: ${this.displayedGrade}`);
+    }
+
+    // Finish credit roll (T.A. Death uses simple completion)
+    finishCreditRoll(gameScene) {
+        // No special ranking lines; just end the game
+        gameScene.showGameOverScreen();
     }
     
     // Save best score for T.A. Death mode

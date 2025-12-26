@@ -195,3 +195,26 @@ The conditions for the M-Roll are the following:
 |- align = center
 | bgcolor="#C4E8E8"|900-999 || ≤ 2 seconds slower than section 800-900||bgcolor="#FFD3AC"| ||bgcolor="#D7ECC6"|
 |}
+
+
+== Specific instructions for credits roll implementation ==
+In TGM2 mode, when the player reaches level 999, play the mino fading sequence over 2s, then start the fading/M-roll based on whether the M-roll conditions are satisfied.
+
+Fading roll:
+* The placed mino fades after 4 seconds of locking onto the stack
+* Completion grants Orange Line of the current displayed grade (reflected in the grade display in game and in the leaderboards)
+* Topping out grants a Green Line of the current displayed grade.
+
+M-Roll:
+* The placed mino becomes invisible after locking onto the stack
+* Completion grants the Gm grade, which is then, based on the amount of lines cleared during the roll, grants Orange Line if the player cleared 32 or more lines, or Green Line if the player cleared less than 32 lines.
+* Topping out grants the m grade with green line.
+
+T.A.Death:
+The credits play for 30 seconds. The stack and its visibility is maintained as is during this time, and the player can still clear lines as usual (scoring metrics are frozen).
+This will play when the player reaches level 999 (or 500 if the player fails to beat the 3:25 torikan.)
+
+Normal mode:
+The credits play for 30 seconds. The stack and its visibility is maintained as is during this time, and the player can still clear lines as usual (scoring metrics are frozen and the time-based bonus is applied at the start of the roll).
+
+Make sure the credits rolling speed matches the duration of the roll.

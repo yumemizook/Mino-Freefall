@@ -45,7 +45,7 @@ class TGM2NormalMode extends BaseMode {
         // Game progression tracking
         this.creditsStarted = false;
         this.creditsTimer = 0;
-        this.creditsDuration = 61.60; // Same as other TGM2 modes
+        this.creditsDuration = 30; // 30s credits roll per spec
         
     }
     
@@ -166,10 +166,8 @@ class TGM2NormalMode extends BaseMode {
         // Normal mode: only stop at 299 (cap 300). +1 per piece, +1 per cleared line (up to 4).
         const atStopLevel = level === 299 || level >= 300;
 
+        // Do NOT advance on piece locks; only advance on line clears
         if (updateType === 'piece') {
-            if (!atStopLevel && level < 300) {
-                return level + 1;
-            }
             return level;
         } else if (updateType === 'lines') {
             const lineIncrement = Math.min(amount || 0, 4);
@@ -629,9 +627,11 @@ class TGM2NormalMode extends BaseMode {
     checkCreditRoll(gameScene) {
         if (gameScene.level >= 300 && !this.creditsStarted) {
             this.creditsStarted = true;
+            // Apply finish time bonus at roll start (once)
+            this.applyFinishTimeBonus(gameScene);
             
             // Start slow 20G credit roll
-            gameScene.startCredits();
+            gameScene.startCredits(30);
             
             console.log('TGM2 Normal: Started slow 20G credit roll');
         }

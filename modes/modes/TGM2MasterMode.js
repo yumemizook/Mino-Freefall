@@ -121,6 +121,32 @@ class TGM2MasterMode extends BaseMode {
         return this.modeId;
     }
     
+    // Handle level progression with Master rules (lines only; 998 -> 999 requires a line clear)
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        // Do NOT advance on piece locks
+        if (updateType === 'piece') {
+            this.updateTimingPhase(level);
+            return level;
+        }
+
+        if (updateType === 'lines') {
+            const lines = Math.max(0, amount || 0);
+
+            // 998 -> 999 requires a line clear
+            if (oldLevel === 998 && lines > 0) {
+                this.updateTimingPhase(999);
+                return 999;
+            }
+
+            const nextLevel = Math.min(level + lines, 999);
+            this.updateTimingPhase(nextLevel);
+            return nextLevel;
+        }
+
+        this.updateTimingPhase(level);
+        return level;
+    }
+    
     // Get gravity speed using TGM2 Master curve (0-999)
     getGravitySpeed(level) {
         // TGM2 Master mode gravity curve based on tgm2modes.md specifications
@@ -348,8 +374,25 @@ class TGM2MasterMode extends BaseMode {
     checkCreditRoll(gameScene) {
         if (gameScene.level >= 999 && !this.creditsStarted) {
             this.creditsStarted = true;
+            console.log('TGM2 Master: Credits pending (stack fade then roll)');
+        }
+    }
 
-            console.log('TGM2 Master: Credits started');
+    // Called by GameScene when credits actually begin (after stack fade)
+    onCreditsStart(gameScene) {
+        this.creditsStarted = true;
+        this.creditsTimer = 0;
+        this.creditsDuration = gameScene.creditsDuration || this.creditsDuration || 61.6;
+
+        // Decide roll type based on unlock
+        if (this.mRollUnlocked) {
+            this.startMRoll(gameScene);
+        } else {
+            this.fadingRollActive = true;
+            if (gameScene) {
+                gameScene.fadingRollActive = true;
+                gameScene.invisibleStackActive = false;
+            }
         }
     }
     
@@ -500,45 +543,68 @@ class TGM2MasterMode extends BaseMode {
     
     // Finish credit roll and determine final ranking
     finishCreditRoll(gameScene) {
+        const linesDuringRoll = gameScene.rollLinesCleared || 0;
+        const failedDuringRoll = gameScene.rollFailedDuringRoll;
+
         let finalGrade = this.displayedGrade;
         let rankingType = 'regular';
-        
-        // Check for Fading Roll completion
-        if (this.fadingRollActive && this.creditsCompleted) {
-            finalGrade = 'M';
-            rankingType = 'fading';
-        }
-        // Check for M-Roll completion
-        else if (this.mRollStarted) {
-            if (this.linesClearedInMRoll >= 32) {
+        let lineColor = 'none';
+
+        if (this.mRollStarted) {
+            this.linesClearedInMRoll = linesDuringRoll;
+            if (failedDuringRoll) {
+                finalGrade = 'm';
+                rankingType = 'm_roll_failed';
+                lineColor = 'green';
+            } else if (linesDuringRoll >= 32) {
                 finalGrade = 'GM';
                 rankingType = 'm_roll_orange';
-            } else if (this.linesClearedInMRoll > 0) {
-                finalGrade = 'M';
-                rankingType = 'm_roll_green';
+                lineColor = 'orange';
             } else {
-                finalGrade = 'M';
-                rankingType = 'm_roll_failed';
+                finalGrade = 'GM';
+                rankingType = 'm_roll_green';
+                lineColor = 'green';
+            }
+        } else if (this.fadingRollActive) {
+            if (failedDuringRoll) {
+                finalGrade = this.displayedGrade;
+                rankingType = 'fading_failed';
+                lineColor = 'green';
+            } else {
+                finalGrade = this.displayedGrade;
+                rankingType = 'fading';
+                lineColor = 'orange';
+            }
+        } else {
+            if (failedDuringRoll) {
+                lineColor = 'green';
             }
         }
-        
-        console.log(`TGM2 Master Final Ranking: ${finalGrade} (${rankingType})`);
-        
+
+        if (gameScene) {
+            if (typeof gameScene.setGradeLineColor === 'function') {
+                gameScene.setGradeLineColor(lineColor);
+            } else {
+                gameScene.gradeLineColor = lineColor;
+            }
+        }
+
+        console.log(`TGM2 Master Final Ranking: ${finalGrade} (${rankingType}) lines:${linesDuringRoll} lineColor:${lineColor}`);
+
         // Show final ranking
-        this.showFinalRanking(gameScene, finalGrade, rankingType);
-        
+        this.showFinalRanking(gameScene, finalGrade, rankingType, lineColor);
+
         // Proceed to game over
         gameScene.showGameOverScreen();
     }
     
     // Show final ranking
-    showFinalRanking(gameScene, grade, rankingType) {
+    showFinalRanking(gameScene, grade, rankingType, lineColor = 'none') {
         if (!gameScene.add) return;
         
-        let color = '#00ff00'; // Green for regular
-        if (rankingType === 'fading' || rankingType.includes('m_roll')) {
-            color = '#ff8800'; // Orange for special rankings
-        }
+        let color = '#ffffff'; // default
+        if (lineColor === 'orange') color = '#ff8800';
+        else if (lineColor === 'green') color = '#00ff00';
         
         const rankingText = gameScene.add.text(gameScene.windowWidth / 2, gameScene.windowHeight / 2, 
             `RANK: ${grade}`, {
