@@ -53,7 +53,7 @@ class ModeManager {
     // Initialize all available modes
     initializeModes() {
         // Register all available modes with their IDs and class references
-        const modeDefinitions = {
+        this.modeDefinitions = {
             // EASY modes
             'easy_normal': {
                 modeClass: 'EasyMode',
@@ -77,145 +77,40 @@ class ModeManager {
                     levelUpType: 'piece', lineClearBonus: 1, gravityLevelCap: 999
                 }
             },
-            
-            // STANDARD modes
-            'sprint_40': {
-                modeClass: 'Sprint40Mode',
-                config: {
-                    difficulty: 'standard',
-                    description: 'Clear 40 lines as fast as possible'
-                }
-            },
-            'sprint_100': {
-                modeClass: 'Sprint40Mode',
-                config: {
-                    difficulty: 'standard',
-                    description: 'Clear 100 lines as fast as possible',
-                    specialMechanics: {
-                        targetLines: 100,
-                        timeAttack: true,
-                        speedBonus: true
-                    }
-                }
-            },
-            'ultra': { 
-                modeClass: 'MarathonMode', 
-                config: { difficulty: 'standard', description: '2-minute score attack' }
-            },
-            'marathon': {
-                modeClass: 'MarathonMode',
-                config: {
-                    difficulty: 'standard',
-                    description: 'Clear 150 lines'
-                }
-            },
-            'zen': {
-                modeClass: 'ZenMode',
-                config: {
-                    difficulty: 'standard',
-                    description: 'Endless relaxed play'
-                }
-            },
-            
-            // MASTER modes
-            'tgm1': {
-                modeClass: 'TGM1Mode',
-                config: {
-                    difficulty: 'master',
-                    description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!'
-                }
-            },
-            'tgm2': {
-                modeClass: 'TGM2MasterMode',
-                config: {
-                    difficulty: 'master',
-                    description: 'Brand new mechanics, brand new challenges! Do you have what it takes?'
-                }
-            },
-            'tgm2_normal': {
-                modeClass: 'TGM2NormalMode',
-                config: {
-                    difficulty: 'easy',
-                    description: 'TGM2 Normal mode with item blocks at levels 100 and 200!'
-                }
-            },
-            'tgm_plus': {
-                modeClass: 'TGMPlusMode',
-                config: {
-                    difficulty: 'master',
-                    description: 'Rising garbage mode with fixed 24-row pattern!'
-                }
-            },
-            'tgm3': { 
-                modeClass: 'TGM3Mode', 
-                config: { difficulty: 'master', description: 'Try to be COOL!!, or you will REGRET!! it' }
-            },
-            'tgm4': { 
-                modeClass: 'TGM4Mode', 
-                config: { difficulty: 'master', description: 'Patience is key...' }
-            },
-            
-            // 20G modes
-            '20g': {
-                modeClass: 'Mode20G',
-                config: {
-                    difficulty: '20g',
-                    description: 'Maximum gravity from the start! Good luck!'
-                }
-            },
-            'tadeath': {
-                modeClass: 'TADeathMode',
-                config: {
-                    difficulty: '20g',
-                    description: 'Extreme 20G mode with torikan time limit. The ultimate test!'
-                }
-            },
-            'shirase': { 
-                modeClass: 'ShiraseMode', 
-                config: { difficulty: '20g', description: 'Lightning-fast speeds. Do you have what it takes?' }
-            },
-            'master20g': { 
-                modeClass: 'MasterTGM4Mode', 
-                config: { difficulty: '20g', description: 'Brand new, unique game mechanics. Can you handle them?' }
-            },
-            
-            // RACE modes
-            'asuka_easy': { 
-                modeClass: 'Mode20G', 
-                config: { difficulty: 'race', description: '20G Tetris stacking introduction' }
-            },
-            'asuka_normal': { 
-                modeClass: 'Mode20G', 
-                config: { difficulty: 'race', description: 'Race mode. Finish 1300 levels in 7 minutes.' }
-            },
-            'asuka_hard': { 
-                modeClass: 'Mode20G', 
-                config: { difficulty: 'race', description: 'The true test of skill and speed!' }
-            },
-            
-            // ALL CLEAR modes
-            'konoha_easy': { 
-                modeClass: 'MarathonMode', 
-                config: { difficulty: 'puzzle', description: 'Easy all-clear challenge with 5 pieces!' }
-            },
-            'konoha_hard': { 
-                modeClass: 'MarathonMode', 
-                config: { difficulty: 'puzzle', description: 'Hard all-clear challenge with all 7 pieces!' }
-            },
-            
-            // PUZZLE modes
-            'tgm3_sakura': { 
-                modeClass: 'ZenMode', 
-                config: { difficulty: 'puzzle', description: 'Puzzle mode from TGM3' }
-            },
-            'flashpoint': { 
-                modeClass: 'ZenMode', 
-                config: { difficulty: 'puzzle', description: 'From Flashpoint.' }
-            }
-        };
 
-        // Store mode definitions
-        this.modeDefinitions = modeDefinitions;
+            // STANDARD modes
+            'sprint_40': { modeClass: 'Sprint40Mode', config: { difficulty: 'standard', description: 'Clear 40 lines as fast as possible' } },
+            'sprint_100': { modeClass: 'Sprint40Mode', config: { difficulty: 'standard', description: 'Clear 100 lines as fast as possible', specialMechanics: { targetLines: 100, timeAttack: true, speedBonus: true } } },
+            'ultra': { modeClass: 'MarathonMode', config: { difficulty: 'standard', description: '2-minute score attack' } },
+            'marathon': { modeClass: 'MarathonMode', config: { difficulty: 'standard', description: 'Clear 150 lines' } },
+            'zen': { modeClass: 'ZenMode', config: { difficulty: 'standard', description: 'Endless relaxed play' } },
+
+            // MASTER modes
+            'tgm1': { modeClass: 'TGM1Mode', config: { difficulty: 'master', description: 'The Tetris game you know and love. Scale through the grades and be a Grand Master!' } },
+            'tgm2': { modeClass: 'TGM2MasterMode', config: { difficulty: 'master', description: 'Brand new mechanics, brand new challenges! Do you have what it takes?' } },
+            'tgm2_normal': { modeClass: 'TGM2NormalMode', config: { difficulty: 'easy', description: 'TGM2 Normal mode with item blocks at levels 100 and 200!' } },
+            'tgm_plus': { modeClass: 'TGMPlusMode', config: { difficulty: 'master', description: 'Rising garbage mode with fixed 24-row pattern!' } },
+            'tgm3': { modeClass: 'TGM3Mode', config: { difficulty: 'master', description: 'Try to be COOL!!, or you will REGRET!! it' } },
+            'tgm3_easy': { modeClass: 'TGM3EasyMode', config: { difficulty: 'easy', description: 'TGM3 Easy with Hanabi scoring and credit roll' } },
+            'tgm3_sakura': { modeClass: 'TGM3SakuraMode', config: { difficulty: 'puzzle', description: 'Puzzle-style Sakura jewel-clearing' } },
+            'shirase': { modeClass: 'TGM3ShiraseMode', config: { difficulty: '20g', description: 'Shirase 20G speed attack to 1300' } },
+            'tgm4': { modeClass: 'TGM4Mode', config: { difficulty: 'master', description: 'Patience is key...' } },
+
+            // 20G modes
+            '20g': { modeClass: 'Mode20G', config: { difficulty: '20g', description: 'Maximum gravity from the start! Good luck!' } },
+            'tadeath': { modeClass: 'TADeathMode', config: { difficulty: '20g', description: 'Extreme 20G mode with torikan time limit. The ultimate test!' } },
+            'master20g': { modeClass: 'MasterTGM4Mode', config: { difficulty: '20g', description: 'Brand new, unique game mechanics. Can you handle them?' } },
+
+            // RACE modes
+            'asuka_easy': { modeClass: 'Mode20G', config: { difficulty: 'race', description: '20G Tetris stacking introduction' } },
+            'asuka_normal': { modeClass: 'Mode20G', config: { difficulty: 'race', description: 'Race mode. Finish 1300 levels in 7 minutes.' } },
+            'asuka_hard': { modeClass: 'Mode20G', config: { difficulty: 'race', description: 'The true test of skill and speed!' } },
+
+            // ALL CLEAR / PUZZLE modes
+            'konoha_easy': { modeClass: 'MarathonMode', config: { difficulty: 'puzzle', description: 'Easy all-clear challenge with 5 pieces!' } },
+            'konoha_hard': { modeClass: 'MarathonMode', config: { difficulty: 'puzzle', description: 'Hard all-clear challenge with all 7 pieces!' } },
+            'flashpoint': { modeClass: 'ZenMode', config: { difficulty: 'puzzle', description: 'From Flashpoint.' } }
+        };
     }
 
     // Load a specific mode by ID
@@ -225,7 +120,6 @@ class ModeManager {
             console.error(`Mode not found: ${modeId}`);
             return null;
         }
-
 
         // Return cached mode if already loaded
         if (this.loadedModes.has(modeId)) {
@@ -330,6 +224,42 @@ class ModeManager {
                     }
                     break;
                     
+                case 'TGM3Mode':
+                    if (typeof TGM3Mode !== 'undefined') {
+                        modeInstance = new TGM3Mode();
+                    } else {
+                        console.warn('TGM3Mode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM3EasyMode':
+                    if (typeof TGM3EasyMode !== 'undefined') {
+                        modeInstance = new TGM3EasyMode();
+                    } else {
+                        console.warn('TGM3EasyMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM3SakuraMode':
+                    if (typeof TGM3SakuraMode !== 'undefined') {
+                        modeInstance = new TGM3SakuraMode();
+                    } else {
+                        console.warn('TGM3SakuraMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM3ShiraseMode':
+                    if (typeof TGM3ShiraseMode !== 'undefined') {
+                        modeInstance = new TGM3ShiraseMode();
+                    } else {
+                        console.warn('TGM3ShiraseMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
                 default:
                     console.warn(`Unknown mode class: ${modeDef.modeClass}, using BaseMode fallback`);
                     modeInstance = new BaseMode();

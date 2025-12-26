@@ -1399,9 +1399,9 @@ class MenuScene extends Phaser.Scene {
             description: "Score as many points as you can within 300 levels!",
           },
           {
-            id: "easy_easy",
+            id: "tgm3_easy",
             name: "Easy",
-            description: "Clear lines, light fireworks. Have fun!",
+            description: "TGM3 Easy with Hanabi scoring and credit roll",
           },
         ],
       },
@@ -2068,6 +2068,18 @@ class MenuScene extends Phaser.Scene {
     return modeId === "tgm3_sakura";
   }
 
+  // Sakura: during Ready/Go, pressing Hold advances sequence (handled by mode)
+  advanceSakuraSequenceWithHold() {
+    if (
+      this.gameMode &&
+      typeof this.gameMode.advanceSequenceWithHold === "function" &&
+      this.gameMode.isReadyGoActive &&
+      this.gameMode.isReadyGoActive()
+    ) {
+      this.gameMode.advanceSequenceWithHold(this);
+    }
+  }
+
   getLeaderboard(modeId) {
     const key = `leaderboard_${modeId}`;
     const stored = localStorage.getItem(key);
@@ -2264,11 +2276,12 @@ class MenuScene extends Phaser.Scene {
           middle: fmtTime(entry.time),
           right: "",
         };
-      case "easy_easy": // Easy (Hanabi not yet implemented)
+      case "easy_easy": // Easy - Hanabi | Score | Level
+      case "easy_hard": // Easy Hard variant
         return {
           left: fmtNum(entry.hanabi || "—"),
-          middle: fmtTime(entry.time),
-          right: "",
+          middle: fmtNum(entry.score || "—"),
+          right: `L${fmtNum(entry.level || 0)}`,
         };
       case "sprint_40":
       case "sprint_100": // Sprint
@@ -2892,12 +2905,12 @@ class SettingsScene extends Phaser.Scene {
       rotateCW: Phaser.Input.Keyboard.KeyCodes.K,
       rotateCW2: Phaser.Input.Keyboard.KeyCodes.UP,
       rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
-      rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L, // return L to CCW alt
-      rotate180: Phaser.Input.Keyboard.KeyCodes.I, // separate 180 bind
-      hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
+      rotateCCW2: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      rotate180: Phaser.Input.Keyboard.KeyCodes.X,
       hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
       pause: Phaser.Input.Keyboard.KeyCodes.ESC,
       menu: Phaser.Input.Keyboard.KeyCodes.ESC, // Menu and Pause share key
+      start: Phaser.Input.Keyboard.KeyCodes.ENTER,
       restart: Phaser.Input.Keyboard.KeyCodes.R,
     };
 
@@ -3775,6 +3788,8 @@ class GameScene extends Phaser.Scene {
     this.backToBack = false;
     this.totalLines = 0;
     this.lastPieceType = null;
+    this.spinRotatedWhileGrounded = false;
+
     this.isTSpin = false;
 
     // Piece active time tracking for scoring
@@ -3842,6 +3857,10 @@ class GameScene extends Phaser.Scene {
 
     // Validate piece history to ensure it's correct
     this.validatePieceHistory();
+    // Reset spin/hanabi for new run
+    this.spinRotatedWhileGrounded = false;
+    this.hanabiCounter = 0;
+    this.clearHanabiParticles();
 
     // Pause functionality
     this.isPaused = false;
@@ -4222,6 +4241,169 @@ class GameScene extends Phaser.Scene {
     this.applyModeConfiguration();
   }
 
+  markGroundedSpin() {
+    this.spinRotatedWhileGrounded = true;
+    if (
+      this.gameMode &&
+      typeof this.gameMode.onRotateWhileGrounded === "function"
+    ) {
+      this.gameMode.onRotateWhileGrounded(this);
+    }
+  }
+
+  spawnHanabiBurst(count = 1) {
+    if (!this.hanabiContainer) return;
+    const particlesToSpawn = Math.min(
+      this.hanabiMaxActive - this.hanabiParticles.length,
+      Math.max(2, Math.min(12, count * 3)),
+    );
+    const originX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2;
+    const originY = this.matrixOffsetY + (this.cellSize * this.visibleRows) / 3;
+    for (let i = 0; i < particlesToSpawn; i++) {
+      let g = this.hanabiPool.pop();
+      if (!g) {
+        g = this.add.graphics();
+      } else {
+        g.clear();
+      }
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 60;
+      const life = 0.35 + Math.random() * 0.2;
+      const radius = 2 + Math.random() * 2;
+      const color = Phaser.Display.Color.GetColor(
+        200 + Math.floor(Math.random() * 55),
+        200 + Math.floor(Math.random() * 55),
+        120 + Math.floor(Math.random() * 135),
+      );
+      g.fillStyle(color, 1);
+      g.fillCircle(0, 0, radius);
+      g.x = originX;
+      g.y = originY;
+      g.setDepth(1000);
+      this.hanabiContainer.add(g);
+      this.hanabiParticles.push({
+        g,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 30,
+        life,
+      });
+    }
+    this.hanabiCounter += count;
+  }
+
+  updateHanabiParticles(deltaTime) {
+    if (!this.hanabiParticles.length) return;
+    const remaining = [];
+    for (const p of this.hanabiParticles) {
+      p.life -= deltaTime;
+      if (p.life <= 0) {
+        p.g.clear();
+        p.g.setVisible(false);
+        this.hanabiPool.push(p.g);
+        continue;
+      }
+      p.vy += 120 * deltaTime;
+      p.g.x += p.vx * deltaTime;
+      p.g.y += p.vy * deltaTime;
+      p.g.setAlpha(Math.max(0, p.life / 0.5));
+      remaining.push(p);
+    }
+    this.hanabiParticles = remaining;
+  }
+
+  clearHanabiParticles() {
+    this.hanabiParticles.forEach((p) => {
+      if (p.g) {
+        p.g.clear();
+        p.g.destroy();
+      }
+    });
+    this.hanabiParticles = [];
+    this.hanabiPool = [];
+  }
+
+  updatePlacementHint() {
+    if (!this.hintGraphics) return;
+    this.hintGraphics.clear();
+    if (
+      !this.currentPiece ||
+      this.areActive ||
+      this.lineClearPhase ||
+      this.isPaused ||
+      this.gameOver
+    ) {
+      return;
+    }
+    const placements = [];
+    const rotations = [0, 1, 2, 3];
+    const pieceType = this.currentPiece.type;
+    for (const rot of rotations) {
+      const testPiece = new Piece(pieceType, this.rotationSystem, rot);
+      const shape = testPiece.shape;
+      const width = shape[0].length;
+      for (let x = -2; x < this.board.cols; x++) {
+        let testX = x;
+        let testY = -4;
+        const tmpPiece = new Piece(pieceType, this.rotationSystem, rot);
+        tmpPiece.x = testX;
+        tmpPiece.y = testY;
+        // Move down until collision
+        while (
+          this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y + 1)
+        ) {
+          tmpPiece.y += 1;
+        }
+        if (!this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y)) {
+          continue;
+        }
+        // Skip if out of bounds horizontally
+        if (tmpPiece.x < -2 || tmpPiece.x + width > this.board.cols + 2) {
+          continue;
+        }
+        // Simple score: holes and height
+        let holes = 0;
+        let maxY = 0;
+        for (let r = 0; r < tmpPiece.shape.length; r++) {
+          for (let c = 0; c < tmpPiece.shape[r].length; c++) {
+            if (!tmpPiece.shape[r][c]) continue;
+            const bx = tmpPiece.x + c;
+            const by = tmpPiece.y + r;
+            maxY = Math.max(maxY, by);
+            // If empty below and within bounds, count hole risk
+            if (by + 1 < this.board.rows) {
+              if (this.board.grid[by + 1][bx] === 0) holes += 1;
+            }
+          }
+        }
+        const score = holes * 100 + maxY;
+        placements.push({ score, piece: tmpPiece });
+      }
+    }
+    if (!placements.length) return;
+    placements.sort((a, b) => a.score - b.score);
+    this.hintPlacement = placements[0].piece;
+    const startRow = 2;
+    const cell = this.cellSize;
+    const offX = this.matrixOffsetX;
+    const offY = this.matrixOffsetY;
+    this.hintGraphics.lineStyle(2, 0x00e0ff, 0.5);
+    for (let r = 0; r < this.hintPlacement.shape.length; r++) {
+      for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
+        if (!this.hintPlacement.shape[r][c]) continue;
+        const x = this.hintPlacement.x + c;
+        const y = this.hintPlacement.y + r;
+        const drawY = y - startRow;
+        if (drawY < 0) continue;
+        this.hintGraphics.strokeRect(
+          offX + x * cell - cell / 2,
+          offY + drawY * cell - cell / 2,
+          cell,
+          cell,
+        );
+      }
+    }
+  }
+
   preload() {
     // Assets are loaded in AssetLoaderScene
     // This preload is intentionally empty to avoid duplicate loading
@@ -4277,7 +4459,16 @@ class GameScene extends Phaser.Scene {
     // Apply other configurations
     this.nextPiecesCount = config.nextPieces || 1;
     this.holdEnabled = config.holdEnabled || false;
-    this.ghostEnabled = config.ghostEnabled !== false; // Default true
+    this.ghostEnabled = true; // Default true
+    this.hanabiParticles = [];
+    this.hanabiPool = [];
+    this.hanabiContainer = null;
+    this.hintGraphics = null;
+    this.hintPlacement = null;
+    this.lowEndFireworks = true;
+    this.hanabiMaxActive = 80;
+    this.spinRotatedWhileGrounded = false;
+    this.hanabiCounter = 0;
     this.levelUpType = config.levelUpType || "piece";
     this.lineClearBonus = config.lineClearBonus || 1;
     this.gravityLevelCap = config.gravityLevelCap || 999;
@@ -4687,6 +4878,23 @@ class GameScene extends Phaser.Scene {
     // Piece per second displays - moved to right side of matrix, aligned with bottom of stack
     const ppsX = this.borderOffsetX + this.cellSize * this.board.cols + 20;
     const ppsY = this.borderOffsetY + this.playfieldHeight - 40; // Align with bottom of stack
+    this.hanabiLabel = this.add
+      .text(ppsX, ppsY - 40, "HANABI", {
+        fontSize: `${uiFontSize - 4}px`,
+        fill: "#fff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0);
+    this.hanabiTextInGame = this.add
+      .text(ppsX, ppsY - 25, "0", {
+        fontSize: `${largeFontSize}px`,
+        fill: "#ffff88",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0);
     this.ppsLabel = this.add
       .text(ppsX, ppsY, "PPS", {
         fontSize: `${uiFontSize - 4}px`,
@@ -4722,7 +4930,8 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
-    const shouldShowSectionTracker = !(isUltraMode || isZenMode);
+    const shouldShowSectionTracker =
+      !(isUltraMode || isZenMode) && modeId !== "tgm3_easy";
     if (this.sectionTrackerGroup) {
       this.sectionTrackerGroup.destroy(true);
       this.sectionTrackerGroup = null;
@@ -4964,6 +5173,8 @@ class GameScene extends Phaser.Scene {
   create() {
     // Initialize game elements here (spawn deferred until after READY/GO)
     this.gameGroup = this.add.group();
+    this.hanabiContainer = this.add.group();
+    this.hintGraphics = this.add.graphics({ lineStyle: { width: 2, color: 0x00e0ff, alpha: 0.5 } });
     this.cursors = this.input.keyboard.createCursorKeys();
 
     // Scene instances can be reused across restarts; reset runtime flags/timers.
@@ -5102,6 +5313,10 @@ class GameScene extends Phaser.Scene {
       this.nextGradeText = null;
       this.playfieldBorder = null;
       this.minoRowFadeAlpha = null;
+      if (this.hanabiLabel) this.hanabiLabel.destroy();
+      if (this.hanabiTextInGame) this.hanabiTextInGame.destroy();
+      this.hanabiLabel = null;
+      this.hanabiTextInGame = null;
     });
     const keybinds = (() => {
       const defaultKeybinds = {
@@ -5700,6 +5915,9 @@ class GameScene extends Phaser.Scene {
     const spaceKeyDown =
       isDown(this.keys.rotateCCW) || isDown(this.keys.rotateCCW2);
     const lKeyDown = isDown(this.keys.rotateCCW2);
+    const startDown = isDown(this.keys.start);
+    const startJustDown = justDown(this.keys.start);
+    const holdJustDown = justDown(this.keys.hold);
 
     const leftDown = isDown(this.cursors.left);
     const rightDown = isDown(this.cursors.right);
@@ -5727,6 +5945,9 @@ class GameScene extends Phaser.Scene {
       // Let game-over logic (fade/timers/UI) run below, but skip movement/rotation.
     }
 
+    // Update lightweight fireworks particles
+    this.updateHanabiParticles(this.deltaTime);
+
     if (this.gameOver) {
       // Skip any input-driven movement/rotation/drop.
     } else
@@ -5747,6 +5968,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, 1, this.rotationSystem)
         ) {
           this.resetLockDelay();
+          if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+            this.markGroundedSpin();
+          }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
           // Don't play ground sound on rotation failure
@@ -5763,6 +5987,9 @@ class GameScene extends Phaser.Scene {
           const second = this.currentPiece.rotate(this.board, 1, this.rotationSystem);
           if (first || second) {
             this.resetLockDelay();
+            if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+              this.markGroundedSpin();
+            }
           } else {
             this.isGrounded = !this.currentPiece.canMoveDown(this.board);
           }
@@ -5779,6 +6006,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.resetLockDelay();
+          if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+            this.markGroundedSpin();
+          }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
         }
@@ -5794,6 +6024,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.resetLockDelay();
+          if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+            this.markGroundedSpin();
+          }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
         }
@@ -5891,6 +6124,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.resetLockDelay();
+          if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+            this.markGroundedSpin();
+          }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
         }
@@ -5906,6 +6142,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.resetLockDelay();
+          if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
+            this.markGroundedSpin();
+          }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
         }
@@ -6013,12 +6252,13 @@ class GameScene extends Phaser.Scene {
       this.rotate180Pressed = false;
     }
 
-    // ARE input tracking - allow during loading for initial piece handling
+    // Update placement hint each frame
+    this.updatePlacementHint();
+
+    // Handle ARE input tracking - allow during loading for initial piece handling
     if (this.areActive || !this.currentPiece) {
       this.areLeftHeld = leftDown || zKeyDown;
       this.areRightHeld = rightDown || cKeyDown;
-
-      // Track rotation key states during ARE/loading for IRS (Initial Rotation System)
       this.areRotationKeys.k = kKeyDown;
       this.areRotationKeys.space = spaceKeyDown;
       this.areRotationKeys.l = lKeyDown;
@@ -6133,6 +6373,19 @@ class GameScene extends Phaser.Scene {
       } else {
         this.areTime += this.deltaTime;
       }
+    }
+
+    // Sakura-specific input (skip, hold-advance) before pause/game over exit
+    if (
+      this.gameMode &&
+      typeof this.gameMode.handleSakuraInput === "function" &&
+      this.selectedMode === "tgm3_sakura"
+    ) {
+      this.gameMode.handleSakuraInput(
+        this,
+        { startDown, startJustDown, holdJustDown },
+        this.deltaTime,
+      );
     }
 
     // Skip ALL game logic if paused or game over
@@ -6960,21 +7213,26 @@ class GameScene extends Phaser.Scene {
 
     // Default reset behavior
     this.lockDelay = 0;
-    this.isGrounded = false;
-    this.wasGroundedDuringSoftDrop = false; // Reset soft drop ground sound tracking
-  }
 
-  updatePPS() {
-    // Calculate conventional PPS (including ARE time)
-    const totalTime = this.activeTime + this.areTime;
-    this.conventionalPPS =
-      totalTime > 0 ? this.totalPiecesPlaced / totalTime : 0;
+          // Add all non-cleared rows to new grid
+          for (let r = 0; r < this.board.rows; r++) {
+            if (!clearedSet.has(r)) {
+              newGrid.push(this.board.grid[r]);
+              newFadeGrid.push(this.board.fadeGrid[r]);
+            }
+          }
 
-    // Calculate raw PPS (excluding ARE time)
-    this.rawPPS =
-      this.activeTime > 0 ? this.totalPiecesPlaced / this.activeTime : 0;
+          // Add empty rows at the top to maintain grid size
+          const emptyRowsNeeded = this.clearedLines.length;
+          for (let i = 0; i < emptyRowsNeeded; i++) {
+            newGrid.unshift(Array(this.board.cols).fill(0));
+            newFadeGrid.unshift(Array(this.board.cols).fill(0));
+          }
 
-    // Track peak PPS
+          // Replace the entire grid
+          this.board.grid = newGrid;
+          this.board.fadeGrid = newFadeGrid;
+          this.clearedLines = [];
     this.maxPpsRecorded = Math.max(this.maxPpsRecorded, this.conventionalPPS);
 
     // Track PPS history per placed piece for sprint graph
@@ -7882,7 +8140,16 @@ class GameScene extends Phaser.Scene {
       this.creditsBGM = null;
     }
 
-    // Default to green line on roll completion; modes can override with higher priority (orange)
+    // Show Hanabi summary after credits if available
+    if (this.gameMode && this.gameMode.hanabi !== undefined) {
+      this.showHanabiSummary(this.gameMode.hanabi);
+    }
+
+    // If invisible stack was active for fading roll, restore visibility
+    if (this.invisibleStackActive) {
+      this.invisibleStackActive = false;
+    }
+
     this.setGradeLineColor("green");
 
     // Delegate to mode-specific finish if available
@@ -8003,6 +8270,7 @@ class GameScene extends Phaser.Scene {
     if (typeof this.saveLeaderboardEntry !== "function") return;
     // Fallback generic entry; mode-specific handlers should prefer saveLeaderboardEntry directly.
     const entry = {
+      hanabi: this.gameMode && this.gameMode.hanabi !== undefined ? this.gameMode.hanabi : undefined,
       score: this.score,
       level: this.level,
       grade: this.grade,
@@ -8037,6 +8305,11 @@ class GameScene extends Phaser.Scene {
     this.gameOverTimer = 0; // Start timer for 10 seconds
     this.gameOverMessage = this.sprintCompleted ? "CONGRATULATIONS" : "GAME OVER";
     this.finesseActiveForPiece = false;
+
+    // Show Hanabi summary if available
+    if (this.gameMode && this.gameMode.hanabi !== undefined) {
+      this.showHanabiSummary(this.gameMode.hanabi);
+    }
 
     // Freeze section tracking so the losing section remains counted and displayed.
     if (
@@ -8118,6 +8391,27 @@ class GameScene extends Phaser.Scene {
     if (this.gameMode && this.gameMode.onGameOver) {
       this.gameMode.onGameOver(this);
     }
+  }
+
+  showHanabiSummary(hanabiValue) {
+    const text = `Hanabi: ${hanabiValue}`;
+    if (this.hanabiText && this.hanabiText.destroy) {
+      this.hanabiText.destroy();
+    }
+    this.hanabiText = this.add
+      .text(
+        this.borderOffsetX + this.playfieldWidth / 2,
+        this.borderOffsetY + this.playfieldHeight + 80,
+        text,
+        {
+          fontSize: "24px",
+          fill: "#ffff88",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+          align: "center",
+        },
+      )
+      .setOrigin(0.5, 0);
   }
 
   drawCreditsScreen() {
