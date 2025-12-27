@@ -10,19 +10,24 @@ class PowerupMino extends Piece {
         this.powerupType = powerupType;
         this.isPowerup = true;
         
+        // Base/native color for restoration
+        this.baseColor = this.color;
+        // Use nonzero black so board treats it as occupied
+        this.powerupFillColor = 0x010101;
+        
         // Visual distinction for powerup pieces
         this.powerupColors = {
-            'del_even': 0xFF00FF,  // Magenta for row deletion
-            'free_fall': 0x00FF80 // Green for gravity burst
+            'del_even': 0x2a7bff,  // Blue border for "="
+            'free_fall': 0x00ff80 // Green border for "!"
         };
         
         // Apply powerup color if specified
         if (this.powerupType && this.powerupColors[this.powerupType]) {
-            this.color = this.powerupColors[this.powerupType];
+            this.color = this.powerupFillColor;
         }
         
         // Store original color for restoration if needed
-        this.originalColor = this.color;
+        this.originalColor = this.baseColor;
         
         // Powerup-specific properties
         this.powerupData = {
@@ -41,43 +46,47 @@ class PowerupMino extends Piece {
         };
     }
     
-    // Override draw method to add visual indicator for powerup pieces
+    // Override draw method to render custom full-size powerup blocks
     draw(scene, offsetX, offsetY, cellSize, ghost = false, alpha = 1) {
         const finalAlpha = ghost ? 0.3 : alpha;
-        
-        // Draw the base piece
         for (let r = 0; r < this.shape.length; r++) {
             for (let c = 0; c < this.shape[r].length; c++) {
-                if (this.shape[r][c]) {
-                    const pieceY = this.y + r;
-                    // Only draw pieces that are in the visible area (row 2 and below in the 22-row matrix)
-                    if (pieceY >= 2) {
-                        const textureKey = scene.rotationSystem === 'ARS' ? 'mino_ars' : 'mino_srs';
-                        const texture = scene.textures ? scene.textures.get(textureKey) : null;
-                        const textureSource = texture && texture.source ? texture.source[0] : null;
-                        const hasValidTextureSource = !!texture && !!textureSource && !!textureSource.image;
-                        if (hasValidTextureSource) {
-                            const sprite = scene.add.sprite(offsetX + (this.x + c) * cellSize, offsetY + (pieceY - 2) * cellSize, textureKey);
-                            sprite.setDisplaySize(cellSize, cellSize);
-                            sprite.setTint(this.color);
-                            sprite.setAlpha(finalAlpha);
-                            scene.gameGroup.add(sprite);
-                            
-                            // Add powerup indicator overlay
-                            this.drawPowerupIndicator(sprite, cellSize);
-                        } else {
-                            const graphics = scene.add.graphics();
-                            graphics.fillStyle(this.color, finalAlpha);
-                            graphics.fillRect(
-                                offsetX + (this.x + c) * cellSize - cellSize / 2,
-                                offsetY + (pieceY - 2) * cellSize - cellSize / 2,
-                                cellSize,
-                                cellSize,
-                            );
-                            scene.gameGroup.add(graphics);
-                        }
-                    }
+                if (!this.shape[r][c]) continue;
+                const pieceY = this.y + r;
+                if (pieceY < 2) continue;
+
+                const x = offsetX + (this.x + c) * cellSize - cellSize / 2;
+                const y = offsetY + (pieceY - 2) * cellSize - cellSize / 2;
+                const g = scene.add.graphics();
+                // Fill
+                g.fillStyle(this.powerupFillColor, finalAlpha);
+                g.fillRect(x, y, cellSize, cellSize);
+                // Border by powerup type color
+                const borderColor = this.powerupColors[this.powerupType] || this.baseColor;
+                g.lineStyle(2, borderColor, finalAlpha);
+                g.strokeRect(x, y, cellSize, cellSize);
+                // Symbol
+                g.lineStyle(3, borderColor, finalAlpha);
+                g.fillStyle(borderColor, finalAlpha);
+                if (this.powerupType === 'free_fall') {
+                    // "!" center
+                    const cx = x + cellSize / 2;
+                    const cy = y + cellSize / 2;
+                    g.beginPath();
+                    g.moveTo(cx, cy - cellSize * 0.25);
+                    g.lineTo(cx, cy + cellSize * 0.1);
+                    g.strokePath();
+                    g.fillCircle(cx, cy + cellSize * 0.25, Math.max(1, cellSize * 0.06));
+                } else if (this.powerupType === 'del_even') {
+                    // "=" lines
+                    const cx = x + cellSize / 2;
+                    const cy = y + cellSize / 2;
+                    const w = cellSize * 0.4;
+                    const h = cellSize * 0.08;
+                    g.fillRect(cx - w / 2, cy - cellSize * 0.12, w, h);
+                    g.fillRect(cx - w / 2, cy + cellSize * 0.05, w, h);
                 }
+                scene.gameGroup.add(g);
             }
         }
     }
@@ -99,32 +108,41 @@ class PowerupMino extends Piece {
         graphics.fillCircle(indicatorX, indicatorY, indicatorSize/2);
         
         // Draw powerup-specific symbol
-        graphics.lineStyle(2, 0xFFFFFF, 1);
-        graphics.strokeCircle(indicatorX, indicatorY, indicatorSize/2 - 1);
-        
-        // Draw powerup symbol based on type
         switch (this.powerupType) {
             case 'del_even':
-                // Draw "X" symbol for deletion
-                graphics.lineStyle(2, 0xFFFFFF, 1);
+                // "=" symbol with blue border
+                graphics.lineStyle(2, this.powerupColors.del_even, 1);
+                graphics.strokeRect(
+                    indicatorX - indicatorSize / 2,
+                    indicatorY - indicatorSize / 2,
+                    indicatorSize,
+                    indicatorSize
+                );
+                graphics.lineStyle(2, 0xffffff, 1);
                 graphics.beginPath();
                 graphics.moveTo(indicatorX - 2, indicatorY - 2);
+                graphics.lineTo(indicatorX + 2, indicatorY - 2);
+                graphics.moveTo(indicatorX - 2, indicatorY + 2);
                 graphics.lineTo(indicatorX + 2, indicatorY + 2);
-                graphics.moveTo(indicatorX + 2, indicatorY - 2);
-                graphics.lineTo(indicatorX - 2, indicatorY + 2);
                 graphics.strokePath();
                 break;
 
             case 'free_fall':
-                // Draw downward arrow for gravity
-                graphics.lineStyle(2, 0xFFFFFF, 1);
+                // "!" symbol with green border
+                graphics.lineStyle(2, this.powerupColors.free_fall, 1);
+                graphics.strokeRect(
+                    indicatorX - indicatorSize / 2,
+                    indicatorY - indicatorSize / 2,
+                    indicatorSize,
+                    indicatorSize
+                );
+                graphics.lineStyle(2, 0xffffff, 1);
                 graphics.beginPath();
-                graphics.moveTo(indicatorX, indicatorY - 3);
-                graphics.lineTo(indicatorX, indicatorY + 3);
-                graphics.moveTo(indicatorX - 2, indicatorY + 1);
-                graphics.lineTo(indicatorX, indicatorY + 3);
-                graphics.lineTo(indicatorX + 2, indicatorY + 1);
+                graphics.moveTo(indicatorX, indicatorY - 2);
+                graphics.lineTo(indicatorX, indicatorY + 2);
                 graphics.strokePath();
+                graphics.fillStyle(0xffffff, 1);
+                graphics.fillCircle(indicatorX, indicatorY + 3, 1);
                 break;
         }
         
@@ -155,7 +173,8 @@ class PowerupMino extends Piece {
                         y: this.y + r,
                         boardX: this.x + c,
                         boardY: this.y + r,
-                        powerupType: this.powerupType
+                        powerupType: this.powerupType,
+                        originalColor: this.baseColor,
                     });
                 }
             }
@@ -197,6 +216,82 @@ class PowerupEffectHandler {
         this.activeEffects = [];
     }
     
+    // Execute powerup by type (simplified entry point)
+    executePowerupByType(powerupType) {
+        switch (powerupType) {
+            case 'del_even':
+                this.executeDeleteRowsEffect();
+                break;
+            case 'free_fall':
+                this.executeFreeFallEffect();
+                break;
+        }
+    }
+    
+    // Delete every other row effect (sync, bottom-up)
+    executeDeleteRowsEffect() {
+        const rowsToDelete = [];
+        const rows = this.gameScene.board.rows;
+        for (let r = 0; r < rows; r++) {
+            if (r % 2 === 0) rowsToDelete.push(r);
+        }
+        if (rowsToDelete.length === 0) return;
+
+        // Sequentially clear every other row with a short stagger
+        const sorted = rowsToDelete.slice().sort((a, b) => a - b);
+        let delay = 0;
+        const stepMs = 120;
+        sorted.forEach((row, idx) => {
+            this.gameScene.time.delayedCall(delay, () => {
+                // Adjust row index as rows above have been removed
+                const adjustedRow = row - idx;
+                this.deleteRows([adjustedRow]);
+                this.playPowerupEffectSound('del_even');
+            });
+            delay += stepMs;
+        });
+    }
+    
+    // Free fall effect with shake then gravity + line clear
+    executeFreeFallEffect() {
+        const doGravity = () => {
+            this.applyColumnGravity();
+            const newLines = this.findFilledLines();
+            if (newLines.length > 0) {
+                this.clearLines(newLines);
+                this.playPowerupEffectSound('free_fall');
+            }
+        };
+        this.shakePlayfield(doGravity);
+    }
+
+    // Simple downward shake twice, then callback
+    shakePlayfield(onComplete) {
+        const scene = this.gameScene;
+        const targets = [];
+        if (scene.gameGroup) targets.push(scene.gameGroup);
+        if (scene.playfieldBorder) targets.push(scene.playfieldBorder);
+        if (!targets.length) {
+            if (onComplete) onComplete();
+            return;
+        }
+        const timeline = scene.tweens.createTimeline();
+        targets.forEach((t) => {
+            timeline.add({
+                targets: t,
+                y: '+=6',
+                duration: 70,
+                yoyo: true,
+                repeat: 1,
+                ease: 'Sine.easeInOut',
+            });
+        });
+        timeline.setCallback('onComplete', () => {
+            if (onComplete) onComplete();
+        });
+        timeline.play();
+    }
+    
     // Process powerup effects when lines are cleared
     processPowerupEffects(clearedLines, powerupCells) {
         if (!powerupCells || powerupCells.length === 0) {
@@ -214,85 +309,8 @@ class PowerupEffectHandler {
         
         // Execute each type of powerup
         Object.keys(powerupsByType).forEach(powerupType => {
-            this.executePowerup(powerupType, powerupsByType[powerupType]);
+            this.executePowerupByType(powerupType);
         });
-    }
-    
-    // Execute specific powerup effect
-    executePowerup(powerupType, powerupCells) {
-        switch (powerupType) {
-            case 'del_even':
-                this.executeDeleteRowsEffect(powerupCells);
-                break;
-            case 'free_fall':
-                this.executeGravityBurstEffect(powerupCells);
-                break;
-        }
-    }
-    
-    // Delete every other row effect
-    executeDeleteRowsEffect(powerupCells) {
-        const config = {
-            preserveTopRows: 2,  // Don't delete top 2 rows
-            preserveBottomRows: 2, // Don't delete bottom 2 rows
-            deletePattern: 'every_other' // Pattern: 'every_other', 'every_third'
-        };
-        
-        const rowsToDelete = [];
-        const rows = this.gameScene.board.rows;
-        const cols = this.gameScene.board.cols;
-        
-        // Determine which rows to delete based on pattern
-        for (let r = config.preserveTopRows; r < rows - config.preserveBottomRows; r++) {
-            // Skip rows that were just cleared by normal line clear
-            if (this.gameScene.clearedLines.includes(r)) continue;
-            
-            // Apply deletion pattern
-            if (config.deletePattern === 'every_other') {
-                // Delete every other row (alternating pattern)
-                if (r % 2 === 0) { // Delete even rows
-                    rowsToDelete.push(r);
-                }
-            }
-            // Add more patterns as needed (every_third, etc.)
-        }
-        
-        // Execute row deletions
-        if (rowsToDelete.length > 0) {
-            this.deleteRows(rowsToDelete);
-            this.playPowerupEffectSound('del_even');
-        }
-    }
-    
-    // Gravity burst effect - force all pieces to fall to bottom
-    executeGravityBurstEffect(powerupCells) {
-        const config = {
-            clearFilledLines: true,
-            maxIterations: 10
-        };
-        
-        let iteration = 0;
-        let linesCleared = 0;
-        
-        do {
-            iteration++;
-            // Apply gravity to all columns independently
-            this.applyColumnGravity();
-            
-            // Check for new filled lines and clear them
-            if (config.clearFilledLines) {
-                const newLines = this.findFilledLines();
-                if (newLines.length > 0) {
-                    this.clearLines(newLines);
-                    linesCleared += newLines.length;
-                }
-            }
-            
-        } while (iteration < config.maxIterations);
-        
-        if (linesCleared > 0) {
-            this.playPowerupEffectSound('free_fall');
-        }
     }
     
     // Apply gravity column by column
