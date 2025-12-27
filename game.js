@@ -4015,6 +4015,21 @@ class GameScene extends Phaser.Scene {
 
     // Soft drop ground sound tracking
     this.wasGroundedDuringSoftDrop = false;
+
+    // Preview piece shown during Ready/Go
+    this.previewPiece = null;
+
+    // Section stop handling (TGM-style)
+    this.levelStopActive = false;
+  }
+
+  isNormalOrEasyMode() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const id = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    return id.includes("normal") || id.includes("easy");
   }
 
   // Get border color based on selected mode
@@ -4395,9 +4410,11 @@ class GameScene extends Phaser.Scene {
     if (
       !this.currentPiece ||
       this.areActive ||
-      this.lineClearPhase ||
-      this.isPaused ||
-      this.gameOver
+      this.gameOver ||
+      this.lineClearDelayActive ||
+      this.loadingPhase ||
+      this.readyGoPhase ||
+      !this.isNormalOrEasyMode()
     ) {
       return;
     }
@@ -4537,7 +4554,10 @@ class GameScene extends Phaser.Scene {
     // Apply other configurations
     this.nextPiecesCount = config.nextPieces || 1;
     this.holdEnabled = config.holdEnabled || false;
-    this.ghostEnabled = true; // Default true
+    this.ghostEnabled = typeof config.ghostEnabled === "boolean" ? config.ghostEnabled : true;
+    if (this.isNormalOrEasyMode()) {
+      this.ghostEnabled = true;
+    }
     this.hanabiParticles = [];
     this.hanabiPool = [];
     this.hanabiContainer = null;
@@ -5653,6 +5673,28 @@ class GameScene extends Phaser.Scene {
     const centerX = this.game.config.width / 2;
     const centerY = this.game.config.height / 2;
 
+    // Prepare first piece during Ready/Go so it is visible (peek without consuming queue)
+    if (!this.previewPiece) {
+      if (this.nextPieces.length < 6) {
+        this.generateNextPieces();
+      }
+      const rawNext = this.nextPieces[0];
+      let pieceType =
+        typeof rawNext === "string"
+          ? rawNext
+          : typeof rawNext?.type === "string"
+            ? rawNext.type
+            : typeof rawNext?.piece === "string"
+              ? rawNext.piece
+              : rawNext;
+      if (typeof pieceType !== "string") {
+        pieceType = "I";
+      }
+      pieceType = pieceType.toUpperCase();
+
+      this.previewPiece = new Piece(pieceType, this.rotationSystem, 0);
+    }
+
     const readyText = this.add
       .text(centerX, centerY, "READY", {
         fontSize: "64px",
@@ -5686,6 +5728,7 @@ class GameScene extends Phaser.Scene {
         goText.destroy();
         this.readyGoPhase = false;
         this.gameStarted = true;
+        this.previewPiece = null;
         if (this.nextPieces.length < 6) {
           this.generateNextPieces();
         }
@@ -5998,7 +6041,15 @@ class GameScene extends Phaser.Scene {
           const ghost = this.currentPiece.getGhostPosition(this.board);
           this.hardDropRows = ghost.y - this.currentPiece.y;
           this.currentPiece.hardDrop(this.board);
-          this.lockPiece();
+          // For ARS, place without instant lock; for others, lock immediately
+          if (this.rotationSystem === "ARS") {
+            this.isGrounded = true;
+            this.lockDelay = this.deltaTime;
+            this.lockDelayBufferedStart = false;
+            this.currentPiece.playGroundSound(this);
+          } else {
+            this.lockPiece();
+          }
         }
       } else if (!xKeyDown && this.xKeyPressed) {
         this.xKeyPressed = false;
@@ -6965,8 +7016,9 @@ class GameScene extends Phaser.Scene {
       try {
         if (isTetrisClear) {
           this.sound?.add("applause", { volume: 0.8 })?.play();
-        } else if (hadComboActive || this.comboCount > 0) {
-          this.sound?.add("combo", { volume: 0.7 })?.play();
+          if (hadComboActive || this.comboCount > 0) {
+            this.sound?.add("combo", { volume: 0.7 })?.play();
+          }
         }
       } catch {}
     }
@@ -7524,13 +7576,31 @@ class GameScene extends Phaser.Scene {
       this.level = maxLevel;
     }
 
-    // Play bell at x99 level stops (once per stop)
-    if (this.level % 100 === 99 && this.level !== this.lastBellLevel) {
+    const specialMechanics =
+      (this.gameMode &&
+        typeof this.gameMode.getConfig === "function" &&
+        this.gameMode.getConfig()?.specialMechanics) ||
+      {};
+    const sectionStops = Array.isArray(specialMechanics.sectionStops)
+      ? specialMechanics.sectionStops
+      : [];
+    const isNormalMode = this.isNormalOrEasyMode() && !sectionStops.length;
+    const stopLevelHit =
+      !isNormalMode && sectionStops.includes(this.level) && this.level !== this.lastBellLevel;
+
+    // Play bell at x99 level stops (once per stop) except Normal mode bypass
+    if (this.level % 100 === 99 && this.level !== this.lastBellLevel && !isNormalMode) {
       this.lastBellLevel = this.level;
       try {
         const bell = this.sound?.add("bell", { volume: 0.6 });
         bell?.play();
       } catch {}
+    }
+
+    // Enforce section stop by freezing level until a line clear occurs (handled via stop flag)
+    if (stopLevelHit) {
+      this.lastBellLevel = this.level;
+      this.levelStopActive = true;
     }
 
     // Play complete when reaching max level once
