@@ -187,6 +187,10 @@ class TGM3SakuraMode extends BaseMode {
 
     // Called after line clear; we use it to detect jewel clears and time bonuses
     handleLineClear(gameScene, linesCleared, pieceType = null) {
+        // Check if the cleared piece was an item block
+        if (gameScene.currentPiece && gameScene.currentPiece.isItemBlock) {
+            this.activateItemBlock(gameScene.currentPiece.itemType, gameScene);
+        }
         // Detect cleared jewels (cells now empty)
         const clearedJewels = [];
         for (const key of Array.from(this.jewelSet)) {
@@ -201,6 +205,9 @@ class TGM3SakuraMode extends BaseMode {
             // +1s per jewel during ARE; approximate by immediate apply
             const bonus = clearedJewels.length;
             this.mainTimer += bonus;
+            try {
+                gameScene.sound?.add('jewelclear', { volume: 0.7 })?.play();
+            } catch {}
         }
     }
 

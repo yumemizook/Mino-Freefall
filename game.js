@@ -3576,29 +3576,20 @@ class AssetLoaderScene extends Phaser.Scene {
     // Load BGM files from the correct directory paths
     try {
       // Load MP3 files from bgm directory (Phaser compatible)
-      if (!this.cache.audio.exists("stage1")) {
-        this.load.audio("stage1", "bgm/tm1_1.mp3");
-      }
-      if (!this.cache.audio.exists("stage2")) {
-        this.load.audio("stage2", "bgm/tm1_2.mp3");
-      }
-      if (!this.cache.audio.exists("credits")) {
-        this.load.audio("credits", "bgm/tm1_endroll.mp3");
-      }
-
-      // Load TGM2 BGM files
-      if (!this.cache.audio.exists("tgm2_stage1")) {
-        this.load.audio("tgm2_stage1", "bgm/tm1_1.mp3");
-      }
-      if (!this.cache.audio.exists("tgm2_stage2")) {
-        this.load.audio("tgm2_stage2", "bgm/tm1_2.mp3");
-      }
-      if (!this.cache.audio.exists("tgm2_stage3")) {
-        this.load.audio("tgm2_stage3", "bgm/tm2_3.mp3");
-      }
-      if (!this.cache.audio.exists("tgm2_stage4")) {
-        this.load.audio("tgm2_stage4", "bgm/tm2_4.mp3");
-      }
+      const bgmLoads = [
+        ["tm1_1", "bgm/tm1_1.mp3"],
+        ["tm1_2", "bgm/tm1_2.mp3"],
+        ["tm1_endroll", "bgm/tm1_endroll.mp3"],
+        ["tm2_3", "bgm/tm2_3.mp3"],
+        ["tm2_4", "bgm/tm2_4.mp3"],
+        ["tm3_4", "bgm/tm3_4.mp3"],
+        ["tm3_6", "bgm/tm3_6.mp3"],
+      ];
+      bgmLoads.forEach(([key, path]) => {
+        if (!this.cache.audio.exists(key)) {
+          this.load.audio(key, path);
+        }
+      });
     } catch (error) {
       console.warn("BGM files could not be loaded from bgm directory", error);
     }
@@ -3655,6 +3646,24 @@ class AssetLoaderScene extends Phaser.Scene {
     }
     if (!this.cache.audio.exists("sound_i")) {
       this.load.audio("sound_i", "sfx/i.wav");
+    }
+    if (!this.cache.audio.exists("IHS")) {
+      this.load.audio("IHS", "sfx/IHS.wav");
+    }
+    if (!this.cache.audio.exists("bell")) {
+      this.load.audio("bell", "sfx/bell.wav");
+    }
+    if (!this.cache.audio.exists("applausee")) {
+      this.load.audio("applausee", "sfx/applausee.wav");
+    }
+    if (!this.cache.audio.exists("combo")) {
+      this.load.audio("combo", "sfx/combo.wav");
+    }
+    if (!this.cache.audio.exists("jewelclear")) {
+      this.load.audio("jewelclear", "sfx/jewelclear.wav");
+    }
+    if (!this.cache.audio.exists("firework")) {
+      this.load.audio("firework", "sfx/firework.wav");
     }
   }
 
@@ -3860,7 +3869,12 @@ class GameScene extends Phaser.Scene {
     // Reset spin/hanabi for new run
     this.spinRotatedWhileGrounded = false;
     this.hanabiCounter = 0;
+    // Ensure particle arrays exist before clearing
+    this.hanabiParticles = [];
+    this.hanabiPool = [];
     this.clearHanabiParticles();
+    this.levelMaxSoundPlayed = false;
+    this.lastBellLevel = -1;
 
     // Pause functionality
     this.isPaused = false;
@@ -3871,6 +3885,7 @@ class GameScene extends Phaser.Scene {
     this.stage2BGM = null;
     this.currentBGM = null;
     this.bgmEnabled = true;
+    this.bgmTracks = {};
 
     // Loop point configuration for BGM tracks
     this.loopPoints = {
@@ -4252,6 +4267,20 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnHanabiBurst(count = 1) {
+    // Disable hanabi for TGM2 Normal mode
+    if (this.gameMode && this.gameMode.modeId === "tgm2_normal") {
+      return;
+    }
+    // Play firework SFX in Easy modes
+    const modeId =
+      this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode;
+    if (modeId === "easy_easy" || modeId === "easy_normal") {
+      try {
+        this.sound?.add("firework", { volume: 0.6 })?.play();
+      } catch {}
+    }
     if (!this.hanabiContainer) return;
     const particlesToSpawn = Math.min(
       this.hanabiMaxActive - this.hanabiParticles.length,
@@ -4334,6 +4363,11 @@ class GameScene extends Phaser.Scene {
     ) {
       return;
     }
+    // Color hint based on current piece color
+    const hintColor = this.currentPiece && this.currentPiece.color
+      ? this.currentPiece.color
+      : 0x00e0ff;
+
     const placements = [];
     const rotations = [0, 1, 2, 3];
     const pieceType = this.currentPiece.type;
@@ -4386,7 +4420,7 @@ class GameScene extends Phaser.Scene {
     const cell = this.cellSize;
     const offX = this.matrixOffsetX;
     const offY = this.matrixOffsetY;
-    this.hintGraphics.lineStyle(2, 0x00e0ff, 0.5);
+    this.hintGraphics.lineStyle(2, hintColor, 0.4);
     for (let r = 0; r < this.hintPlacement.shape.length; r++) {
       for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
         if (!this.hintPlacement.shape[r][c]) continue;
@@ -4402,6 +4436,12 @@ class GameScene extends Phaser.Scene {
         );
       }
     }
+
+    // Apply smooth blink (alpha oscillation)
+    const blinkSpeed = 2; // Hz
+    const t = this.time.now / 1000;
+    const alpha = 0.3 + 0.2 * (1 + Math.sin(2 * Math.PI * blinkSpeed * t));
+    this.hintGraphics.setAlpha(Math.min(1, Math.max(0, alpha)));
   }
 
   preload() {
@@ -4930,6 +4970,11 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
+    // Hide Hanabi counter for TGM2 Normal mode
+    const hideHanabi = modeId === "tgm2_normal";
+    if (this.hanabiLabel) this.hanabiLabel.setVisible(!hideHanabi);
+    if (this.hanabiTextInGame) this.hanabiTextInGame.setVisible(!hideHanabi);
+
     const shouldShowSectionTracker =
       !(isUltraMode || isZenMode) && modeId !== "tgm3_easy";
     if (this.sectionTrackerGroup) {
@@ -5170,11 +5215,13 @@ class GameScene extends Phaser.Scene {
     ); // Height reduced by 1px, width expanded 1px left
   }
 
-  create() {
+   create() {
     // Initialize game elements here (spawn deferred until after READY/GO)
     this.gameGroup = this.add.group();
     this.hanabiContainer = this.add.group();
-    this.hintGraphics = this.add.graphics({ lineStyle: { width: 2, color: 0x00e0ff, alpha: 0.5 } });
+    this.hintGraphics = this.add.graphics({
+      lineStyle: { width: 2, color: 0x00e0ff, alpha: 0.5 },
+    });
     this.cursors = this.input.keyboard.createCursorKeys();
 
     // Scene instances can be reused across restarts; reset runtime flags/timers.
@@ -5247,7 +5294,6 @@ class GameScene extends Phaser.Scene {
     this.readyGoPhase = false;
     this.loadingPhase = true;
     this.gameStarted = false;
-    this.showGameOverText = false;
 
     // Ensure layout values are correct for UI drawing (level bar, border, etc.)
     this.calculateLayout();
@@ -5257,12 +5303,10 @@ class GameScene extends Phaser.Scene {
         this.bgmLoopTimer.remove(false);
         this.bgmLoopTimer = null;
       }
-
       if (this.currentBGM) {
         this.currentBGM.stop();
         this.currentBGM = null;
       }
-
       const bgmObjects = [
         this.stage1BGM,
         this.stage2BGM,
@@ -5271,29 +5315,22 @@ class GameScene extends Phaser.Scene {
         this.tgm2_stage3,
         this.tgm2_stage4,
       ];
-
       bgmObjects.forEach((bgm) => {
         if (bgm) {
           bgm.stop();
           bgm.destroy();
         }
       });
-
       this.stage1BGM = null;
       this.stage2BGM = null;
       this.tgm2_stage1 = null;
       this.tgm2_stage2 = null;
       this.tgm2_stage3 = null;
       this.tgm2_stage4 = null;
+      if (this.tweens) this.tweens.killAll();
+      if (this.time) this.time.removeAllEvents();
 
-      if (this.tweens) {
-        this.tweens.killAll();
-      }
-      if (this.time) {
-        this.time.removeAllEvents();
-      }
-
-      // Scene instances can be reused; ensure we don't keep references to destroyed UI objects.
+      // Clear UI refs
       this.timeText = null;
       this.levelLabel = null;
       this.levelDisplayLabel = null;
@@ -5318,6 +5355,7 @@ class GameScene extends Phaser.Scene {
       this.hanabiLabel = null;
       this.hanabiTextInGame = null;
     });
+
     const keybinds = (() => {
       const defaultKeybinds = {
         moveLeft: Phaser.Input.Keyboard.KeyCodes.Z,
@@ -5338,8 +5376,7 @@ class GameScene extends Phaser.Scene {
         try {
           const parsed = JSON.parse(stored);
           return { ...defaultKeybinds, ...parsed };
-        } catch (e) {
-        }
+        } catch (e) {}
       }
       return defaultKeybinds;
     })();
@@ -5362,7 +5399,6 @@ class GameScene extends Phaser.Scene {
       restart: makeKey(keybinds.restart),
     };
 
-    // Prevent default browser behavior for game keys
     this.input.keyboard.addCapture([
       keybinds.moveLeft,
       keybinds.moveRight,
@@ -5384,7 +5420,6 @@ class GameScene extends Phaser.Scene {
     this.startTime = Date.now();
     this.gameStartTime = this.startTime;
     this.currentTime = 0;
-
     this.sectionStartTime = 0;
     this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.currentSectionTetrisCount = 0;
@@ -5392,7 +5427,7 @@ class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseStartTime = null;
 
-    // UI - positioned relative to screen size
+    // UI
     this.setupUI();
 
     // Initialize BGM system (playback deferred)
@@ -5414,478 +5449,136 @@ class GameScene extends Phaser.Scene {
   }
 
   initializeBGM() {
-    // Initialize audio objects with error handling (no auto-play)
     try {
-      this.stage1BGM = this.sound.add("stage1", { loop: true, volume: 0.5 });
-      this.stage2BGM = this.sound.add("stage2", { loop: true, volume: 0.5 });
-      this.tgm2_stage1 = this.sound.add("tgm2_stage1", {
-        loop: false,
-        volume: 0.5,
-      });
-      this.tgm2_stage2 = this.sound.add("tgm2_stage2", {
-        loop: false,
-        volume: 0.5,
-      });
-      this.tgm2_stage3 = this.sound.add("tgm2_stage3", {
-        loop: false,
-        volume: 0.5,
-      });
-      this.tgm2_stage4 = this.sound.add("tgm2_stage4", {
-        loop: false,
-        volume: 0.5,
-      });
+      const addTrack = (key, opts = {}) =>
+        this.sound.add(key, { loop: false, volume: 0.5, ...opts });
+      this.bgmTracks = {
+        tm1_1: addTrack("tm1_1", { loop: true }),
+        tm1_2: addTrack("tm1_2", { loop: true }),
+        tm1_endroll: addTrack("tm1_endroll", { loop: true }),
+        tm2_3: addTrack("tm2_3", { loop: true }),
+        tm2_4: addTrack("tm2_4", { loop: true }),
+        tm3_4: addTrack("tm3_4", { loop: true }),
+        tm3_6: addTrack("tm3_6", { loop: true }),
+      };
+      this.stage1BGM = this.bgmTracks.tm1_1;
+      this.stage2BGM = this.bgmTracks.tm1_2;
+      this.currentBgmKey = null;
     } catch (error) {
-      console.warn(
-        "BGM initialization failed, disabling background music:",
+      console.error(
+        "Failed to initialize BGM audio objects. BGM functionality may be limited.",
         error,
       );
-      this.bgmEnabled = false;
-      this.stage1BGM = null;
-      this.stage2BGM = null;
-      this.tgm2_stage1 = null;
-      this.tgm2_stage2 = null;
-      this.tgm2_stage3 = null;
-      this.tgm2_stage4 = null;
-      this.currentBGM = null;
-    }
-  }
-
-  startInitialBGM() {
-    if (!this.bgmEnabled) return;
-    this.updateBGM();
-  }
-
-  showReadyGo() {
-    this.readyGoPhase = true;
-    const centerX = this.cameras.main.width / 2;
-    const centerY = this.cameras.main.height / 2;
-
-    const readyText = this.add
-      .text(centerX, centerY, "READY", {
-        fontSize: "64px",
-        fill: "#ffff00",
-        fontFamily: "Courier New",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
-    this.children.bringToTop(readyText);
-    this.gameGroup.add(readyText);
-
-    // Play ready sound
-    if (this.sound && this.sound.get("ready")) {
-      this.sound.add("ready", { volume: 0.7 }).play();
-    }
-
-    this.time.delayedCall(1000, () => {
-      readyText.destroy();
-
-      const goText = this.add
-        .text(centerX, centerY, "GO", {
-          fontSize: "64px",
-          fill: "#00ff00",
-          fontFamily: "Courier New",
-          fontStyle: "bold",
-        })
-        .setOrigin(0.5);
-      this.children.bringToTop(goText);
-      this.gameGroup.add(goText);
-
-      // Play go sound
-      if (this.sound && this.sound.get("go")) {
-        this.sound.add("go", { volume: 0.7 }).play();
-      }
-      this.time.delayedCall(1000, () => {
-        goText.destroy();
-        this.readyGoPhase = false;
-        this.gameStarted = true;
-        // Ensure queue and spawn first piece after GO
-        if (this.nextPieces.length < 6) {
-          this.generateNextPieces();
-        }
-
-        this.sectionStartTime = this.currentTime;
-        this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
-        this.currentSectionTetrisCount = 0;
-
-        this.spawnPiece();
-        // Start BGM after GO
-        this.startInitialBGM();
-      });
-    });
-  }
-
-  updateTimer() {
-    if (
-      this.startTime &&
-      !this.isPaused &&
-      !this.level999Reached &&
-      !this.gameOver &&
-      !this.creditsActive
-    ) {
-      this.currentTime = (Date.now() - this.startTime) / 1000;
-    }
-  }
-
-  startBGMWithLoop(bgmType) {
-    if (!this.bgmEnabled) return;
-
-    let audioObject;
-    let loopPoint;
-    let isFirstPlay = this.bgmFirstPlay[bgmType];
-
-    if (bgmType === "stage1") {
-      audioObject = this.stage1BGM;
-      loopPoint = this.loopPoints.stage1;
-    } else if (bgmType === "stage2") {
-      audioObject = this.stage2BGM;
-      loopPoint = this.loopPoints.stage2;
-    }
-
-    if (audioObject && loopPoint) {
-      // Stop any currently playing BGM
-      if (this.currentBGM && this.currentBGM !== audioObject) {
-        this.currentBGM.stop();
-      }
-
-      // Clean up old audio object if it exists
-      if (audioObject.isPlaying) {
-        audioObject.stop();
-      }
-
-      // Create new audio instance with proper configuration
-      const audioKey = bgmType === "stage1" ? "stage1" : "stage2";
-
-      // Remove old instance from sound cache to avoid conflicts
-      if (this.sound.cache.exists(audioKey)) {
-        this.sound.cache.remove(audioKey);
-      }
-
-      // Create new audio instance
-      const newAudio = this.sound.add(audioKey, {
-        loop: false,
-        volume: 0.5,
-      });
-
-      // Update reference
-      if (bgmType === "stage1") {
-        this.stage1BGM = newAudio;
-      } else {
-        this.stage2BGM = newAudio;
-      }
-
-      // Set up completion handler
-      newAudio.once("complete", () => {
-        if (this.bgmEnabled) {
-          // Mark that we've completed first play
-          this.bgmFirstPlay[bgmType] = false;
-
-          // Start the loop
-          if (this.bgmLoopTimer) {
-            this.bgmLoopTimer.remove(false);
-            this.bgmLoopTimer = null;
-          }
-          this.bgmLoopTimer = this.time.delayedCall(100, () => {
-            this.startLoopPhase(bgmType);
-          });
-        }
-      });
-
-      // Play the audio
-      newAudio.play();
-      this.currentBGM = newAudio;
-    }
-  }
-
-  startLoopPhase(bgmType) {
-    if (!this.bgmEnabled) return;
-
-    let audioObject;
-    let loopPoint;
-
-    if (bgmType === "stage1") {
-      audioObject = this.stage1BGM;
-      loopPoint = this.loopPoints.stage1;
-    } else if (bgmType === "stage2") {
-      audioObject = this.stage2BGM;
-      loopPoint = this.loopPoints.stage2;
-    }
-
-    if (audioObject && loopPoint) {
-      // Clean up and restart for loop phase
-      if (audioObject.isPlaying) {
-        audioObject.stop();
-      }
-
-      const audioKey = bgmType === "stage1" ? "stage1" : "stage2";
-
-      // Create new audio for loop phase
-      const loopAudio = this.sound.add(audioKey, {
-        loop: false,
-        volume: 0.5,
-      });
-
-      // Update reference
-      if (bgmType === "stage1") {
-        this.stage1BGM = loopAudio;
-      } else {
-        this.stage2BGM = loopAudio;
-      }
-
-      // Set up continuous looping
-      loopAudio.once("complete", () => {
-        if (this.bgmEnabled) {
-          // Immediately restart for seamless loop
-          if (this.bgmLoopTimer) {
-            this.bgmLoopTimer.remove(false);
-            this.bgmLoopTimer = null;
-          }
-          this.bgmLoopTimer = this.time.delayedCall(50, () => {
-            this.startLoopPhase(bgmType);
-          });
-        }
-      });
-
-      loopAudio.play();
-      this.currentBGM = loopAudio;
-    }
-  }
-
-  switchToLoopMode(bgmType) {
-    if (!this.bgmEnabled) return;
-
-    let audioObject;
-    let loopPoint;
-
-    if (bgmType === "stage1") {
-      audioObject = this.stage1BGM;
-      loopPoint = this.loopPoints.stage1;
-    } else if (bgmType === "stage2") {
-      audioObject = this.stage2BGM;
-      loopPoint = this.loopPoints.stage2;
-    }
-
-    if (audioObject && loopPoint) {
-      // Stop current audio
-      audioObject.stop();
-
-      // For simplicity, we'll restart from the beginning but use Phaser's loop
-      // This provides seamless looping, though not from the exact start point
-      audioObject.play();
-      this.currentBGM = audioObject;
     }
   }
 
   updateBGM() {
     if (!this.bgmEnabled) return;
+    this.updateModeBGM();
+  }
 
-    // Check if this is a TGM2 mode
-    const isTGM2Mode =
-      this.selectedMode &&
-      (this.selectedMode.startsWith("tgm2") ||
-        this.selectedMode === "tgm_plus");
+  getBgmSchedule(modeId) {
+    const sharedTGM1 = [
+      { end: 499, key: "tm1_1" },
+      { end: 999, key: "tm1_2" },
+    ];
+    const schedules = {
+      normal: { segments: [{ end: 299, key: "tm1_1" }, { end: 999, key: "tm1_2" }], credits: "tm1_endroll" },
+      easy_normal: { segments: [{ end: 199, key: "tm1_1" }, { end: 999, key: "tm1_endroll" }], credits: "tm1_endroll" },
+      easy_easy: { segments: [{ end: 199, key: "tm1_1" }, { end: 999, key: "tm1_endroll" }], credits: "tm1_endroll" },
+      marathon: { segments: [{ end: 49, key: "tm1_1" }, { end: 99, key: "tm1_2" }, { end: 999, key: "tm2_3" }], credits: "tm1_endroll" },
+      sprint_40: { segments: [{ end: 999, key: "tm1_1" }] },
+      sprint_100: { segments: [{ end: 999, key: "tm1_1" }] },
+      ultra: { segments: [{ end: 999, key: "tm1_1" }] },
+      zen: { segments: [{ end: 999, key: "tm1_1" }] },
+      tgm1: { segments: sharedTGM1, credits: "tm1_endroll" },
+      tgm_plus: { segments: sharedTGM1, credits: "tm1_endroll" },
+      "20g": { segments: sharedTGM1, credits: "tm1_endroll" },
+      tgm2: {
+        segments: [
+          { end: 499, key: "tm1_1" },
+          { end: 699, key: "tm1_2" },
+          { end: 899, key: "tm2_3" },
+          { end: 999, key: "tm2_4" },
+        ],
+        credits: "tm1_endroll",
+      },
+      tgm3: {
+        segments: [
+          { end: 499, key: "tm1_1" },
+          { end: 799, key: "tm1_2" },
+          { end: 999, key: "tm3_4" },
+        ],
+        credits: "tm1_endroll",
+      },
+      tadeath: {
+        segments: [
+          { end: 299, key: "tm1_2" },
+          { end: 499, key: "tm2_3" },
+          { end: 999, key: "tm2_4" },
+        ],
+        credits: "tm1_endroll",
+      },
+      shirase: {
+        segments: [
+          { end: 499, key: "tm2_4" },
+          { end: 699, key: "tm3_4" },
+          { end: 999, key: "tm1_2" },
+          { end: 1299, key: "tm3_6" },
+        ],
+        credits: "tm1_endroll",
+      },
+      tgm3_sakura: { segments: [{ end: 999, key: "tm1_1" }] },
+    };
+    return schedules[modeId] || { segments: sharedTGM1, credits: "tm1_endroll" };
+  }
 
-    // Check if this is T.A.Death mode
-    const isTADeathMode = this.selectedMode === "tadeath";
+  playBgmByKey(key) {
+    if (!key || !this.bgmTracks || !this.bgmTracks[key]) return;
+    const audio = this.bgmTracks[key];
+    if (this.currentBGM && this.currentBGM !== audio) {
+      this.currentBGM.stop();
+    }
+    audio.play({ loop: true });
+    this.currentBGM = audio;
+    this.currentBgmKey = key;
+  }
 
-    if (isTGM2Mode) {
-      this.updateTGM2BGM();
-    } else if (isTADeathMode) {
-      this.updateTADeathBGM();
-    } else {
-      this.updateTGM1BGM();
+  stopCurrentBGM() {
+    if (this.currentBGM) {
+      this.currentBGM.stop();
+      this.currentBGM = null;
+      this.currentBgmKey = null;
     }
   }
 
-  updateTGM1BGM() {
-    if (!this.stage1BGM || !this.stage2BGM) return;
+  updateModeBGM() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "tgm1";
+    const schedule = this.getBgmSchedule(modeId);
+    if (!schedule || !schedule.segments || !schedule.segments.length) return;
 
-    if (this.level >= 491 && this.level < 500) {
-      if (this.currentBGM) {
-        this.currentBGM.stop();
-        this.currentBGM = null;
-      }
-    } else if (this.level >= 500 && this.level < 999) {
-      if (this.currentBGM !== this.stage2BGM) {
-        if (this.currentBGM) this.currentBGM.stop();
-        this.stage2BGM.play();
-        this.currentBGM = this.stage2BGM;
-      }
-    } else if (this.level < 491) {
-      if (this.currentBGM !== this.stage1BGM) {
-        if (this.currentBGM) this.currentBGM.stop();
-        this.stage1BGM.play();
-        this.currentBGM = this.stage1BGM;
-      }
-    }
-    // At level 999, stop all stage BGM - only credits BGM should play
-    // This is handled in startCredits() method
-  }
+    const maxSegment = schedule.segments[schedule.segments.length - 1];
+    const level = this.level;
+    let segment = schedule.segments.find((s) => level <= s.end);
+    if (!segment) segment = maxSegment;
+    const isLast = segment === maxSegment;
 
-  updateTGM2BGM() {
-    // TGM2 BGM selection based on level
-    let targetBGM = null;
-    let bgmKey = null;
-
-    if (this.level < 500) {
-      // Levels 0-299: tm2_3.mp3
-      targetBGM = this.tgm2_stage1;
-      bgmKey = "tgm2_stage1";
-    } else if (this.level < 700) {
-      // Levels 300-499: tm2_4.mp3
-      targetBGM = this.tgm2_stage2;
-      bgmKey = "tgm2_stage2";
-    } else if (this.level < 900) {
-      // Levels 500-699: tm3_4.mp3
-      targetBGM = this.tgm2_stage3;
-      bgmKey = "tgm2_stage3";
-    } else {
-      // Levels 700+: tm3_6.mp3
-      targetBGM = this.tgm2_stage4;
-      bgmKey = "tgm2_stage4";
+    // Stop 10 levels early unless in final segment
+    if (!isLast && level >= segment.end - 9) {
+      this.stopCurrentBGM();
+      return;
     }
 
-    if (targetBGM && this.currentBGM !== targetBGM) {
-      if (this.currentBGM) {
-        this.currentBGM.stop();
-      }
-      this.startTGM2BGM(bgmKey, targetBGM);
-      this.currentBGM = targetBGM;
+    if (this.currentBgmKey !== segment.key) {
+      this.playBgmByKey(segment.key);
     }
   }
 
-  startTGM2BGM(bgmKey, audioObject) {
-    if (!audioObject) return;
-
-    // Stop any current playback
-    if (audioObject.isPlaying) {
-      audioObject.stop();
-    }
-
-    // Set up loop points based on the BGM
-    let loopStart = 0;
-    let loopEnd = audioObject.duration || 0;
-
-    switch (bgmKey) {
-      case "tgm2_stage1": // tm2_3.mp3
-        // Play from beginning, loop from 29.872s to 115.193s
-        loopStart = 29.872;
-        loopEnd = 115.193;
-        break;
-      case "tgm2_stage2": // tm2_4.mp3
-        // Loop from 61.432s to 168.954s
-        loopStart = 61.432;
-        loopEnd = 168.954;
-        break;
-      case "tgm2_stage3": // tm3_4.mp3
-        // Loop entire file
-        loopStart = 0;
-        break;
-      case "tgm2_stage4": // tm3_6.mp3
-        // Loop entire file
-        loopStart = 0;
-        break;
-    }
-
-    // For Phaser, we need to handle looping manually since it doesn't support loop points directly
-    // We'll play the intro once, then loop the specified section
-    if (bgmKey === "tgm2_stage1") {
-      // For tm2_3.mp3, play intro then loop
-      audioObject.once("complete", () => {
-        if (this.bgmEnabled && this.currentBGM === audioObject) {
-          this.startTGM2Loop(audioObject, loopStart, loopEnd);
-        }
-      });
-      audioObject.play();
-    } else {
-      // For others, start looping immediately
-      this.startTGM2Loop(audioObject, loopStart, loopEnd);
-    }
-  }
-
-  startTGM2Loop(audioObject, loopStart, loopEnd) {
-    if (!audioObject || !this.bgmEnabled) return;
-
-    // Seek to loop start
-    audioObject.seek = loopStart;
-
-    // Set up completion handler to loop back
-    audioObject.once("complete", () => {
-      if (this.bgmEnabled && this.currentBGM === audioObject) {
-        this.startTGM2Loop(audioObject, loopStart, loopEnd);
-      }
-    });
-
-    audioObject.play();
-  }
-
-  updateTADeathBGM() {
-    // T.A.Death BGM selection based on level
-    let targetBGM = null;
-    let bgmKey = null;
-
-    if (this.level < 300) {
-      // Levels 0-299: tm1_2.mp3
-      targetBGM = this.tgm2_stage2;
-      bgmKey = "tgm2_stage2";
-    } else if (this.level < 500) {
-      // Levels 300-499: tm2_3.flac
-      targetBGM = this.tgm2_stage2;
-      bgmKey = "tgm2_stage3";
-    } else {
-      // Levels 500+: tm2_4.flac
-      targetBGM = this.tgm2_stage4;
-      bgmKey = "tgm2_stage4";
-    }
-
-    if (targetBGM && this.currentBGM !== targetBGM) {
-      if (this.currentBGM) {
-        this.currentBGM.stop();
-      }
-      if (bgmKey === "stage2") {
-        // tm1_2.mp3 uses standard looping
-        targetBGM.play();
-      } else {
-        // TGM2 tracks use loop points
-        this.startTGM2BGM(bgmKey, targetBGM);
-      }
-      this.currentBGM = targetBGM;
-    }
-  }
-
-  manageBGMLoopMode() {
-    if (!this.bgmEnabled || !this.currentBGM) return;
-
-    // Get current audio position (in seconds)
-    const currentTime = this.currentBGM.currentTime || 0;
-    let loopPoint;
-    let bgmType;
-
-    // Determine which track is currently playing and its loop points
-    if (this.currentBGM === this.stage1BGM) {
-      loopPoint = this.loopPoints.stage1;
-      bgmType = "stage1";
-    } else if (this.currentBGM === this.stage2BGM) {
-      loopPoint = this.loopPoints.stage2;
-      bgmType = "stage2";
-    }
-
-    if (loopPoint && bgmType) {
-      // Check if we've completed the first play (reached end point)
-      if (this.bgmFirstPlay[bgmType] && currentTime >= loopPoint.end) {
-        // Mark first play as complete
-        this.bgmFirstPlay[bgmType] = false;
-
-        // Continue with normal looping - Phaser will handle the loop seamlessly
-        // The effect is that we get full track first, then continuous looping
-      }
-    }
-  }
-
-  getCurrentBGMType() {
-    if (this.currentBGM === this.stage1BGM) return "stage1";
-    if (this.currentBGM === this.stage2BGM) return "stage2";
-    return null;
-  }
+  // Legacy loop-point manager kept for compatibility; no-op with unified BGM
+  manageBGMLoopMode() {}
 
   update(time, delta) {
     // Track delta time in seconds for consistency
@@ -5947,11 +5640,18 @@ class GameScene extends Phaser.Scene {
 
     // Update lightweight fireworks particles
     this.updateHanabiParticles(this.deltaTime);
+    // Update BGM scheduling
+    this.updateBGM();
 
     if (this.gameOver) {
       // Skip any input-driven movement/rotation/drop.
     } else
     if (this.rotationSystem === "ARS") {
+
+      // Hold first (if supported and not in ARE)
+      if (!this.areActive && this.holdEnabled && justDown(this.keys.hold)) {
+        this.hold();
+      }
       // ARS: Process rotation before movement
 
       // Track rotation keys for immediate response
@@ -6042,7 +5742,11 @@ class GameScene extends Phaser.Scene {
           const ghost = this.currentPiece.getGhostPosition(this.board);
           this.hardDropRows = ghost.y - this.currentPiece.y;
           this.currentPiece.hardDrop(this.board);
-          this.lockPiece();
+          // In ARS, begin lock delay instead of instant lock
+          this.isGrounded = true;
+          this.lockDelay = this.deltaTime;
+          this.lockDelayBufferedStart = false;
+          this.currentPiece.playGroundSound(this);
         }
       } else if (!xKeyDown && this.xKeyPressed) {
         this.xKeyPressed = false;
@@ -6070,6 +5774,10 @@ class GameScene extends Phaser.Scene {
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
     } else {
+      // Hold first (if supported and not in ARE)
+      if (!this.areActive && this.holdEnabled && justDown(this.keys.hold)) {
+        this.hold();
+      }
       // SRS: Process movement before rotation
 
       // Track key states for DAS using custom keys (z for left, c for right)
@@ -6412,20 +6120,29 @@ class GameScene extends Phaser.Scene {
           this.softDropRows += 1; // Track soft drop rows for scoring
           this.wasGroundedDuringSoftDrop = false; // Reset flag when piece can move
         } else if (!this.isGrounded) {
-          // Piece just became grounded - start lock delay and play ground sound once
-          this.isGrounded = true;
-          this.lockDelay += this.deltaTime;
-          if (this.lockDelay >= this.lockDelayMax) {
-            // 30 frames = 0.5 seconds
+          // Piece just became grounded
+          if (this.rotationSystem === "ARS") {
+            // In ARS, soft drop locks immediately on contact
+            if (!this.wasGroundedDuringSoftDrop && this.currentPiece.isTouchingGround(this.board)) {
+              this.currentPiece.playGroundSound(this);
+            }
             this.lockPiece();
-          }
-          // Play ground sound only once when piece first touches ground during soft drop
-          if (
-            !this.wasGroundedDuringSoftDrop &&
-            this.currentPiece.isTouchingGround(this.board)
-          ) {
-            this.currentPiece.playGroundSound(this);
             this.wasGroundedDuringSoftDrop = true;
+          } else {
+            // SRS (or others): start lock delay and play ground sound once
+            this.isGrounded = true;
+            this.lockDelay += this.deltaTime;
+            if (this.lockDelay >= this.lockDelayMax) {
+              // 30 frames = 0.5 seconds
+              this.lockPiece();
+            }
+            if (
+              !this.wasGroundedDuringSoftDrop &&
+              this.currentPiece.isTouchingGround(this.board)
+            ) {
+              this.currentPiece.playGroundSound(this);
+              this.wasGroundedDuringSoftDrop = true;
+            }
           }
         } else {
           // Piece is already grounded - don't play ground sound again during soft drop
@@ -6442,12 +6159,20 @@ class GameScene extends Phaser.Scene {
         if (this.currentPiece.move(this.board, 0, 1)) {
           this.resetLockDelay();
         } else if (!this.isGrounded) {
-          // Only start lock delay if piece wasn't already grounded
-          this.isGrounded = true;
-          this.lockDelay += this.deltaTime;
-          if (this.lockDelay >= this.lockDelayMax) {
-            // 30 frames = 0.5 seconds
+          if (this.rotationSystem === "ARS") {
+            // Single-tap soft drop in ARS: lock on contact
+            if (this.currentPiece.isTouchingGround(this.board)) {
+              this.currentPiece.playGroundSound(this);
+            }
             this.lockPiece();
+          } else {
+            // Only start lock delay if piece wasn't already grounded
+            this.isGrounded = true;
+            this.lockDelay += this.deltaTime;
+            if (this.lockDelay >= this.lockDelayMax) {
+              // 30 frames = 0.5 seconds
+              this.lockPiece();
+            }
           }
         } else {
           // Piece is already grounded but tried to move down - play ground sound only if touching ground
@@ -6609,7 +6334,29 @@ class GameScene extends Phaser.Scene {
 
     // Draw
 
-    this.draw();
+  this.draw();
+}
+
+  // Safeguard: PPS updater (noop if metrics not in use)
+  updatePPS() {
+    // If PPS tracking fields exist, keep lightweight calculation; otherwise skip.
+    if (typeof this.computePPS === "function") {
+      this.computePPS();
+    }
+  }
+
+  // Compute piece-per-second metrics (conventional includes ARE; raw excludes ARE)
+  computePPS() {
+    const totalTime = this.activeTime + this.areTime;
+    if (totalTime > 0) {
+      this.conventionalPPS = this.totalPiecesPlaced / totalTime;
+    }
+    if (this.activeTime > 0) {
+      this.rawPPS = this.totalPiecesPlaced / this.activeTime;
+    }
+    // Clamp to finite numbers to avoid NaN in UI
+    if (!Number.isFinite(this.conventionalPPS)) this.conventionalPPS = 0;
+    if (!Number.isFinite(this.rawPPS)) this.rawPPS = 0;
   }
 
   spawnPiece() {
@@ -6746,6 +6493,9 @@ class GameScene extends Phaser.Scene {
     // Handle ARE hold (Initial Hold System) for modes that support hold
     if (this.holdEnabled && holdPressedAtSpawn) {
       this.hold();
+      try {
+        this.sound?.add("IHS", { volume: 0.6 })?.play();
+      } catch {}
     }
 
 
@@ -6978,6 +6728,9 @@ class GameScene extends Phaser.Scene {
     // Store cleared lines for animation
     this.clearedLines = linesToClear;
 
+    const hadComboActive = this.comboCount > 0;
+    const isTetrisClear = linesToClear.length === 4;
+
     if (!this.creditsActive && linesToClear.length === 4) {
       const sectionIndex = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
       if (sectionIndex === this.currentSection) {
@@ -6989,6 +6742,17 @@ class GameScene extends Phaser.Scene {
     this.updateScore(linesToClear.length, this.currentPiece.type, isTSpin);
     this.updateLevel("lines", linesToClear.length);
     this.canHold = true;
+
+    // Play Tetris / combo sounds
+    if (linesToClear.length > 0) {
+      try {
+        if (isTetrisClear) {
+          this.sound?.add("applausee", { volume: 0.8 })?.play();
+        } else if (hadComboActive || this.comboCount > 0) {
+          this.sound?.add("combo", { volume: 0.7 })?.play();
+        }
+      } catch {}
+    }
 
     // Handle powerup effects for TGM2 mode
     if (this.gameMode && this.gameMode.handleLineClear) {
@@ -7213,26 +6977,6 @@ class GameScene extends Phaser.Scene {
 
     // Default reset behavior
     this.lockDelay = 0;
-
-          // Add all non-cleared rows to new grid
-          for (let r = 0; r < this.board.rows; r++) {
-            if (!clearedSet.has(r)) {
-              newGrid.push(this.board.grid[r]);
-              newFadeGrid.push(this.board.fadeGrid[r]);
-            }
-          }
-
-          // Add empty rows at the top to maintain grid size
-          const emptyRowsNeeded = this.clearedLines.length;
-          for (let i = 0; i < emptyRowsNeeded; i++) {
-            newGrid.unshift(Array(this.board.cols).fill(0));
-            newFadeGrid.unshift(Array(this.board.cols).fill(0));
-          }
-
-          // Replace the entire grid
-          this.board.grid = newGrid;
-          this.board.fadeGrid = newFadeGrid;
-          this.clearedLines = [];
     this.maxPpsRecorded = Math.max(this.maxPpsRecorded, this.conventionalPPS);
 
     // Track PPS history per placed piece for sprint graph
@@ -7489,6 +7233,24 @@ class GameScene extends Phaser.Scene {
     const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
     if (this.level > maxLevel) {
       this.level = maxLevel;
+    }
+
+    // Play bell at x99 level stops (once per stop)
+    if (this.level % 100 === 99 && this.level !== this.lastBellLevel) {
+      this.lastBellLevel = this.level;
+      try {
+        const bell = this.sound?.add("bell", { volume: 0.6 });
+        bell?.play();
+      } catch {}
+    }
+
+    // Play complete when reaching max level once
+    if (this.level >= maxLevel && !this.levelMaxSoundPlayed) {
+      this.levelMaxSoundPlayed = true;
+      try {
+        const complete = this.sound?.add("complete", { volume: 0.8 });
+        complete?.play();
+      } catch {}
     }
 
     // Update mode-specific timings in case they change with level
