@@ -4423,23 +4423,102 @@ class GameScene extends Phaser.Scene {
       ? this.currentPiece.color
       : 0x00e0ff;
 
+    // Scoring helpers (lightweight clone and analysis)
+    const rows = this.board.rows;
+    const cols = this.board.cols;
+    const baseGrid = this.board.grid;
+
+    const makeGridWithPiece = (piece) => {
+      const grid = baseGrid.map((row) => row.slice());
+      for (let r = 0; r < piece.shape.length; r++) {
+        for (let c = 0; c < piece.shape[r].length; c++) {
+          if (!piece.shape[r][c]) continue;
+          const gx = piece.x + c;
+          const gy = piece.y + r;
+          if (gy >= 0 && gy < rows && gx >= 0 && gx < cols) {
+            grid[gy][gx] = 1;
+          }
+        }
+      }
+      return grid;
+    };
+
+    const computeHeights = (grid) => {
+      const heights = Array(cols).fill(0);
+      for (let x = 0; x < cols; x++) {
+        let y = 0;
+        while (y < rows && grid[y][x] === 0) y++;
+        heights[x] = rows - y;
+      }
+      return heights;
+    };
+
+    const scorePlacement = (piece) => {
+      const grid = makeGridWithPiece(piece);
+      const heights = computeHeights(grid);
+
+      // Holes: empty cell with at least one filled above
+      let holes = 0;
+      let coveredHoles = 0;
+      for (let x = 0; x < cols; x++) {
+        let seenBlock = false;
+        for (let y = 0; y < rows; y++) {
+          const filled = grid[y][x] !== 0;
+          if (filled) {
+            seenBlock = true;
+          } else if (seenBlock) {
+            holes++;
+            // Covered hole: if there is also a block immediately above
+            if (y > 0 && grid[y - 1][x] !== 0) coveredHoles++;
+          }
+        }
+      }
+
+      // Surface stats
+      const maxHeight = Math.max(...heights);
+      const aggregateHeight = heights.reduce((a, b) => a + b, 0);
+      let bumpiness = 0;
+      for (let i = 0; i < cols - 1; i++) {
+        bumpiness += Math.abs(heights[i] - heights[i + 1]);
+      }
+
+      // Ceiling penalty (hidden rows: y < 2)
+      let aboveCeilPenalty = 0;
+      for (let r = 0; r < piece.shape.length; r++) {
+        for (let c = 0; c < piece.shape[r].length; c++) {
+          if (!piece.shape[r][c]) continue;
+          const gy = piece.y + r;
+          if (gy < 2) {
+            aboveCeilPenalty += (2 - gy) * 50;
+          }
+        }
+      }
+
+      // Weighted score (lower is better)
+      const score =
+        holes * 1000 +
+        coveredHoles * 800 +
+        bumpiness * 5 +
+        aggregateHeight * 2 +
+        maxHeight * 3 +
+        aboveCeilPenalty +
+        piece.x * 0.01; // slight tie-breaker to favor leftmost
+
+      return score;
+    };
+
     const placements = [];
     const rotations = [0, 1, 2, 3];
     const pieceType = this.currentPiece.type;
     for (const rot of rotations) {
-      const testPiece = new Piece(pieceType, this.rotationSystem, rot);
-      const shape = testPiece.shape;
+      const shape = new Piece(pieceType, this.rotationSystem, rot).shape;
       const width = shape[0].length;
       for (let x = -2; x < this.board.cols; x++) {
-        let testX = x;
-        let testY = -4;
         const tmpPiece = new Piece(pieceType, this.rotationSystem, rot);
-        tmpPiece.x = testX;
-        tmpPiece.y = testY;
+        tmpPiece.x = x;
+        tmpPiece.y = -4;
         // Move down until collision
-        while (
-          this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y + 1)
-        ) {
+        while (this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y + 1)) {
           tmpPiece.y += 1;
         }
         if (!this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y)) {
@@ -4449,25 +4528,12 @@ class GameScene extends Phaser.Scene {
         if (tmpPiece.x < -2 || tmpPiece.x + width > this.board.cols + 2) {
           continue;
         }
-        // Simple score: holes and height
-        let holes = 0;
-        let maxY = 0;
-        for (let r = 0; r < tmpPiece.shape.length; r++) {
-          for (let c = 0; c < tmpPiece.shape[r].length; c++) {
-            if (!tmpPiece.shape[r][c]) continue;
-            const bx = tmpPiece.x + c;
-            const by = tmpPiece.y + r;
-            maxY = Math.max(maxY, by);
-            // If empty below and within bounds, count hole risk
-            if (by + 1 < this.board.rows) {
-              if (this.board.grid[by + 1][bx] === 0) holes += 1;
-            }
-          }
-        }
-        const score = holes * 100 + maxY;
+
+        const score = scorePlacement(tmpPiece);
         placements.push({ score, piece: tmpPiece });
       }
     }
+
     if (!placements.length) return;
     placements.sort((a, b) => a.score - b.score);
     this.hintPlacement = placements[0].piece;
