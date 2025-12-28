@@ -696,123 +696,76 @@ const SRS_KICKS = {
     [
       [0, 0],
       [-1, 0],
-      [-1, 1],
-      [0, -2],
-      [-1, -2],
-    ], // 0->1
-    [
-      [0, 0],
-      [1, 0],
-      [1, -1],
+      [-1, -1],
       [0, 2],
-      [1, 2],
-    ], // 1->2
+      [-1, 2],
+    ], // 0->1
     [
       [0, 0],
       [1, 0],
       [1, 1],
       [0, -2],
       [1, -2],
+    ], // 1->2
+    [
+      [0, 0],
+      [1, 0],
+      [1, -1],
+      [0, 2],
+      [1, 2],
     ], // 2->3
     [
       [0, 0],
       [-1, 0],
-      [-1, -1],
-      [0, 2],
-      [-1, 2],
+      [-1, 1],
+      [0, -2],
+      [-1, -2],
     ], // 3->0
   ],
   JLSTZ_CCW: [
     [
       [0, 0],
       [1, 0],
-      [1, 1],
-      [0, -2],
-      [1, -2],
+      [1, -1],
+      [0, 2],
+      [1, 2],
     ], // 0->3
     [
       [0, 0],
       [1, 0],
-      [1, -1],
-      [0, 2],
-      [1, 2],
-    ], // 3->2
-    [
-      [0, 0],
-      [-1, 0],
-      [-1, 1],
+      [1, 1],
       [0, -2],
-      [-1, -2],
-    ], // 2->1
+      [1, -2],
+    ], // 3->2
     [
       [0, 0],
       [-1, 0],
       [-1, -1],
       [0, 2],
       [-1, 2],
-    ], // 1->0
-  ],
-  // TGM3 World (SRS) I-piece kicks
-  I_CW: [
-    [
-      [0, 0],
-      [-2, 0],
-      [1, 0],
-      [-2, 1],
-      [1, -2],
-    ], // 0->1
-    [
-      [0, 0],
-      [-1, 0],
-      [2, 0],
-      [-1, -2],
-      [2, 1],
-    ], // 1->2
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, -1],
-      [-1, 2],
-    ], // 2->3
-    [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, 2],
-      [-2, -1],
-    ], // 3->0
-  ],
-  I_CCW: [
-    [
-      [0, 0],
-      [-1, 0],
-      [2, 0],
-      [-1, -2],
-      [2, 1],
-    ], // 0->3
-    [
-      [0, 0],
-      [2, 0],
-      [-1, 0],
-      [2, -1],
-      [-1, 2],
-    ], // 3->2
-    [
-      [0, 0],
-      [1, 0],
-      [-2, 0],
-      [1, 2],
-      [-2, -1],
     ], // 2->1
     [
       [0, 0],
-      [-2, 0],
-      [1, 0],
-      [-2, 1],
-      [1, -2],
+      [-1, 0],
+      [-1, 1],
+      [0, -2],
+      [-1, -2],
     ], // 1->0
   ],
+  // TGM3 World (SRS) I-piece kicks (y positive downward)
+ // TGM3 World (SRS) I-piece kicks (y positive downward)
+I_CW: [
+  [ [0,0], [-2,0], [1,0], [1,-2], [-2,1] ],      // 0->1 (0->R)
+  [ [0,0], [2,0], [-1,0], [2,-1], [-1,2] ],      // 1->2 (R->2)
+  [ [0,0], [-1,0], [2,0], [-1,-2], [2,1] ],      // 2->3 (2->L)
+  [ [0,0], [-2,0], [1,0], [-2,-1], [1,2] ],      // 3->0 (L->0)
+],
+I_CCW: [
+  [ [0,0], [2,0], [-1,0], [-1,-2], [2,1] ],      // 0->3 (0->L)
+  [ [0,0], [1,0], [-2,0], [1,-2], [-2,1] ],      // 3->2 (L->2)
+  [ [0,0], [-2,0], [1,0], [-2,-1], [1,2] ],      // 2->1 (2->R)
+  [ [0,0], [2,0], [-1,0], [2,-1], [-1,2] ],      // 1->0 (R->0)
+],
 };
 
 // Minimal-input SRS finesse tables (leftmost column reference, rotations count per final orientation)
@@ -858,9 +811,9 @@ const SRS_FINESSE_TABLE = {
 };
 
 // ARS (Arika Rotation System) kick tables - TGM3 Classic (TGM2 + extra T and I floor kicks), with vertical I wall kicks.
-// O-piece has no kicks; JLSTZ share a single table per direction; I has its own.
+// O-piece has no kicks; T uses the full T_* tables; J/L/S/Z use simplified right/left-only kicks (JLSZ_*); I has its own.
 const ARS_KICKS = {
-  JLSTZ_CW: [
+  T_CW: [
     [
       [0, 0],
       [-1, 0],
@@ -887,10 +840,10 @@ const ARS_KICKS = {
       [-1, 0],
       [0, 1],
       [-1, 1],
-      [0, -1],
+      [0, 1],
     ], // 3->0
   ],
-  JLSTZ_CCW: [
+  T_CCW: [
     [
       [0, 0],
       [1, 0],
@@ -918,6 +871,50 @@ const ARS_KICKS = {
       [0, -1],
       [-1, -1],
       [0, 1],
+    ], // 1->0
+  ],
+  JLSZ_CW: [
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 0->1
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 1->2
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 2->3
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 3->0
+  ],
+  JLSZ_CCW: [
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 0->3
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 3->2
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // 2->1
+    [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
     ], // 1->0
   ],
   I_CW: [
@@ -3944,6 +3941,7 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0; // Longest active time (frames) for a single piece
     this.ppsHistory = [];
+    this.ppsLockSampleIndices = [];
     this.ppsSampleTimer = 0;
     this.ppsSampleInterval = 0.5; // seconds
     this.ppsGraphGraphics = null;
@@ -5140,6 +5138,29 @@ class GameScene extends Phaser.Scene {
         align: "left",
       })
       .setOrigin(0, 0);
+    const showPieceCount =
+      isZenMode || isUltraMode || isSprintMode || isMarathonMode;
+
+    this.pieceCountLabel = this.add
+      .text(ppsX, ppsY - 25, "PIECES", {
+        fontSize: `${uiFontSize - 6}px`,
+        fill: "#ccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(showPieceCount);
+    this.pieceCountText = this.add
+      .text(ppsX, ppsY - 10, "0", {
+        fontSize: `${largeFontSize - 4}px`,
+        fill: "#fff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0)
+      .setVisible(showPieceCount);
+
     this.ppsLabel = this.add
       .text(ppsX, ppsY, "PPS", {
         fontSize: `${uiFontSize - 4}px`,
@@ -5610,6 +5631,8 @@ class GameScene extends Phaser.Scene {
       this.scoreText = null;
       this.ppsLabel = null;
       this.ppsText = null;
+      this.pieceCountLabel = null;
+      this.pieceCountText = null;
       this.rawPpsLabel = null;
       this.rawPpsText = null;
       this.gradeDisplay = null;
@@ -5879,9 +5902,11 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
     this.ppsHistory = [];
+    this.ppsLockSampleIndices = [];
     this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
     if (this.ppsText) this.ppsText.setText("0.00");
+    if (this.pieceCountText) this.pieceCountText.setText("0");
     if (this.rawPpsText) this.rawPpsText.setText("0.00");
     if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
     if (this.ppsSummaryText && this.ppsSummaryText.scene) {
@@ -6840,6 +6865,7 @@ class GameScene extends Phaser.Scene {
         if (this.rawPpsText) this.rawPpsText.setText("0.00");
         if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
         if (Array.isArray(this.ppsHistory)) this.ppsHistory.length = 0;
+        if (Array.isArray(this.ppsLockSampleIndices)) this.ppsLockSampleIndices.length = 0;
         this.lastPpsRecordedPieceCount = 0;
         this.ppsSampleTimer = 0;
         return;
@@ -6855,6 +6881,11 @@ class GameScene extends Phaser.Scene {
         this.ppsHistory.push(this.conventionalPPS);
         if (this.ppsHistory.length > 200) {
           this.ppsHistory.shift();
+          if (Array.isArray(this.ppsLockSampleIndices)) {
+            this.ppsLockSampleIndices = this.ppsLockSampleIndices
+              .map((idx) => idx - 1)
+              .filter((idx) => idx >= 0);
+          }
         }
       }
     }
@@ -7295,6 +7326,7 @@ class GameScene extends Phaser.Scene {
 
     // Track pieces placed for PPS calculation
     this.totalPiecesPlaced++;
+    if (this.pieceCountText) this.pieceCountText.setText(this.totalPiecesPlaced.toString());
     // Track worst choke (longest active time)
     this.worstChoke = Math.max(this.worstChoke, this.pieceActiveTime || 0);
 
@@ -7745,9 +7777,17 @@ class GameScene extends Phaser.Scene {
     if (this.totalPiecesPlaced > this.lastPpsRecordedPieceCount) {
       this.ppsHistory.push(this.conventionalPPS);
       this.lastPpsRecordedPieceCount = this.totalPiecesPlaced;
+      if (Array.isArray(this.ppsLockSampleIndices)) {
+        this.ppsLockSampleIndices.push(this.ppsHistory.length - 1);
+      }
       // Keep history reasonable
       if (this.ppsHistory.length > 200) {
         this.ppsHistory.shift();
+        if (Array.isArray(this.ppsLockSampleIndices)) {
+          this.ppsLockSampleIndices = this.ppsLockSampleIndices
+            .map((idx) => idx - 1)
+            .filter((idx) => idx >= 0);
+        }
       }
     }
   }
@@ -7795,6 +7835,17 @@ class GameScene extends Phaser.Scene {
       else g.lineTo(p.px, p.py);
     });
     g.strokePath();
+
+    // Draw dots at piece lock samples
+    if (Array.isArray(this.ppsLockSampleIndices) && this.ppsLockSampleIndices.length) {
+      const startIndex = history.length - visibleHistory.length;
+      g.fillStyle(0xffffff, 1);
+      this.ppsLockSampleIndices.forEach((lockIdx) => {
+        if (lockIdx < startIndex || lockIdx >= history.length) return;
+        const pt = pts[lockIdx - startIndex];
+        if (pt) g.fillCircle(pt.px, pt.py, 3);
+      });
+    }
 
     if (this.ppsSummaryText) {
       const chokeSec = (this.worstChoke || 0) / 60;
@@ -8661,6 +8712,7 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
     this.ppsHistory = [];
+    this.ppsLockSampleIndices = [];
     this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
     this.ppsGraphGraphics = null;
@@ -8668,6 +8720,7 @@ class GameScene extends Phaser.Scene {
     if (this.ppsSummaryText) {
       this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
     }
+    if (this.pieceCountText) this.pieceCountText.setText("0");
     this.finesseActiveForPiece = false;
 
     // Reset leaderboard saved flag so new runs can submit once
