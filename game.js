@@ -988,8 +988,16 @@ class Board {
   constructor(rows = 22, cols = 10) {
     this.rows = rows;
     this.cols = cols;
-    this.grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    this.grid = [];
+    for (let i = 0; i < rows; i++) {
+      this.grid[i] = Array(cols).fill(0);
+    }
     this.fadeGrid = Array.from({ length: rows }, () => Array(cols).fill(0));
+  }
+
+  applyMonochromeTextures(scene) {
+    const textureKey = scene.rotationSystem === "ARS" ? "mono_ars" : "mono";
+    this.currentTextureKey = textureKey;
   }
 
   isValidPosition(piece, x, y) {
@@ -3782,6 +3790,17 @@ class GameScene extends Phaser.Scene {
     this.gradePointsText = null;
     this.nextGradeText = null;
     this.levelDisplay = null;
+    this.rollBonus = 0;
+    this.sectionPerformance = [];
+    this.torikanFailed = false;
+    this.torikanChecked = { 500: false, 1000: false };
+    this.garbageCountdown = 0;
+    this.garbageInterval = 1.5; // seconds between garbage rows in Shirase post-500
+    this.monochromeApplied = false;
+    this.monochromeActive = false;
+    this.monochromeTextureKey = null;
+    this.regretMessageTimer = 0;
+    this.regretMessageText = null;
     this.playfieldBorder = null;
     this.gameOver = false;
     this.visibleRows = 20; // Only show bottom 20 rows of the 22-row matrix
@@ -5094,13 +5113,13 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0);
 
-    // Hide Hanabi counter for TGM2 Normal mode
-    const hideHanabi = modeId === "tgm2_normal";
-    if (this.hanabiLabel) this.hanabiLabel.setVisible(!hideHanabi);
-    if (this.hanabiTextInGame) this.hanabiTextInGame.setVisible(!hideHanabi);
+    // Show Hanabi counter only in Easy mode
+    const showHanabi = modeId === "tgm3_easy";
+    if (this.hanabiLabel) this.hanabiLabel.setVisible(showHanabi);
+    if (this.hanabiTextInGame) this.hanabiTextInGame.setVisible(showHanabi);
 
     const shouldShowSectionTracker =
-      !(isUltraMode || isZenMode) && modeId !== "tgm3_easy";
+      !(isUltraMode || isZenMode) && modeId !== "tgm3_sakura";
     if (this.sectionTrackerGroup) {
       this.sectionTrackerGroup.destroy(true);
       this.sectionTrackerGroup = null;
@@ -5197,7 +5216,11 @@ class GameScene extends Phaser.Scene {
 
         this.halfTimeTexts = null;
         let tableStartY = sectionRowHeight;
-        if (!isTgm2Normal && !isMarathonMode) {
+        const isShiraseMode =
+          modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
+        const isEasyMode = modeId === "tgm3_easy";
+
+        if (!isTgm2Normal && !isMarathonMode && !isShiraseMode && !isEasyMode) {
           const colWidth = 120;
           const labelStyle = {
             fontSize: `${sectionLabelFontSize}px`,
@@ -5296,6 +5319,16 @@ class GameScene extends Phaser.Scene {
           this.sectionTallyTexts.push(tallyText);
           this.sectionTotalTexts.push(totalText);
         }
+
+        // Staff roll grade bonus display placeholder
+        const rollBonusY = tableStartY + maxSections * rowHeight + 6;
+        this.staffRollBonusText = this.add.text(0, rollBonusY, "ROLL BONUS: --", {
+          fontSize: `${sectionLabelFontSize}px`,
+          fill: "#ccc",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        });
+        this.sectionTrackerGroup.add(this.staffRollBonusText);
       }
     }
 
@@ -5343,6 +5376,8 @@ class GameScene extends Phaser.Scene {
    create() {
     // Initialize game elements here (spawn deferred until after READY/GO)
     this.gameGroup = this.add.group();
+    // Overlay group for transient UI (e.g., READY/GO) that must survive draw() clears
+    this.overlayGroup = this.add.group();
     this.hanabiContainer = this.add.group();
     this.hintGraphics = this.add.graphics({
       lineStyle: { width: 2, color: 0x00e0ff, alpha: 0.5 },
@@ -5561,9 +5596,9 @@ class GameScene extends Phaser.Scene {
     ]);
     this.restartKey = this.keys.restart;
 
-    // Initialize time tracking using Date.now() for reliability
-    this.startTime = Date.now();
-    this.gameStartTime = this.startTime;
+    // Initialize time tracking; actual start time is set on GO
+    this.startTime = null;
+    this.gameStartTime = null;
     this.currentTime = 0;
     this.sectionStartTime = 0;
     this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
@@ -5736,8 +5771,26 @@ class GameScene extends Phaser.Scene {
   manageBGMLoopMode() {}
 
   showReadyGo() {
+    this.readyGoPhase = true;
     const centerX = this.game.config.width / 2;
     const centerY = this.game.config.height / 2;
+
+    // Pre-initialize PPS/UI at scene display so sprint modes start at zero
+    this.totalPiecesPlaced = 0;
+    this.activeTime = 0;
+    this.areTime = 0;
+    this.conventionalPPS = 0;
+    this.rawPPS = 0;
+    this.maxPpsRecorded = 0;
+    this.worstChoke = 0;
+    this.ppsHistory = [];
+    this.lastPpsRecordedPieceCount = 0;
+    if (this.ppsText) this.ppsText.setText("0.00");
+    if (this.rawPpsText) this.rawPpsText.setText("0.00");
+    if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
+    if (this.ppsSummaryText) {
+      this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
+    }
 
     // Prepare first piece during Ready/Go so it is visible (peek without consuming queue)
     if (!this.previewPiece) {
@@ -5769,8 +5822,10 @@ class GameScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+    // Render Ready/Go above everything
     this.children.bringToTop(readyText);
-    this.gameGroup.add(readyText);
+    this.overlayGroup.add(readyText);
+    readyText.setDepth(9999);
 
     this.sound?.add("ready", { volume: 0.7 })?.play();
 
@@ -5786,7 +5841,8 @@ class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       this.children.bringToTop(goText);
-      this.gameGroup.add(goText);
+      this.overlayGroup.add(goText);
+      goText.setDepth(9999);
 
       this.sound?.add("go", { volume: 0.7 })?.play();
 
@@ -5794,6 +5850,27 @@ class GameScene extends Phaser.Scene {
         goText.destroy();
         this.readyGoPhase = false;
         this.gameStarted = true;
+        // Start timer at GO
+        this.startTime = Date.now();
+        this.gameStartTime = this.startTime;
+        this.currentTime = 0;
+        this.sectionStartTime = 0;
+        // Hard reset PPS metrics/UI at run start (covers sprint modes)
+        this.totalPiecesPlaced = 0;
+        this.activeTime = 0;
+        this.areTime = 0;
+        this.conventionalPPS = 0;
+        this.rawPPS = 0;
+        this.maxPpsRecorded = 0;
+        this.worstChoke = 0;
+        this.ppsHistory = [];
+        this.lastPpsRecordedPieceCount = 0;
+        if (this.ppsText) this.ppsText.setText("0.00");
+        if (this.rawPpsText) this.rawPpsText.setText("0.00");
+        if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
+        if (this.ppsSummaryText) {
+          this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
+        }
         this.previewPiece = null;
         if (this.nextPieces.length < 6) {
           this.generateNextPieces();
@@ -5809,13 +5886,22 @@ class GameScene extends Phaser.Scene {
 
   updateTimer() {
     if (
-      this.startTime &&
-      !this.isPaused &&
-      !this.level999Reached &&
-      !this.gameOver &&
-      !this.creditsActive
+      !this.gameStarted ||
+      !this.startTime ||
+      this.isPaused ||
+      this.level999Reached ||
+      this.gameOver ||
+      this.creditsActive
     ) {
-      this.currentTime = (Date.now() - this.startTime) / 1000;
+      return;
+    }
+    this.currentTime = (Date.now() - this.startTime) / 1000;
+    // Keep PPS UI clamped to zero when no pieces have been placed yet
+    if (this.totalPiecesPlaced === 0) {
+      this.conventionalPPS = 0;
+      this.rawPPS = 0;
+      if (this.ppsText) this.ppsText.setText("0.00");
+      if (this.rawPpsText) this.rawPpsText.setText("0.00");
     }
   }
 
@@ -5823,8 +5909,14 @@ class GameScene extends Phaser.Scene {
     // Track delta time in seconds for consistency
     this.deltaTime = delta / 1000;
 
-    // If loading or not fully initialized, skip update
+    // If loading or not fully initialized, skip gameplay but still draw UI (next queue, etc.)
     if (this.loadingPhase) {
+      this.draw();
+      return;
+    }
+    // During READY/GO sequence, let only UI/timers run
+    if (this.readyGoPhase && !this.gameStarted) {
+      this.draw();
       return;
     }
 
@@ -6357,11 +6449,13 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (!this.areActive || !this.currentPiece) {
-      if (!this.currentPiece) {
+    if (!this.currentPiece) {
+      // If no active piece, only return early when not in ARE; otherwise let ARE progress below.
+      if (!this.areActive) {
         this.draw();
         return;
       }
+    } else if (!this.areActive) {
       // Track key states for DAS using custom keys (z for left, c for right)
       // Allow DAS during loading for initial piece handling
       // Soft drop handling - only when s key is held
@@ -6592,6 +6686,17 @@ class GameScene extends Phaser.Scene {
   updatePPS() {
     // If PPS tracking fields exist, keep lightweight calculation; otherwise skip.
     if (typeof this.computePPS === "function") {
+      // If no pieces placed yet, clamp to zero and clear graph/history
+      if (this.totalPiecesPlaced === 0) {
+        this.conventionalPPS = 0;
+        this.rawPPS = 0;
+        if (this.ppsText) this.ppsText.setText("0.00");
+        if (this.rawPpsText) this.rawPpsText.setText("0.00");
+        if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
+        if (Array.isArray(this.ppsHistory)) this.ppsHistory.length = 0;
+        this.lastPpsRecordedPieceCount = 0;
+        return;
+      }
       this.computePPS();
     }
   }
@@ -7626,11 +7731,12 @@ class GameScene extends Phaser.Scene {
         amount,
       );
     } else {
-      // Default logic
+      // Default logic with TGM3 line bonuses (triple +1, tetris +2)
       if (type === "piece") {
         newLevel += 1;
       } else if (type === "lines") {
-        newLevel += amount;
+        const bonus = amount === 3 ? 1 : amount === 4 ? 2 : 0;
+        newLevel += amount + bonus;
       }
     }
 
@@ -7640,6 +7746,42 @@ class GameScene extends Phaser.Scene {
     const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
     if (this.level > maxLevel) {
       this.level = maxLevel;
+    }
+
+    // Shirase torikan checks (S5 at 500, S10 at 1000 if slow)
+    const isShiraseMode =
+      this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase";
+    if (isShiraseMode && !this.torikanFailed) {
+      const specMech =
+        (this.gameMode &&
+          typeof this.gameMode.getConfig === "function" &&
+          this.gameMode.getConfig()?.specialMechanics) ||
+        {};
+      const times =
+        specMech.torikanTimes &&
+        (this.rotationSystem === "ARS" || this.rotationSystem === "classic"
+          ? specMech.torikanTimes.classic
+          : specMech.torikanTimes.world);
+      if (times) {
+        if (this.level >= 500 && !this.torikanChecked[500]) {
+          this.torikanChecked[500] = true;
+          if (this.currentTime > (times.level500 || Infinity)) {
+            this.torikanFailed = true;
+            this.grade = "S5";
+            this.showGameOverScreen();
+            return;
+          }
+        }
+        if (this.level >= 1000 && !this.torikanChecked[1000]) {
+          this.torikanChecked[1000] = true;
+          if (this.currentTime > (times.level1000 || Infinity)) {
+            this.torikanFailed = true;
+            this.grade = "S10";
+            this.showGameOverScreen();
+            return;
+          }
+        }
+      }
     }
 
     const specialMechanics =
@@ -7667,10 +7809,36 @@ class GameScene extends Phaser.Scene {
     if (stopLevelHit) {
       this.lastBellLevel = this.level;
       this.levelStopActive = true;
+    } else if (!stopLevelHit) {
+      // Clear stop when advancing via line clear at stop levels
+      this.levelStopActive = false;
     }
 
-    // Play complete when reaching max level once
-    if (this.level >= maxLevel && !this.levelMaxSoundPlayed) {
+    // Easy mode completion handling (TGM2-style finish -> credits)
+    const easyCompletionLevel =
+      specialMechanics && typeof specialMechanics.easyCompletionLevel === "number"
+        ? specialMechanics.easyCompletionLevel
+        : null;
+    if (
+      easyCompletionLevel !== null &&
+      !this.creditsActive &&
+      this.level >= easyCompletionLevel
+    ) {
+      this.level = easyCompletionLevel;
+      // Clear stack with fading animation, then start credits roll
+      this.startMinoFading();
+      const creditsDuration =
+        typeof specialMechanics.creditsDuration === "number"
+          ? specialMechanics.creditsDuration
+          : 55;
+      this.startCredits(creditsDuration);
+      if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
+        this.gameMode.onCreditsStart(this);
+      }
+    }
+
+    // Play complete when reaching max level once (non-easy completion)
+    if (this.level >= maxLevel && !this.levelMaxSoundPlayed && easyCompletionLevel === null) {
       this.levelMaxSoundPlayed = true;
       try {
         const complete = this.sound?.add("complete", { volume: 0.8 });
@@ -7739,6 +7907,8 @@ class GameScene extends Phaser.Scene {
 
         const isTGM2Mode =
           this.selectedMode && this.selectedMode.startsWith("tgm2") && maxLevel === 999;
+        const isShiraseMode =
+          this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase";
 
         // TGM2: run 2s stack fade before credits; credits start once fade completes
         if (isTGM2Mode) {
@@ -7766,6 +7936,30 @@ class GameScene extends Phaser.Scene {
     if (completedSection >= 0) {
       this.sectionTimes[completedSection] = this.currentTime - this.sectionStartTime;
       this.sectionTetrises[completedSection] = this.currentSectionTetrisCount;
+
+      // COOL/REGRET evaluation for TGM3 Master
+      if (
+        this.gameMode &&
+        typeof this.gameMode.evaluateSectionPerformance === "function" &&
+        typeof this.gameMode.onSectionCool === "function" &&
+        typeof this.gameMode.onSectionRegret === "function"
+      ) {
+        const sectionTime = this.sectionTimes[completedSection];
+        const result = this.gameMode.evaluateSectionPerformance(completedSection, sectionTime);
+        if (result === "cool") {
+          this.gameMode.onSectionCool();
+          if (typeof this.rollBonus === "number") {
+            this.rollBonus += 1;
+          }
+          this.sectionPerformance[completedSection] = "COOL";
+        } else if (result === "regret") {
+          this.gameMode.onSectionRegret();
+          this.sectionPerformance[completedSection] = "REGRET";
+        } else {
+          this.sectionPerformance[completedSection] = null;
+        }
+      }
+
       this.sectionStartTime = this.currentTime;
       this.currentSection = section;
       this.currentSectionTetrisCount = 0;
@@ -7800,7 +7994,11 @@ class GameScene extends Phaser.Scene {
   getTGMGravitySpeed(level) {
     // Use mode-based gravity calculation if mode is available
     if (this.gameMode) {
-      return this.gameMode.getGravitySpeed(level);
+      const effLevel =
+        typeof this.gameMode.internalLevel === "number"
+          ? this.gameMode.internalLevel
+          : level;
+      return this.gameMode.getGravitySpeed(effLevel);
     }
 
     // Fallback to TGM1 curve if no mode
@@ -8118,6 +8316,8 @@ class GameScene extends Phaser.Scene {
     this.rawPPS = 0;
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
+    this.ppsHistory = [];
+    this.lastPpsRecordedPieceCount = 0;
     if (this.ppsSummaryText) {
       this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
     }
@@ -8163,9 +8363,9 @@ class GameScene extends Phaser.Scene {
     // Validate piece history to ensure it's correct after reset
     this.validatePieceHistory();
 
-    // Reset time tracking using Date.now()
-    this.startTime = Date.now();
-    this.gameStartTime = this.startTime;
+    // Reset time tracking; actual start time is set on GO
+    this.startTime = null;
+    this.gameStartTime = null;
     this.currentTime = 0;
     this.pauseStartTime = null;
     this.totalPausedTime = 0;
@@ -8228,9 +8428,8 @@ class GameScene extends Phaser.Scene {
       this.showReadyGo();
     });
 
-    // Restart game
+    // Restart game (queue prep only; spawn happens after GO in showReadyGo)
     this.generateNextPieces();
-    this.spawnPiece();
 
     // Restart BGM
     this.updateBGM();
@@ -8268,6 +8467,18 @@ class GameScene extends Phaser.Scene {
     this.creditsTimer = 0;
     if (creditsDurationSec != null) {
       this.creditsDuration = creditsDurationSec;
+    }
+    // Allow continuous play/spawn during credits
+    this.creditsGameplayEnabled = true;
+    // Easy mode credits use hanabi bonuses during roll if configured
+    this.creditsHanabi = false;
+    const specialMechanics =
+      (this.gameMode &&
+        typeof this.gameMode.getConfig === "function" &&
+        this.gameMode.getConfig()?.specialMechanics) ||
+      {};
+    if (specialMechanics.creditsHanabi) {
+      this.creditsHanabi = true;
     }
     this.rollLinesCleared = 0;
     this.rollFailedDuringRoll = false;
@@ -8325,6 +8536,17 @@ class GameScene extends Phaser.Scene {
     if (this.creditsBGM) {
       this.creditsBGM.stop();
       this.creditsBGM = null;
+    }
+
+    // Staff roll grading: add roll bonus based on roll performance
+    if (typeof this.rollBonus === "number") {
+      const rollFactor = this.rollType === "mroll" ? 1.0 : 0.5;
+      this.rollBonus += (this.rollLinesCleared || 0) * rollFactor;
+    }
+
+    // Mode-specific credits end hook
+    if (this.gameMode && typeof this.gameMode.onCreditsEnd === "function") {
+      this.gameMode.onCreditsEnd(this);
     }
 
     // Show Hanabi summary after credits if available
@@ -9159,9 +9381,17 @@ class GameScene extends Phaser.Scene {
 
         const tVal = sectionTetrisesArray[i];
         if (this.sectionTallyTexts && this.sectionTallyTexts[i]) {
-          this.sectionTallyTexts[i].setText(
-            typeof tVal === "number" && tVal > 0 ? "x".repeat(tVal) : "",
-          );
+          const perf =
+            Array.isArray(this.sectionPerformance) && this.sectionPerformance[i]
+              ? this.sectionPerformance[i]
+              : null;
+          const tallyText =
+            perf != null
+              ? perf
+              : typeof tVal === "number" && tVal > 0
+                ? "x".repeat(tVal)
+                : "";
+          this.sectionTallyTexts[i].setText(tallyText);
         }
 
         if (hasCompletedTime) {

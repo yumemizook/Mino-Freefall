@@ -15,6 +15,10 @@ class TGM3EasyMode extends BaseMode {
         this.elapsedTime = 0;
         this.nextThirtyTrigger = 30;
         this.spinDuringGround = false;
+        this.creditsComboSize = 0;
+        this.creditsHanabiInterval = null;
+        this.creditsHanabiTimer = 0;
+        this.comboStreamTimer = 0;
     }
 
     getModeConfig() {
@@ -34,7 +38,11 @@ class TGM3EasyMode extends BaseMode {
             gravityLevelCap: 200,
             hasGrading: false,
             specialMechanics: {
-                hanabi: true
+                hanabi: true,
+                sectionStops: [99, 199],
+                easyCompletionLevel: 200,
+                creditsDuration: 55,
+                creditsHanabi: true
             }
         };
     }
@@ -43,10 +51,21 @@ class TGM3EasyMode extends BaseMode {
     getModeId() { return this.modeId; }
 
     onLevelUpdate(level, oldLevel, type, amount) {
-        // Stop at 99: do not increment beyond 99
+        // Match other modes: pieces advance levels normally until 99; beyond 99 only line clears advance
         let next = oldLevel;
-        if (type === 'piece' || type === 'lines') {
-            next = Math.min(99, oldLevel + (type === 'lines' ? amount : 1));
+        if (type === 'piece') {
+            // Allow piece-based increment up to 99 and 199 only
+            if (oldLevel < 99) {
+                next = oldLevel + 1;
+            } else if (oldLevel >= 99 && oldLevel < 199) {
+                next = oldLevel + 1;
+            } else {
+                next = oldLevel; // freeze after 199 for piece-based increments
+            }
+        } else if (type === 'lines') {
+            const inc = Math.max(amount || 0, 0);
+            // Lines can advance beyond stops
+            next = oldLevel + inc;
         }
         return next;
     }
@@ -73,6 +92,19 @@ class TGM3EasyMode extends BaseMode {
         const frames = deltaTime * 60;
         this.framesSinceLastClear += frames;
         this.pieceActiveFrames += frames;
+        this.comboStreamTimer = Math.max(0, this.comboStreamTimer - frames);
+
+        // Credits free hanabi stream
+        if (gameScene && gameScene.creditsActive && this.creditsHanabiInterval) {
+            this.creditsHanabiTimer += frames;
+            while (this.creditsHanabiTimer >= this.creditsHanabiInterval) {
+                this.creditsHanabiTimer -= this.creditsHanabiInterval;
+                this.hanabi += 1;
+                if (typeof gameScene.spawnHanabiBurst === 'function') {
+                    gameScene.spawnHanabiBurst(1);
+                }
+            }
+        }
 
         // 30s bonus trigger from main stopwatch
         this.elapsedTime += deltaTime;
@@ -86,6 +118,16 @@ class TGM3EasyMode extends BaseMode {
         this.spinDuringGround = true;
     }
 
+    onCreditsStart(gameScene) {
+        // Freeze combo size for credits roll per Ti Easy behavior
+        this.creditsComboSize = this.comboSize;
+        // Precompute credit roll hanabi interval based on earned hanabi 0-200 (avoid divide by zero)
+        const baseHanabi = Math.max(1, Math.floor(this.hanabi || 0));
+        this.creditsHanabiInterval = Math.max(1, Math.floor(3265 / baseHanabi));
+        // Start with a random initial phase up to interval-1 to mimic staggered first fire
+        this.creditsHanabiTimer = Math.random() * this.creditsHanabiInterval;
+    }
+
     handleLineClear(gameScene, linesCleared, pieceType = null) {
         if (linesCleared <= 0) return;
 
@@ -94,19 +136,35 @@ class TGM3EasyMode extends BaseMode {
         const base = baseTable[Math.min(linesCleared, 4)] || 1.0;
 
         // Combo handling: singles maintain; doubles+ increment; cap 9
-        if (linesCleared >= 2) {
-            this.comboSize = Math.min(9, this.comboSize + 1);
-        } // singles keep size
+        let comboMult = 1.0;
+        if (gameScene && gameScene.creditsActive) {
+            // Credits: freeze combo, remap to 0-4 then to multiplier
+            const frozen = Math.min(9, Math.max(0, this.creditsComboSize));
+            const remap = { 0: 1, 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 0 };
+            const mapped = remap[frozen] ?? 1;
+            const creditsComboTable = {
+                0: 1.0, 1: 1.5, 2: 1.9, 3: 2.2, 4: 2.9,
+            };
+            comboMult = creditsComboTable[mapped] || 1.0;
+        } else {
+            if (linesCleared >= 2) {
+                this.comboSize = Math.min(9, this.comboSize + 1);
+            } // singles keep size
+            const comboTable = {
+                0: 1.0, 1: 1.0, 2: 1.5, 3: 1.9, 4: 2.2,
+                5: 2.9, 6: 3.5, 7: 3.9, 8: 4.2, 9: 4.5
+            };
+            comboMult = comboTable[this.comboSize] || 1.0;
+        }
 
-        const comboTable = {
-            0: 1.0, 1: 1.0, 2: 1.5, 3: 1.9, 4: 2.2,
-            5: 2.9, 6: 3.5, 7: 3.9, 8: 4.2, 9: 4.5
-        };
-        const comboMult = comboTable[this.comboSize] || 1.0;
-
-        // Lucky level bonus (before clear)
+        // Lucky level bonus (before clear; credits bug uses levelAfter - linesCleared)
         const luckyLevels = new Set([25, 50, 75, 125, 150, 175, 199]);
-        const lucky = luckyLevels.has(gameScene.level) ? 1.3 : 1.0;
+        const levelBefore = gameScene.level;
+        const levelAfterRaw = levelBefore + linesCleared;
+        const luckyCheckLevel = gameScene && gameScene.creditsActive
+            ? levelAfterRaw - linesCleared
+            : levelBefore;
+        const lucky = luckyLevels.has(luckyCheckLevel) ? 1.3 : 1.0;
 
         // Split bonus: if non-contiguous clears (simple check using board rows cleared)
         const clearedRows = gameScene.clearedLines || [];
@@ -122,12 +180,12 @@ class TGM3EasyMode extends BaseMode {
         this.thirtySecondBonus = false;
 
         // Variable speed combo bonus: (levelAfter - framesSinceLastClear)/100 if >100
-        const levelAfter = gameScene.level + linesCleared;
-        const varSpeedDelta = levelAfter - this.framesSinceLastClear;
+        const levelAfterCredits = gameScene && gameScene.creditsActive ? 200 : levelAfterRaw;
+        const varSpeedDelta = levelAfterCredits - this.framesSinceLastClear;
         const varSpeedMult = varSpeedDelta > 100 ? (varSpeedDelta / 100) : 1.0;
 
         // Variable finesse bonus: (levelAfter - pieceActiveFrames)/120 if >120
-        const varFinDelta = levelAfter - this.pieceActiveFrames;
+        const varFinDelta = levelAfterCredits - this.pieceActiveFrames;
         const varFinMult = varFinDelta > 120 ? (varFinDelta / 120) : 1.0;
 
         // Spin bonus: if rotation happened while grounded
@@ -142,14 +200,14 @@ class TGM3EasyMode extends BaseMode {
         this.spinDuringGround = false;
 
         // Fixed speed combo bonus (combo stream active if comboSize > 0)
-        const fixedComboMult = this.comboSize > 0 ? 1.3 : 1.0;
+        const fixedComboMult = this.comboStreamTimer > 0 ? 1.3 : 1.0;
 
         // Aggregate
         let awarded = base * comboMult * splitMult * lucky * thirtyMult * varSpeedMult * varFinMult * spinMult * fixedComboMult;
 
         // Bravos: +6 flat if all cleared (simplified detection)
         const isBravo = clearedRows.length > 0 && gameScene.board && gameScene.board.grid.every(row => row.every(cell => cell === 0));
-        if (isBravo && gameScene.level < 200) {
+        if (isBravo && (!gameScene || !gameScene.creditsActive)) {
             awarded += 6;
         }
 
@@ -166,6 +224,16 @@ class TGM3EasyMode extends BaseMode {
         // Reset timers for next piece/clear context
         this.framesSinceLastClear = 0;
         this.pieceActiveFrames = 0;
+        // Combo stream timer refreshed on any line clear for fixed-speed bonus
+        this.comboStreamTimer = 100;
+    }
+
+    onCreditsEnd(gameScene) {
+        // Completion hanabi: +24 after credits roll
+        this.hanabi += 24;
+        if (gameScene && typeof gameScene.spawnHanabiBurst === 'function') {
+            gameScene.spawnHanabiBurst(24);
+        }
     }
 
     // Simplified Ti Easy gravity table (1/256G units converted)

@@ -14,6 +14,10 @@ class TGM3Mode extends BaseMode {
 
         // Internal timing phase pointer
         this.currentTimingPhase = 1;
+        this.coolBonus = 0; // +100 per section COOL
+        this.internalLevel = 0;
+        this.coolTimes = [52, 52, 49, 45, 45, 42, 42, 38, 38]; // secs to *70 baseline
+        this.regretTimes = [90, 75, 75, 68, 60, 60, 50, 50, 50]; // section time caps
         this.timingPhases = [
             // Simplified Ti-like phases (frames @60fps)
             { minLevel: 0, maxLevel: 499, are: 27/60, lineAre: 27/60, das: 16/60, arr: 1/60, lock: 30/60, lineClear: 40/60 },
@@ -22,8 +26,8 @@ class TGM3Mode extends BaseMode {
             { minLevel: 700, maxLevel: 799, are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
             { minLevel: 800, maxLevel: 899, are: 14/60, lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 30/60, lineClear: 6/60 },
             { minLevel: 900, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
-            { minLevel: 1000, maxLevel: 1200, are: 8/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
-            { minLevel: 1201, maxLevel: 1500, are: 6/60, lineAre: 6/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 6/60 },
+            { minLevel: 1000, maxLevel: 1199, are: 8/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
+            { minLevel: 1200, maxLevel: 1899, are: 6/60, lineAre: 6/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 6/60 },
         ];
     }
 
@@ -132,10 +136,36 @@ class TGM3Mode extends BaseMode {
             nextLevel = Math.min(level + 1, this.config.gravityLevelCap);
         } else if (updateType === 'lines') {
             const inc = Math.min(Math.max(amount || 0, 0), 4);
-            nextLevel = Math.min(level + inc, this.config.gravityLevelCap);
+            const bonus = inc === 3 ? 1 : inc === 4 ? 2 : 0;
+            nextLevel = Math.min(level + inc + bonus, this.config.gravityLevelCap);
         }
-        this.updateTimingPhase(nextLevel);
+        // Internal level accounts for COOL bonus
+        this.internalLevel = nextLevel + this.coolBonus;
+        this.updateTimingPhase(this.internalLevel);
         return nextLevel;
+    }
+
+    // Section COOL/REGRET hooks (timing thresholds to be provided by game scene)
+    onSectionCool() {
+        this.coolBonus += 100;
+        this.internalLevel += 100;
+        this.updateTimingPhase(this.internalLevel);
+    }
+
+    onSectionRegret() {
+        // No direct penalty to internal level; could add if desired
+    }
+
+    evaluateSectionPerformance(sectionIndex, sectionTimeSec) {
+        const coolThreshold = this.coolTimes[sectionIndex] ?? null;
+        const regretThreshold = this.regretTimes[sectionIndex] ?? null;
+        if (coolThreshold !== null && sectionTimeSec <= coolThreshold) {
+            return 'cool';
+        }
+        if (regretThreshold !== null && sectionTimeSec > regretThreshold) {
+            return 'regret';
+        }
+        return null;
     }
 }
 

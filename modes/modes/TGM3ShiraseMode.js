@@ -7,6 +7,9 @@ class TGM3ShiraseMode extends BaseMode {
         this.modeName = 'Shirase';
         this.modeId = 'tgm3_shirase';
         this.config = this.getModeConfig();
+        this.sectionTimes = {};
+        this.sectionGrades = {};
+        this.rollReached = false;
     }
 
     getModeConfig() {
@@ -27,6 +30,10 @@ class TGM3ShiraseMode extends BaseMode {
             hasGrading: false,
             specialMechanics: {
                 torikan: true,
+                torikanTimes: {
+                    classic: { level500: 148, level1000: 296 }, // 2:28, 4:56
+                    world: { level500: 183, level1000: 366 },   // 3:03, 6:06
+                },
                 monochromeAfter1000: true,
                 garbageAfter500: true
             }
@@ -35,6 +42,42 @@ class TGM3ShiraseMode extends BaseMode {
 
     getName() { return this.modeName; }
     getModeId() { return this.modeId; }
+
+    onLineClear(gameScene, linesCleared) {
+        if (linesCleared > 0) {
+            gameScene.garbageCountdown = 0; // reset garbage timer on clear
+        }
+    }
+
+    onLevelUpdate(level, oldLevel) {
+        const max = this.config.gravityLevelCap || 1300;
+        if (level >= max) {
+            this.rollReached = true;
+        }
+    }
+
+    onSectionComplete(gameScene, sectionIndex, sectionTimeSec) {
+        // S-grade per section: S1..S13
+        this.sectionTimes[sectionIndex] = sectionTimeSec;
+        // S-grade per section: S1..S13
+        this.sectionGrades[sectionIndex] = "S" + (sectionIndex + 1);
+        // REGRET if slower than thresholds (approximate)
+        const regretTimes = [90, 75, 75, 68, 60, 60, 50, 50, 50, 50, 50, 50, 50];
+        if (sectionIndex < regretTimes.length && sectionTimeSec > regretTimes[sectionIndex]) {
+            this.sectionGrades[sectionIndex] = "REGRET";
+        }
+        if (gameScene) {
+            gameScene.sectionPerformance = gameScene.sectionPerformance || [];
+            gameScene.sectionPerformance[sectionIndex] = this.sectionGrades[sectionIndex];
+        }
+    }
+
+    getARE() { return this.config.are; }
+    getLineARE() { return this.config.lineAre; }
+    getDAS() { return this.config.das; }
+    getARR() { return this.config.arr; }
+    getLockDelay() { return this.config.lockDelay; }
+    getLineClearDelay() { return this.config.lineClearDelay; }
 }
 
 // Export
