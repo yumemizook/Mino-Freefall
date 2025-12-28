@@ -12,10 +12,17 @@ class TGM3Mode extends BaseMode {
 
         this.config = this.getModeConfig();
 
+        // Grading system (TGM3/Ti style)
+        this.tgm3Grading = typeof TGM3GradingSystem !== 'undefined' ? new TGM3GradingSystem() : null;
+
         // Internal timing phase pointer
         this.currentTimingPhase = 1;
         this.coolBonus = 0; // +100 per section COOL
         this.internalLevel = 0;
+        this.sectionTimes = [];
+        this.sectionPerformance = [];
+        this.fadingRollActive = false;
+        this.mRollStarted = false;
         this.coolTimes = [52, 52, 49, 45, 45, 42, 42, 38, 38]; // secs to *70 baseline
         this.regretTimes = [90, 75, 75, 68, 60, 60, 50, 50, 50]; // section time caps
         this.timingPhases = [
@@ -46,10 +53,15 @@ class TGM3Mode extends BaseMode {
             levelUpType: 'piece',
             lineClearBonus: 1,
             gravityLevelCap: 1500,
-            hasGrading: false,
+            hasGrading: true,
             specialMechanics: {
                 coolRegret: true,
-                staffRoll: true
+                staffRoll: true,
+                torikan: true,
+                torikanTimes: {
+                    classic: { level500: 420 }, // 7:00
+                    world: { level500: 420 }
+                }
             }
         };
     }
@@ -67,6 +79,21 @@ class TGM3Mode extends BaseMode {
 
     getModeId() {
         return this.modeId;
+    }
+
+    getDisplayedGrade() {
+        if (this.tgm3Grading) return this.tgm3Grading.getDisplayedGrade();
+        return null;
+    }
+
+    getInternalGrade() {
+        if (this.tgm3Grading) return this.tgm3Grading.getInternalGrade();
+        return 0;
+    }
+
+    getGradePoints() {
+        if (this.tgm3Grading) return this.tgm3Grading.getGradePoints();
+        return 0;
     }
 
     // Gravity curve derived from Ti table (values divided by 256 to map to existing engine units)
@@ -150,22 +177,86 @@ class TGM3Mode extends BaseMode {
         this.coolBonus += 100;
         this.internalLevel += 100;
         this.updateTimingPhase(this.internalLevel);
+        if (this.tgm3Grading) {
+            this.tgm3Grading.applySectionCool();
+        }
+        this.sectionPerformance.push('COOL');
     }
 
     onSectionRegret() {
-        // No direct penalty to internal level; could add if desired
+        if (this.tgm3Grading) {
+            this.tgm3Grading.applySectionRegret();
+        }
+        this.sectionPerformance.push('REGRET');
     }
 
     evaluateSectionPerformance(sectionIndex, sectionTimeSec) {
+        // No section COOL/REGRET after section 900+
+        if (sectionIndex >= 9) return null;
         const coolThreshold = this.coolTimes[sectionIndex] ?? null;
         const regretThreshold = this.regretTimes[sectionIndex] ?? null;
-        if (coolThreshold !== null && sectionTimeSec <= coolThreshold) {
+        // COOL also requires within +2s of previous section time if available
+        const prevTime = sectionIndex > 0 ? this.sectionTimes?.[sectionIndex - 1] : null;
+        const withinPrevious = prevTime == null || sectionTimeSec <= prevTime + 2;
+        if (coolThreshold !== null && sectionTimeSec <= coolThreshold && withinPrevious) {
             return 'cool';
         }
         if (regretThreshold !== null && sectionTimeSec > regretThreshold) {
             return 'regret';
         }
         return null;
+    }
+
+    handleLineClear(gameScene, linesCleared, pieceType = null) {
+        if (!this.tgm3Grading || !gameScene) return;
+        const comboSize = Math.max(1, (gameScene.comboCount ?? -1) + 1);
+        const isTetris = linesCleared === 4;
+        this.tgm3Grading.awardPoints(linesCleared, comboSize, gameScene.level, isTetris);
+    }
+
+    initializeForGameScene(gameScene) {
+        if (super.initializeForGameScene) super.initializeForGameScene(gameScene);
+        if (this.tgm3Grading && typeof this.tgm3Grading.reset === 'function') {
+            this.tgm3Grading.reset();
+        }
+    }
+
+    update(gameScene, deltaTime) {
+        if (super.update) super.update(gameScene, deltaTime);
+        if (this.tgm3Grading && typeof this.tgm3Grading.update === 'function') {
+            this.tgm3Grading.update(deltaTime);
+        }
+    }
+
+    onCreditsStart(gameScene) {
+        // Decide roll type: invisible roll (m-roll) if all COOLs and internal grade high enough
+        const allCool = this.sectionPerformance.slice(0, 9).every(v => v === 'COOL');
+        const internalGrade = this.getInternalGrade();
+        // Ti requirement: all COOLs + internal grade >= m9 (~27 in TAP terms)
+        const mRollEligible = allCool && internalGrade >= 27;
+        if (mRollEligible) {
+            this.mRollStarted = true;
+            this.fadingRollActive = false;
+        } else {
+            this.fadingRollActive = true;
+            this.mRollStarted = false;
+        }
+        if (gameScene) {
+            gameScene.mRollStarted = this.mRollStarted;
+            gameScene.fadingRollActive = this.fadingRollActive;
+        }
+    }
+
+    addStaffRollBonus(amount) {
+        if (this.tgm3Grading && typeof this.tgm3Grading.addStaffRollBonus === 'function') {
+            this.tgm3Grading.addStaffRollBonus(amount);
+        }
+    }
+
+    addStaffRollLines(lines, rollType = 'fading') {
+        if (this.tgm3Grading && typeof this.tgm3Grading.addStaffRollLines === 'function') {
+            this.tgm3Grading.addStaffRollLines(lines, rollType);
+        }
     }
 }
 

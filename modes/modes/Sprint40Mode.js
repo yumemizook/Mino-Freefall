@@ -17,13 +17,13 @@ class Sprint40Mode extends BaseMode {
             },
             das: 9/60,       // 9 frames
             arr: 1/60,        // 1 frame
-            are: 7/60,        // 7 frames
+            are: 7/60,        //  7 frames.
             lineAre: 7/60,    // Line ARE matches grid for sprint
             lockDelay: 30/60,  // 10 frames
             lineClearDelay: 9/60, // 9 frames for line clear delay flash
 
             nextPieces: 6,
-            holdEnabled: true,
+            holdEnabled: true, // ensure hold stays enabled (copied by getConfig)
             ghostEnabled: true,
             levelUpType: 'lines',
             lineClearBonus: 1,

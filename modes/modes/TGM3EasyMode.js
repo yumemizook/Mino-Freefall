@@ -12,6 +12,7 @@ class TGM3EasyMode extends BaseMode {
         this.framesSinceLastClear = 0;
         this.pieceActiveFrames = 0;
         this.thirtySecondBonus = false;
+        this.lastThirtyLevel = 0;
         this.elapsedTime = 0;
         this.nextThirtyTrigger = 30;
         this.spinDuringGround = false;
@@ -19,6 +20,7 @@ class TGM3EasyMode extends BaseMode {
         this.creditsHanabiInterval = null;
         this.creditsHanabiTimer = 0;
         this.comboStreamTimer = 0;
+        this.lastClearWasLine = false;
     }
 
     getModeConfig() {
@@ -73,6 +75,7 @@ class TGM3EasyMode extends BaseMode {
     onPieceSpawn(gameScene) {
         this.pieceActiveFrames = 0;
         this.spinDuringGround = false;
+        this.lastClearWasLine = false;
     }
 
     initializeForGameScene(gameScene) {
@@ -82,9 +85,11 @@ class TGM3EasyMode extends BaseMode {
         this.framesSinceLastClear = 0;
         this.pieceActiveFrames = 0;
         this.thirtySecondBonus = false;
+        this.lastThirtyLevel = gameScene ? gameScene.level || 0 : 0;
         this.elapsedTime = 0;
         this.nextThirtyTrigger = 30;
         this.spinDuringGround = false;
+        this.lastClearWasLine = false;
     }
 
     update(gameScene, deltaTime) {
@@ -100,7 +105,7 @@ class TGM3EasyMode extends BaseMode {
             while (this.creditsHanabiTimer >= this.creditsHanabiInterval) {
                 this.creditsHanabiTimer -= this.creditsHanabiInterval;
                 this.hanabi += 1;
-                if (typeof gameScene.spawnHanabiBurst === 'function') {
+                if (typeof gameScene.spawnHanabiBurst === "function") {
                     gameScene.spawnHanabiBurst(1);
                 }
             }
@@ -108,8 +113,12 @@ class TGM3EasyMode extends BaseMode {
 
         // 30s bonus trigger from main stopwatch
         this.elapsedTime += deltaTime;
-        if (this.elapsedTime >= this.nextThirtyTrigger) {
-            this.thirtySecondBonus = true;
+        while (this.elapsedTime >= this.nextThirtyTrigger) {
+            const levelNow = gameScene ? gameScene.level || 0 : 0;
+            if (levelNow - this.lastThirtyLevel >= 30) {
+                this.thirtySecondBonus = true;
+            }
+            this.lastThirtyLevel = levelNow;
             this.nextThirtyTrigger += 30;
         }
     }
@@ -131,64 +140,69 @@ class TGM3EasyMode extends BaseMode {
     handleLineClear(gameScene, linesCleared, pieceType = null) {
         if (linesCleared <= 0) return;
 
-        // Base line clear values
+        this.lastClearWasLine = true;
+
+        // Base line clear values (cap >4 as Tetris)
         const baseTable = { 1: 1.0, 2: 2.9, 3: 3.8, 4: 4.7 };
         const base = baseTable[Math.min(linesCleared, 4)] || 1.0;
 
-        // Combo handling: singles maintain; doubles+ increment; cap 9
+        // Combo handling: singles keep; doubles+ increment; cap 9. Credits freeze combo.
         let comboMult = 1.0;
         if (gameScene && gameScene.creditsActive) {
-            // Credits: freeze combo, remap to 0-4 then to multiplier
             const frozen = Math.min(9, Math.max(0, this.creditsComboSize));
             const remap = { 0: 1, 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 0 };
             const mapped = remap[frozen] ?? 1;
-            const creditsComboTable = {
-                0: 1.0, 1: 1.5, 2: 1.9, 3: 2.2, 4: 2.9,
-            };
+            const creditsComboTable = { 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.2, 4: 2.9 };
             comboMult = creditsComboTable[mapped] || 1.0;
         } else {
             if (linesCleared >= 2) {
                 this.comboSize = Math.min(9, this.comboSize + 1);
-            } // singles keep size
+            }
             const comboTable = {
                 0: 1.0, 1: 1.0, 2: 1.5, 3: 1.9, 4: 2.2,
-                5: 2.9, 6: 3.5, 7: 3.9, 8: 4.2, 9: 4.5
+                5: 2.9, 6: 3.5, 7: 3.9, 8: 4.2, 9: 4.5,
             };
             comboMult = comboTable[this.comboSize] || 1.0;
         }
 
-        // Lucky level bonus (before clear; credits bug uses levelAfter - linesCleared)
-        const luckyLevels = new Set([25, 50, 75, 125, 150, 175, 199]);
-        const levelBefore = gameScene.level;
-        const levelAfterRaw = levelBefore + linesCleared;
-        const luckyCheckLevel = gameScene && gameScene.creditsActive
-            ? levelAfterRaw - linesCleared
-            : levelBefore;
-        const lucky = luckyLevels.has(luckyCheckLevel) ? 1.3 : 1.0;
+        // Fixed speed combo bonus: active if stream timer > 0
+        const fixedComboMult = this.comboStreamTimer > 0 ? 1.3 : 1.0;
 
-        // Split bonus: if non-contiguous clears (simple check using board rows cleared)
-        const clearedRows = gameScene.clearedLines || [];
+        // Split bonus
+        const clearedRows = gameScene && Array.isArray(gameScene.clearedLines)
+            ? gameScene.clearedLines
+            : [];
         let splitMult = 1.0;
         if (clearedRows.length > 1) {
             const diffs = clearedRows.slice(1).map((r, i) => r - clearedRows[i]);
-            const nonContig = diffs.some(d => d > 1);
+            const nonContig = diffs.some((d) => d > 1);
             if (nonContig) splitMult = 1.4;
         }
 
-        // 30-second bonus (flag-based; user-provided timer not implemented, so keep manual flag)
+        // Lucky level bonus (bugged in credits)
+        const luckyLevels = new Set([25, 50, 75, 125, 150, 175, 199]);
+        const levelBefore = gameScene ? gameScene.level || 0 : 0;
+        const levelAfterRaw = levelBefore + linesCleared;
+        const luckyCheckLevel =
+            gameScene && gameScene.creditsActive
+                ? levelAfterRaw - linesCleared
+                : levelBefore;
+        const lucky = luckyLevels.has(luckyCheckLevel) ? 1.3 : 1.0;
+
+        // 30-second bonus
         const thirtyMult = this.thirtySecondBonus ? 1.4 : 1.0;
         this.thirtySecondBonus = false;
 
-        // Variable speed combo bonus: (levelAfter - framesSinceLastClear)/100 if >100
+        // Variable speed combo bonus
         const levelAfterCredits = gameScene && gameScene.creditsActive ? 200 : levelAfterRaw;
         const varSpeedDelta = levelAfterCredits - this.framesSinceLastClear;
-        const varSpeedMult = varSpeedDelta > 100 ? (varSpeedDelta / 100) : 1.0;
+        const varSpeedMult = varSpeedDelta > 100 ? varSpeedDelta / 100 : 1.0;
 
-        // Variable finesse bonus: (levelAfter - pieceActiveFrames)/120 if >120
+        // Variable finesse bonus
         const varFinDelta = levelAfterCredits - this.pieceActiveFrames;
-        const varFinMult = varFinDelta > 120 ? (varFinDelta / 120) : 1.0;
+        const varFinMult = varFinDelta > 120 ? varFinDelta / 120 : 1.0;
 
-        // Spin bonus: if rotation happened while grounded
+        // Spin bonus
         let spinMult = 1.0;
         if (this.spinDuringGround) {
             if (pieceType === 'T') {
@@ -199,33 +213,48 @@ class TGM3EasyMode extends BaseMode {
         }
         this.spinDuringGround = false;
 
-        // Fixed speed combo bonus (combo stream active if comboSize > 0)
-        const fixedComboMult = this.comboStreamTimer > 0 ? 1.3 : 1.0;
+        // Aggregate (truncated)
+        let awarded =
+            base *
+            comboMult *
+            fixedComboMult *
+            splitMult *
+            lucky *
+            thirtyMult *
+            varSpeedMult *
+            varFinMult *
+            spinMult;
+        awarded = Math.floor(awarded);
 
-        // Aggregate
-        let awarded = base * comboMult * splitMult * lucky * thirtyMult * varSpeedMult * varFinMult * spinMult * fixedComboMult;
-
-        // Bravos: +6 flat if all cleared (simplified detection)
-        const isBravo = clearedRows.length > 0 && gameScene.board && gameScene.board.grid.every(row => row.every(cell => cell === 0));
+        // Bravos only during 0-200 (not credits): +6 flat
+        const isBravo =
+            clearedRows.length > 0 &&
+            gameScene &&
+            gameScene.board &&
+            gameScene.board.grid.every((row) => row.every((cell) => cell === 0));
         if (isBravo && (!gameScene || !gameScene.creditsActive)) {
             awarded += 6;
         }
 
-        this.hanabi += Math.floor(awarded);
-        console.log(
-            `[Hanabi] +${Math.floor(awarded)} | total=${this.hanabi} | lines=${linesCleared} piece=${pieceType || "?"} combo=${this.comboSize}`,
-        );
-
-        // Fireworks trigger (lightweight)
-        if (gameScene && typeof gameScene.spawnHanabiBurst === 'function') {
-            gameScene.spawnHanabiBurst(Math.max(1, Math.floor(awarded)));
+        this.hanabi += awarded;
+        if (gameScene && typeof gameScene.spawnHanabiBurst === "function" && awarded > 0) {
+            gameScene.spawnHanabiBurst(awarded);
         }
 
         // Reset timers for next piece/clear context
         this.framesSinceLastClear = 0;
         this.pieceActiveFrames = 0;
-        // Combo stream timer refreshed on any line clear for fixed-speed bonus
         this.comboStreamTimer = 100;
+    }
+
+    // Reset combo when a piece locks without clearing
+    onPieceLock(piece, gameScene) {
+        if (!this.lastClearWasLine) {
+            this.comboSize = 0;
+            this.comboStreamTimer = 0;
+        }
+        this.lastClearWasLine = false;
+        return true;
     }
 
     onCreditsEnd(gameScene) {

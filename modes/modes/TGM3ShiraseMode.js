@@ -35,7 +35,8 @@ class TGM3ShiraseMode extends BaseMode {
                     world: { level500: 183, level1000: 366 },   // 3:03, 6:06
                 },
                 monochromeAfter1000: true,
-                garbageAfter500: true
+                garbageAfter500: true,
+                bigRollAfter1300: true
             }
         };
     }
@@ -49,11 +50,23 @@ class TGM3ShiraseMode extends BaseMode {
         }
     }
 
-    onLevelUpdate(level, oldLevel) {
+    onLevelUpdate(level, oldLevel, updateType = 'piece', amount = 1) {
         const max = this.config.gravityLevelCap || 1300;
-        if (level >= max) {
+        let nextLevel = level;
+
+        if (updateType === 'piece') {
+            nextLevel = Math.min(level + 1, max);
+        } else if (updateType === 'lines') {
+            const inc = Math.max(amount || 0, 0);
+            const bonus = inc === 3 ? 1 : inc === 4 ? 2 : 0;
+            nextLevel = Math.min(level + inc + bonus, max);
+        }
+
+        if (nextLevel >= max) {
             this.rollReached = true;
         }
+
+        return nextLevel;
     }
 
     onSectionComplete(gameScene, sectionIndex, sectionTimeSec) {
@@ -61,8 +74,10 @@ class TGM3ShiraseMode extends BaseMode {
         this.sectionTimes[sectionIndex] = sectionTimeSec;
         // S-grade per section: S1..S13
         this.sectionGrades[sectionIndex] = "S" + (sectionIndex + 1);
-        // REGRET if slower than thresholds (approximate)
-        const regretTimes = [90, 75, 75, 68, 60, 60, 50, 50, 50, 50, 50, 50, 50];
+        // REGRET if slower than thresholds (Ti): ≤60s early, 50s later
+        const regretTimes = [
+            60, 60, 60, 60, 60, 60, 50, 50, 50, 50, 50, 50, 50,
+        ];
         if (sectionIndex < regretTimes.length && sectionTimeSec > regretTimes[sectionIndex]) {
             this.sectionGrades[sectionIndex] = "REGRET";
         }

@@ -1060,13 +1060,23 @@ class Board {
     const startRow = 2;
     const endRow = Math.min(this.rows, startRow + scene.visibleRows);
 
+    const bigBlocks = !!(scene && scene.bigBlocksActive);
+    const drawCellSize = bigBlocks ? cellSize * 2 : cellSize;
+
     for (let r = startRow; r < endRow; r++) {
       for (let c = 0; c < this.cols; c++) {
         if (this.grid[r][c]) {
-          const rowAlpha =
+          let rowAlpha =
             scene.minoRowFadeAlpha && scene.minoRowFadeAlpha[r] !== undefined
               ? scene.minoRowFadeAlpha[r]
               : 1;
+          if (scene.strobeActive) {
+            const t = scene.currentTime || 0;
+            const omega = (2 * Math.PI) / 0.5; // 0.5s cycle
+            const phase = t * omega + c * 0.15 + r * 0.07;
+            const strobe = 0.25 + 0.75 * (0.5 * (Math.sin(phase) + 1));
+            rowAlpha *= strobe;
+          }
           if (rowAlpha <= 0) {
             continue;
           }
@@ -1094,39 +1104,60 @@ class Board {
             }
           }
 
-          const textureKey =
-            scene.rotationSystem === "ARS" ? "mino_ars" : "mino_srs";
+          const textureKey = scene.monochromeActive && this.currentTextureKey
+            ? this.currentTextureKey
+            : scene.rotationSystem === "ARS"
+              ? "mino_ars"
+              : "mino_srs";
+          const tintColor =
+            scene.monochromeActive && textureKey.startsWith("mono")
+              ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
+              : color;
           const texture = scene.textures ? scene.textures.get(textureKey) : null;
           const textureSource = texture && texture.source ? texture.source[0] : null;
           const hasValidTextureSource =
             !!texture && !!textureSource && !!textureSource.image;
           const drawX = offsetX + c * cellSize;
           const drawY = offsetY + (r - startRow) * cellSize;
+          // X-ray effect: only render current sweep column (ghost still visible elsewhere)
+          if (scene.xrayActive) {
+            if (scene.xrayRevealCooldown > 0) {
+              continue;
+            }
+            if (scene.xrayColumn !== c) {
+              continue;
+            }
+          }
+          const renderX = bigBlocks ? drawX - cellSize / 2 : drawX;
+          const renderY = bigBlocks ? drawY - cellSize / 2 : drawY;
 
           if (hasValidTextureSource && !isPowerObj) {
-            const sprite = scene.add.sprite(drawX, drawY, textureKey);
-            sprite.setDisplaySize(cellSize, cellSize);
-            sprite.setTint(color);
+            const sprite = scene.add.sprite(renderX, renderY, textureKey);
+            sprite.setDisplaySize(drawCellSize, drawCellSize);
+            sprite.setTint(tintColor);
             sprite.setAlpha(rowAlpha);
             scene.gameGroup.add(sprite);
           } else {
             const graphics = scene.add.graphics();
-            const fillColor = color || 0x010101;
+            const fillColor =
+              scene.monochromeActive && textureKey.startsWith("mono")
+                ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
+                : color || 0x010101;
             graphics.fillStyle(fillColor, rowAlpha);
             graphics.fillRect(
-              drawX - cellSize / 2,
-              drawY - cellSize / 2,
-              cellSize,
-              cellSize,
+              renderX - drawCellSize / 2,
+              renderY - drawCellSize / 2,
+              drawCellSize,
+              drawCellSize,
             );
             if (isPowerObj && cellVal.powerupType) {
               const borderColor = cellVal.borderColor || 0xffffff;
               graphics.lineStyle(2, borderColor, rowAlpha);
               graphics.strokeRect(
-                drawX - cellSize / 2,
-                drawY - cellSize / 2,
-                cellSize,
-                cellSize,
+                renderX - drawCellSize / 2,
+                renderY - drawCellSize / 2,
+                drawCellSize,
+                drawCellSize,
               );
               graphics.lineStyle(3, borderColor, rowAlpha);
               graphics.fillStyle(borderColor, rowAlpha);
@@ -1367,6 +1398,8 @@ class Piece {
 
   draw(scene, offsetX, offsetY, cellSize, ghost = false, alpha = 1) {
     const finalAlpha = ghost ? 0.3 : alpha;
+    const bigBlocks = !!(scene && scene.bigBlocksActive);
+    const drawCellSize = bigBlocks ? cellSize * 2 : cellSize;
     for (let r = 0; r < this.shape.length; r++) {
       for (let c = 0; c < this.shape[r].length; c++) {
         if (this.shape[r][c]) {
@@ -1374,29 +1407,45 @@ class Piece {
           // Only draw pieces that are in the visible area (row 2 and below in the 22-row matrix)
           if (pieceY >= 2) {
             const textureKey =
-              scene.rotationSystem === "ARS" ? "mino_ars" : "mino_srs";
+              scene.monochromeActive && scene.board && scene.board.currentTextureKey
+                ? scene.board.currentTextureKey
+                : scene.rotationSystem === "ARS"
+                  ? "mino_ars"
+                  : "mino_srs";
+            const tintColor =
+              scene.monochromeActive && textureKey.startsWith("mono")
+                ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
+                : this.color;
             const texture = scene.textures ? scene.textures.get(textureKey) : null;
             const textureSource = texture && texture.source ? texture.source[0] : null;
             const hasValidTextureSource =
               !!texture && !!textureSource && !!textureSource.image;
+            const drawX = offsetX + (this.x + c) * cellSize;
+            const drawY = offsetY + (pieceY - 2) * cellSize;
+            const renderX = bigBlocks ? drawX - cellSize / 2 : drawX;
+            const renderY = bigBlocks ? drawY - cellSize / 2 : drawY;
             if (hasValidTextureSource) {
               const sprite = scene.add.sprite(
-                offsetX + (this.x + c) * cellSize,
-                offsetY + (pieceY - 2) * cellSize,
+                renderX,
+                renderY,
                 textureKey,
               );
-              sprite.setDisplaySize(cellSize, cellSize);
-              sprite.setTint(this.color);
+              sprite.setDisplaySize(drawCellSize, drawCellSize);
+              sprite.setTint(tintColor);
               sprite.setAlpha(finalAlpha);
               scene.gameGroup.add(sprite);
             } else {
               const graphics = scene.add.graphics();
-              graphics.fillStyle(this.color, finalAlpha);
+              const fillColor =
+                scene.monochromeActive && textureKey.startsWith("mono")
+                  ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
+                  : this.color;
+              graphics.fillStyle(fillColor, finalAlpha);
               graphics.fillRect(
-                offsetX + (this.x + c) * cellSize - cellSize / 2,
-                offsetY + (pieceY - 2) * cellSize - cellSize / 2,
-                cellSize,
-                cellSize,
+                renderX - drawCellSize / 2,
+                renderY - drawCellSize / 2,
+                drawCellSize,
+                drawCellSize,
               );
               scene.gameGroup.add(graphics);
             }
@@ -3768,6 +3817,7 @@ class GameScene extends Phaser.Scene {
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
+    this.holdRequest = false;
     this.nextPieces = []; // Initialize next pieces array
     this.gravityTimer = 0.0;
     this.gravityAccum = 0.0;
@@ -3794,18 +3844,26 @@ class GameScene extends Phaser.Scene {
     this.sectionPerformance = [];
     this.torikanFailed = false;
     this.torikanChecked = { 500: false, 1000: false };
+    this.torikanFailActive = false;
+    this.torikanFailTimer = 0;
+    this.torikanFailMessageShown = false;
+    this.torikanFailGameOverShown = false;
     this.garbageCountdown = 0;
     this.garbageInterval = 1.5; // seconds between garbage rows in Shirase post-500
+    this.shiraseGarbageQuota = 0; // Rising garbage quota (500-999)
+    this.shiraseGarbageCounter = 0; // Counter per doc (increments per piece, decrements per line)
+    this.shiraseTorikanLevel = null;
     this.monochromeApplied = false;
     this.monochromeActive = false;
     this.monochromeTextureKey = null;
+    this.bigBlocksActive = false;
+    this.xrayActive = false;
+    this.xrayColumn = 0;
+    this.strobeActive = false;
     this.regretMessageTimer = 0;
     this.regretMessageText = null;
     this.playfieldBorder = null;
     this.gameOver = false;
-    this.visibleRows = 20; // Only show bottom 20 rows of the 22-row matrix
-    // Calculate cell size and positioning for full screen
-    this.calculateLayout();
     this.visibleRows = 20; // Only show bottom 20 rows of the 22-row matrix
     // Calculate cell size and positioning for full screen
     this.calculateLayout();
@@ -3886,9 +3944,11 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0; // Longest active time (frames) for a single piece
     this.ppsHistory = [];
-    this.lastPpsRecordedPieceCount = 0;
+    this.ppsSampleTimer = 0;
+    this.ppsSampleInterval = 0.5; // seconds
     this.ppsGraphGraphics = null;
     this.ppsGraphArea = null;
+    this.ppsLegendText = null;
     this.ppsSummaryText = null;
 
     // Leaderboard tracking
@@ -4914,7 +4974,9 @@ class GameScene extends Phaser.Scene {
 
     if (hasGrading) {
       const gradeX = uiX + 25;
-      const gradeY = this.borderOffsetY;
+      const gradeYOffset =
+        modeId === "tgm3_master" || modeId === "tgm3" ? 80 : 0;
+      const gradeY = this.borderOffsetY + gradeYOffset;
       const gradeWidth = 80;
       this.gradeDisplay = this.add.graphics();
       this.gradeDisplay.lineStyle(2, 0xffffff);
@@ -5118,19 +5180,28 @@ class GameScene extends Phaser.Scene {
     if (this.hanabiLabel) this.hanabiLabel.setVisible(showHanabi);
     if (this.hanabiTextInGame) this.hanabiTextInGame.setVisible(showHanabi);
 
-    const shouldShowSectionTracker =
-      !(isUltraMode || isZenMode) && modeId !== "tgm3_sakura";
-    if (this.sectionTrackerGroup) {
-      this.sectionTrackerGroup.destroy(true);
-      this.sectionTrackerGroup = null;
-    }
-
-    if (!shouldShowSectionTracker) {
+    const clearSectionTrackerRefs = () => {
+      this.ppsSummaryText = null;
+      this.ppsGraphGraphics = null;
+      this.ppsGraphArea = null;
+      this.ppsLegendText = null;
       this.halfTimeTexts = null;
       this.sectionSectionLabels = null;
       this.sectionTimeTexts = null;
       this.sectionTotalTexts = null;
       this.sectionTallyTexts = null;
+    };
+
+    const shouldShowSectionTracker =
+      !(isUltraMode || isZenMode) && modeId !== "tgm3_sakura";
+    if (this.sectionTrackerGroup) {
+      this.sectionTrackerGroup.destroy(true);
+      this.sectionTrackerGroup = null;
+      clearSectionTrackerRefs();
+    }
+
+    if (!shouldShowSectionTracker) {
+      clearSectionTrackerRefs();
     }
 
     if (shouldShowSectionTracker) {
@@ -5186,6 +5257,22 @@ class GameScene extends Phaser.Scene {
           summaryStyle,
         );
         this.sectionTrackerGroup.add(this.ppsSummaryText);
+
+        // Legend: clarify that top of chart is most recent
+        const legendStyle = {
+          fontSize: `${uiFontSize - 8}px`,
+          fill: "#ccc",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        };
+        this.ppsLegendText = this.add.text(
+          -70,
+          graphY + graphHeight * 0.5,
+          "← TIME",
+          legendStyle,
+        ).setAngle(90);
+        this.ppsLegendText.setOrigin(0.5, 0.5);
+        this.sectionTrackerGroup.add(this.ppsLegendText);
 
         const yLabel = this.add.text(
           graphWidth + 6,
@@ -5409,6 +5496,7 @@ class GameScene extends Phaser.Scene {
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
+    this.holdRequest = false;
     this.nextPieces = [];
     this.areActive = false;
     this.areTimer = 0;
@@ -5545,6 +5633,7 @@ class GameScene extends Phaser.Scene {
         rotateCW2: Phaser.Input.Keyboard.KeyCodes.UP,
         rotateCCW: Phaser.Input.Keyboard.KeyCodes.SPACE,
         rotateCCW2: Phaser.Input.Keyboard.KeyCodes.L,
+        rotate180: Phaser.Input.Keyboard.KeyCodes.X,
         hardDrop: Phaser.Input.Keyboard.KeyCodes.X,
         hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
         pause: Phaser.Input.Keyboard.KeyCodes.ESC,
@@ -5561,22 +5650,28 @@ class GameScene extends Phaser.Scene {
       return defaultKeybinds;
     })();
 
-    const makeKey = (keyCode) => this.input.keyboard.addKey(keyCode);
+    const ensureKeyCode = (code, fallback) =>
+      Number.isInteger(code) ? code : fallback;
+    const makeKey = (keyCode, fallback) =>
+      this.input.keyboard.addKey(ensureKeyCode(keyCode, fallback));
 
     this.keys = {
-      left: makeKey(keybinds.moveLeft),
-      right: makeKey(keybinds.moveRight),
-      softDrop: makeKey(keybinds.softDrop),
-      hardDrop: makeKey(keybinds.hardDrop),
-      rotateCW: makeKey(keybinds.rotateCW),
-      rotateCW2: makeKey(keybinds.rotateCW2),
-      rotateCCW: makeKey(keybinds.rotateCCW),
-      rotateCCW2: makeKey(keybinds.rotateCCW2),
-      rotate180: makeKey(keybinds.rotate180),
-      hold: makeKey(keybinds.hold),
-      pause: makeKey(keybinds.pause),
-      menu: makeKey(keybinds.menu),
-      restart: makeKey(keybinds.restart),
+      left: makeKey(keybinds.moveLeft, Phaser.Input.Keyboard.KeyCodes.Z),
+      right: makeKey(keybinds.moveRight, Phaser.Input.Keyboard.KeyCodes.C),
+      softDrop: makeKey(keybinds.softDrop, Phaser.Input.Keyboard.KeyCodes.S),
+      hardDrop: makeKey(keybinds.hardDrop, Phaser.Input.Keyboard.KeyCodes.X),
+      rotateCW: makeKey(keybinds.rotateCW, Phaser.Input.Keyboard.KeyCodes.K),
+      rotateCW2: makeKey(keybinds.rotateCW2, Phaser.Input.Keyboard.KeyCodes.UP),
+      rotateCCW: makeKey(
+        keybinds.rotateCCW,
+        Phaser.Input.Keyboard.KeyCodes.SPACE,
+      ),
+      rotateCCW2: makeKey(keybinds.rotateCCW2, Phaser.Input.Keyboard.KeyCodes.L),
+      rotate180: makeKey(keybinds.rotate180, Phaser.Input.Keyboard.KeyCodes.X),
+      hold: makeKey(keybinds.hold, Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      pause: makeKey(keybinds.pause, Phaser.Input.Keyboard.KeyCodes.ESC),
+      menu: makeKey(keybinds.menu, Phaser.Input.Keyboard.KeyCodes.M),
+      restart: makeKey(keybinds.restart, Phaser.Input.Keyboard.KeyCodes.ENTER),
     };
 
     this.input.keyboard.addCapture([
@@ -5784,11 +5879,12 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
     this.ppsHistory = [];
+    this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
     if (this.ppsText) this.ppsText.setText("0.00");
     if (this.rawPpsText) this.rawPpsText.setText("0.00");
     if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
-    if (this.ppsSummaryText) {
+    if (this.ppsSummaryText && this.ppsSummaryText.scene) {
       this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
     }
 
@@ -5868,7 +5964,7 @@ class GameScene extends Phaser.Scene {
         if (this.ppsText) this.ppsText.setText("0.00");
         if (this.rawPpsText) this.rawPpsText.setText("0.00");
         if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
-        if (this.ppsSummaryText) {
+        if (this.ppsSummaryText && this.ppsSummaryText.scene) {
           this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
         }
         this.previewPiece = null;
@@ -5942,6 +6038,28 @@ class GameScene extends Phaser.Scene {
     const startDown = isDown(this.keys.start);
     const startJustDown = justDown(this.keys.start);
     const holdJustDown = justDown(this.keys.hold);
+    if (holdJustDown) {
+      console.log("[Hold] key pressed (code:", this.keys.hold?.keyCode, ")");
+      this.holdRequest = true;
+      // If currently in ARE, mark for IHS; otherwise try to consume immediately later in the frame
+      if (this.areActive) {
+        this.areHoldPressed = true;
+      }
+    }
+
+    // Global hold consumption pass (piece-active, not in ARE)
+    if (
+      this.holdEnabled &&
+      this.holdRequest &&
+      !this.areActive &&
+      this.currentPiece
+    ) {
+      if (this.performHoldSwap({ bypassCanHold: false, isIHS: false })) {
+        this.holdRequest = false;
+      } else {
+        console.log("[Hold] performHoldSwap refused (canHold?", this.canHold, ")");
+      }
+    }
 
     const leftDown = isDown(this.cursors.left);
     const rightDown = isDown(this.cursors.right);
@@ -5980,8 +6098,10 @@ class GameScene extends Phaser.Scene {
     if (this.rotationSystem === "ARS") {
 
       // Hold first (if supported and not in ARE)
-      if (!this.areActive && this.holdEnabled && justDown(this.keys.hold)) {
-        this.hold();
+      if (!this.areActive && this.holdEnabled && this.holdRequest) {
+        if (this.performHoldSwap({ bypassCanHold: false, isIHS: false })) {
+          this.holdRequest = false;
+        }
       }
       // ARS: Process rotation before movement
 
@@ -6106,8 +6226,10 @@ class GameScene extends Phaser.Scene {
       }
     } else {
       // Hold first (if supported and not in ARE)
-      if (!this.areActive && this.holdEnabled && justDown(this.keys.hold)) {
-        this.hold();
+      if (!this.areActive && this.holdEnabled && this.holdRequest) {
+        if (this.performHoldSwap({ bypassCanHold: false, isIHS: false })) {
+          this.holdRequest = false;
+        }
       }
       // SRS: Process movement before rotation
 
@@ -6399,6 +6521,28 @@ class GameScene extends Phaser.Scene {
         this.scene.start("MenuScene");
       }
     }
+
+    // Torikan fail staged flow for TGM3 Master
+    if (this.torikanFailActive) {
+      this.torikanFailTimer += this.deltaTime;
+      // Show message after 1s
+      if (!this.torikanFailMessageShown && this.torikanFailTimer >= 1) {
+        this.torikanFailMessageShown = true;
+        this.gameOverMessage = "Excellent... but let's go better next time";
+      }
+      // Trigger GAME OVER after 5s
+      if (!this.torikanFailGameOverShown && this.torikanFailTimer >= 5) {
+        this.torikanFailGameOverShown = true;
+        this.showGameOverScreen();
+      }
+      // Return to menu after 10s from fail start
+      if (this.torikanFailTimer >= 10) {
+        this.scene.start("MenuScene");
+      }
+      // Skip further update logic during staged fail
+      this.draw();
+      return;
+    }
     // Show GAME OVER text only after fade completes + 3s
     if (this.fadingComplete && this.gameOverFadeDoneTime !== null) {
       const elapsedSinceFade = this.time.now - this.gameOverFadeDoneTime;
@@ -6528,8 +6672,10 @@ class GameScene extends Phaser.Scene {
         // If piece was already grounded, don't increment lock delay
       }
       // Hold functionality for modes that support it
-      if (this.holdEnabled && justDown(this.keys.hold)) {
-        this.hold();
+      if (this.holdEnabled && this.holdRequest) {
+        if (this.performHoldSwap({ bypassCanHold: false, isIHS: false })) {
+          this.holdRequest = false;
+        }
       }
     }
 
@@ -6695,9 +6841,22 @@ class GameScene extends Phaser.Scene {
         if (this.ppsGraphGraphics) this.ppsGraphGraphics.clear();
         if (Array.isArray(this.ppsHistory)) this.ppsHistory.length = 0;
         this.lastPpsRecordedPieceCount = 0;
+        this.ppsSampleTimer = 0;
         return;
       }
+
       this.computePPS();
+
+      // Time-based sampling for PPS graph
+      const dt = this.deltaTime || 0;
+      this.ppsSampleTimer += dt;
+      while (this.ppsSampleTimer >= this.ppsSampleInterval) {
+        this.ppsSampleTimer -= this.ppsSampleInterval;
+        this.ppsHistory.push(this.conventionalPPS);
+        if (this.ppsHistory.length > 200) {
+          this.ppsHistory.shift();
+        }
+      }
     }
   }
 
@@ -6715,7 +6874,51 @@ class GameScene extends Phaser.Scene {
     if (!Number.isFinite(this.rawPPS)) this.rawPPS = 0;
   }
 
+  getShiraseQuotaForLevel(level) {
+    if (level < 500 || level >= 1000) return 0;
+    if (level < 600) return 20;
+    if (level < 700) return 18;
+    if (level < 800) return 10;
+    if (level < 900) return 9;
+    return 8; // 900-999
+  }
+
+  raiseShiraseGarbage() {
+    if (!this.board || !this.board.grid || !this.board.grid.length) return;
+    const bottomRowIndex = this.board.rows - 1;
+    const bottomRow = this.board.grid[bottomRowIndex] || [];
+    // Duplicate bottom row exactly (per doc) as the garbage line
+    const garbageRow = bottomRow.slice();
+    // Raise stack: remove top row, push garbage clone at bottom
+    this.board.grid.shift();
+    this.board.grid.push(garbageRow);
+    if (this.board.fadeGrid) {
+      this.board.fadeGrid.shift();
+      this.board.fadeGrid.push(Array(this.board.cols).fill(0));
+    }
+    // Optional sound feedback
+    try {
+      const garbageSound = this.sound?.add("fall", { volume: 0.5 });
+      garbageSound?.play();
+    } catch {}
+  }
+
   spawnPiece() {
+    // Shirase garbage check before spawning next piece (during ARE)
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const isShiraseMode =
+      modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
+    if (isShiraseMode && this.level >= 500 && this.level < 1000) {
+      const quota = this.getShiraseQuotaForLevel(this.level);
+      if (quota > 0 && this.shiraseGarbageCounter >= quota) {
+        this.raiseShiraseGarbage();
+        this.shiraseGarbageCounter = 0;
+      }
+    }
+
     if (this.nextPieces.length < 6) {
       this.generateNextPieces();
     }
@@ -6739,13 +6942,9 @@ class GameScene extends Phaser.Scene {
     pieceType = pieceType.toUpperCase();
 
     // Determine mode and powerup gating (TGM2 Normal only)
-    const modeIdRaw =
-      (this.gameMode && typeof this.gameMode.getModeId === "function"
-        ? this.gameMode.getModeId()
-        : this.selectedMode) || "";
-    const modeId = typeof modeIdRaw === "string" ? modeIdRaw.toLowerCase() : "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
     const isTgm2Normal =
-      modeId === "tgm2_normal" || modeId === "normal" || modeId === "tgm2normal";
+      modeIdLower === "tgm2_normal" || modeIdLower === "normal" || modeIdLower === "tgm2normal";
     let powerupType = null;
     if (isTgm2Normal) {
       // Force powerup spawn at/after thresholds if not yet spawned
@@ -6775,6 +6974,11 @@ class GameScene extends Phaser.Scene {
     } else {
       this.currentPiece = new Piece(pieceType, this.rotationSystem, 0);
       this.activePowerupType = null;
+    }
+
+    // Shirase garbage counter increment per piece spawn (500-999)
+    if (isShiraseMode && this.level >= 500 && this.level < 1000) {
+      this.shiraseGarbageCounter += 1;
     }
 
     if (this.isFirstSpawn && this.gameMode) {
@@ -6909,10 +7113,9 @@ class GameScene extends Phaser.Scene {
 
     // Handle ARE hold (Initial Hold System) for modes that support hold
     if (this.holdEnabled && holdPressedAtSpawn) {
-      this.hold();
-      try {
-        this.sound?.add("IHS", { volume: 0.6 })?.play();
-      } catch {}
+      this.performHoldSwap({ bypassCanHold: true, isIHS: true });
+      // Consume the request so it doesn't double-trigger after spawn
+      this.holdRequest = false;
     }
 
 
@@ -7126,6 +7329,11 @@ class GameScene extends Phaser.Scene {
       this.currentPiece.y,
     );
 
+    // Mode hook: notify piece lock (e.g., Easy combo reset on no clear)
+    if (this.gameMode && typeof this.gameMode.onPieceLock === "function") {
+      this.gameMode.onPieceLock(this.currentPiece, this);
+    }
+
     // Finesse evaluation on lock (SRS sprint/ultra only)
     this.evaluateFinesseOnLock(this.currentPiece);
     this.finesseActiveForPiece = false;
@@ -7248,6 +7456,20 @@ class GameScene extends Phaser.Scene {
       this.areHoldPressed = false;
     }
 
+    // Shirase garbage counter decrement on line clears (500-999)
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const isShiraseMode =
+      modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
+    if (isShiraseMode && this.level >= 500 && this.level < 1000) {
+      this.shiraseGarbageCounter = Math.max(
+        0,
+        this.shiraseGarbageCounter - linesToClear.length,
+      );
+    }
+
     // If item animation is active (e.g., powerup activation), delay ARE start by 2 seconds
     if (this.gameMode && this.gameMode.itemAnimationActive) {
       this.areTimer = -2; // Delay ARE start by 2 seconds
@@ -7264,44 +7486,72 @@ class GameScene extends Phaser.Scene {
     piece.shape = rotations[0].map((row) => [...row]);
   }
 
-  // Hold functionality for modes that support it
-  hold() {
-    if (!this.canHold || !this.holdEnabled || !this.currentPiece) return;
+  getNextPieceTypeFromQueue() {
+    if (this.nextPieces.length < 1) {
+      this.generateNextPieces();
+    }
+    if (this.nextPieces.length < 1) {
+      return "I";
+    }
+    const raw = this.nextPieces.shift();
+    let t =
+      typeof raw === "string"
+        ? raw
+        : typeof raw?.type === "string"
+          ? raw.type
+          : typeof raw?.piece === "string"
+            ? raw.piece
+            : raw;
+    if (typeof t !== "string") t = "I";
+    return t.toUpperCase();
+  }
 
-    const currentType = this.currentPiece?.type ?? "none";
-    const holdType = this.holdPiece ? this.holdPiece.type : "none";
+  performHoldSwap({ bypassCanHold = false, isIHS = false } = {}) {
+    if (!this.holdEnabled) return false;
+    if (!bypassCanHold && !this.canHold) return false;
+    if (!this.currentPiece) return false;
+
+    const currentType = this.currentPiece.type;
+
+    // Normalize existing hold piece if stored as string
+    if (this.holdPiece && typeof this.holdPiece === "string") {
+      this.holdPiece = new Piece(this.holdPiece, this.rotationSystem, 0);
+    }
 
     if (this.holdPiece) {
-      // Swap current piece with hold piece
-      this.resetPieceToDefaultRotation(this.currentPiece);
-      const oldCurrent = this.currentPiece.type;
-      const oldHold = this.holdPiece.type;
-      [this.currentPiece, this.holdPiece] = [this.holdPiece, this.currentPiece];
-      this.currentPiece.x = 3; // Reset position
-      this.currentPiece.y = 1; // Spawn position
-      this.currentPiece.rotation = 0; // Reset rotation
-      // Reset piece shape to initial rotation
-      const rotations =
-        this.rotationSystem === "ARS"
-          ? SEGA_ROTATIONS[this.currentPiece.type].rotations
-          : TETROMINOES[this.currentPiece.type].rotations;
-      this.currentPiece.shape = rotations[0].map((row) => [...row]);
+      // Swap current with held
+      const holdType = this.holdPiece.type;
+      this.holdPiece = new Piece(currentType, this.rotationSystem, 0);
+      this.currentPiece = new Piece(holdType, this.rotationSystem, 0);
     } else {
-      // Move current piece to hold
-      this.resetPieceToDefaultRotation(this.currentPiece);
-      this.holdPiece = this.currentPiece;
-      this.spawnPiece();
+      // Move current to hold, pull next from queue
+      this.holdPiece = new Piece(currentType, this.rotationSystem, 0);
+      const nextType = this.getNextPieceTypeFromQueue();
+      this.currentPiece = new Piece(nextType, this.rotationSystem, 0);
     }
+
+    // Reset position/rotation on the new current piece
+    this.currentPiece.x = 3;
+    this.currentPiece.y = 1;
+    this.resetPieceToDefaultRotation(this.currentPiece);
 
     this.canHold = false;
     this.resetLockDelay();
     this.isGrounded = false;
 
-    // Play hold sound if available
-    if (this.sound && this.sound.get("lock")) {
-      const holdSound = this.sound.add("lock", { volume: 0.4 });
-      holdSound.play();
-    }
+    // Play hold/IHS sound if available
+    try {
+      const soundKey = isIHS ? "IHS" : "lock";
+      const snd = this.sound?.add(soundKey, { volume: isIHS ? 0.6 : 0.4 });
+      snd?.play();
+    } catch {}
+
+    return true;
+  }
+
+  // Hold functionality for modes that support it
+  hold() {
+    this.performHoldSwap({ bypassCanHold: false, isIHS: false });
   }
 
   clearStoredLines() {
@@ -7526,18 +7776,25 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const maxBars = Math.max(1, Math.min(history.length, 60));
-    const barHeight = height / maxBars;
-    const visibleHistory = history.slice(-maxBars);
+    const maxPoints = Math.max(2, Math.min(history.length, 120));
+    const visibleHistory = history.slice(-maxPoints);
     const maxPps = Math.max(1.5, ...visibleHistory);
 
-    visibleHistory.forEach((pps, idx) => {
-      const barLength = Math.min(width, Math.max(1, (pps / maxPps) * width));
-      const barX = x;
-      const barY = y + height - (idx + 1) * barHeight;
-      g.fillStyle(0x00ffd0, 0.9);
-      g.fillRect(barX, barY, barLength, Math.max(1, barHeight - 1));
+    // Draw line graph: newest at top (vertical axis is reversed)
+    const stepY = height / (visibleHistory.length - 1 || 1);
+    const pts = visibleHistory.map((pps, idx) => {
+      const px = x + Math.min(width, Math.max(1, (pps / maxPps) * width));
+      const py = y + height - idx * stepY;
+      return { px, py };
     });
+
+    g.lineStyle(2, 0x00ffd0, 1);
+    g.beginPath();
+    pts.forEach((p, i) => {
+      if (i === 0) g.moveTo(p.px, p.py);
+      else g.lineTo(p.px, p.py);
+    });
+    g.strokePath();
 
     if (this.ppsSummaryText) {
       const chokeSec = (this.worstChoke || 0) / 60;
@@ -7748,10 +8005,12 @@ class GameScene extends Phaser.Scene {
       this.level = maxLevel;
     }
 
-    // Shirase torikan checks (S5 at 500, S10 at 1000 if slow)
+    // Torikan checks
     const isShiraseMode =
       this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase";
-    if (isShiraseMode && !this.torikanFailed) {
+    const isTGM3Master =
+      this.selectedMode === "tgm3" || this.selectedMode === "tgm3_master";
+    if ((isShiraseMode || isTGM3Master) && !this.torikanFailed) {
       const specMech =
         (this.gameMode &&
           typeof this.gameMode.getConfig === "function" &&
@@ -7767,17 +8026,68 @@ class GameScene extends Phaser.Scene {
           this.torikanChecked[500] = true;
           if (this.currentTime > (times.level500 || Infinity)) {
             this.torikanFailed = true;
-            this.grade = "S5";
+            if (isShiraseMode) this.grade = "S5";
+            // TGM3 Master/Shirase torikan fail: trigger staged fail sequence instead of immediate game over
+            if (isTGM3Master || isShiraseMode) {
+              this.torikanFailActive = true;
+              this.torikanFailTimer = 0;
+              this.torikanFailMessageShown = false;
+              this.torikanFailGameOverShown = false;
+              this.startMinoFading();
+              // Stop BGM immediately
+              if (this.currentBGM) {
+                this.currentBGM.stop();
+                this.currentBGM = null;
+              }
+              if (this.creditsBGM) {
+                this.creditsBGM.stop();
+                this.creditsBGM = null;
+              }
+              // Clear held inputs
+              this.leftKeyPressed = false;
+              this.rightKeyPressed = false;
+              this.leftInRepeat = false;
+              this.rightInRepeat = false;
+              this.leftTimer = 0;
+              this.rightTimer = 0;
+              this.kKeyPressed = false;
+              this.spaceKeyPressed = false;
+              this.lKeyPressed = false;
+              this.xKeyPressed = false;
+              return;
+            }
             this.showGameOverScreen();
             return;
           }
         }
-        if (this.level >= 1000 && !this.torikanChecked[1000]) {
+        if (isShiraseMode && this.level >= 1000 && !this.torikanChecked[1000]) {
           this.torikanChecked[1000] = true;
           if (this.currentTime > (times.level1000 || Infinity)) {
             this.torikanFailed = true;
             this.grade = "S10";
-            this.showGameOverScreen();
+            this.torikanFailActive = true;
+            this.torikanFailTimer = 0;
+            this.torikanFailMessageShown = false;
+            this.torikanFailGameOverShown = false;
+            this.startMinoFading();
+            if (this.currentBGM) {
+              this.currentBGM.stop();
+              this.currentBGM = null;
+            }
+            if (this.creditsBGM) {
+              this.creditsBGM.stop();
+              this.creditsBGM = null;
+            }
+            this.leftKeyPressed = false;
+            this.rightKeyPressed = false;
+            this.leftInRepeat = false;
+            this.rightInRepeat = false;
+            this.leftTimer = 0;
+            this.rightTimer = 0;
+            this.kKeyPressed = false;
+            this.spaceKeyPressed = false;
+            this.lKeyPressed = false;
+            this.xKeyPressed = false;
             return;
           }
         }
@@ -7844,6 +8154,26 @@ class GameScene extends Phaser.Scene {
         const complete = this.sound?.add("complete", { volume: 0.8 });
         complete?.play();
       } catch {}
+    }
+
+    // Shirase monochrome activation 1000-1299
+    if (isShiraseMode) {
+      if (this.level >= 1000) {
+        if (!this.monochromeActive) {
+          this.monochromeActive = true;
+          this.board?.applyMonochromeTextures(this);
+        }
+        this.shiraseGarbageCounter = 0; // Disable garbage after 1000
+        // Big roll: pieces become double-size cells (2x2 per mino) for 1300 roll
+        if (this.level >= 1300) {
+          this.bigBlocksActive = true;
+        } else {
+          this.bigBlocksActive = false;
+        }
+      } else {
+        this.monochromeActive = false;
+        this.bigBlocksActive = false;
+      }
     }
 
     // Update mode-specific timings in case they change with level
@@ -7936,6 +8266,11 @@ class GameScene extends Phaser.Scene {
     if (completedSection >= 0) {
       this.sectionTimes[completedSection] = this.currentTime - this.sectionStartTime;
       this.sectionTetrises[completedSection] = this.currentSectionTetrisCount;
+      // Persist section times into mode for COOL/REGRET checks that need previous section timing
+      if (this.gameMode && Array.isArray(this.sectionTimes)) {
+        this.gameMode.sectionTimes = this.gameMode.sectionTimes || [];
+        this.gameMode.sectionTimes[completedSection] = this.sectionTimes[completedSection];
+      }
 
       // COOL/REGRET evaluation for TGM3 Master
       if (
@@ -7948,7 +8283,16 @@ class GameScene extends Phaser.Scene {
         const result = this.gameMode.evaluateSectionPerformance(completedSection, sectionTime);
         if (result === "cool") {
           this.gameMode.onSectionCool();
-          if (typeof this.rollBonus === "number") {
+          const modeId =
+            this.gameMode && typeof this.gameMode.getModeId === "function"
+              ? this.gameMode.getModeId()
+              : this.selectedMode;
+          // Only add generic rollBonus for non-TGM3 Master modes
+          if (
+            typeof this.rollBonus === "number" &&
+            modeId !== "tgm3_master" &&
+            modeId !== "tgm3"
+          ) {
             this.rollBonus += 1;
           }
           this.sectionPerformance[completedSection] = "COOL";
@@ -8317,7 +8661,10 @@ class GameScene extends Phaser.Scene {
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
     this.ppsHistory = [];
+    this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
+    this.ppsGraphGraphics = null;
+    this.ppsGraphArea = null;
     if (this.ppsSummaryText) {
       this.ppsSummaryText.setText("Max PPS: -- | Worst choke: --");
     }
@@ -8542,6 +8889,19 @@ class GameScene extends Phaser.Scene {
     if (typeof this.rollBonus === "number") {
       const rollFactor = this.rollType === "mroll" ? 1.0 : 0.5;
       this.rollBonus += (this.rollLinesCleared || 0) * rollFactor;
+      // For TGM3 Master: feed roll bonus into grading system (displayed grade) instead of rollBonus accumulation
+      const modeId =
+        this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode;
+      if (
+        (modeId === "tgm3_master" || modeId === "tgm3") &&
+        this.gameMode &&
+        typeof this.gameMode.addStaffRollBonus === "function" &&
+        typeof this.gameMode.addStaffRollLines === "function"
+      ) {
+        this.gameMode.addStaffRollLines(this.rollLinesCleared || 0, this.rollType === "mroll" ? "mroll" : "fading");
+      }
     }
 
     // Mode-specific credits end hook
@@ -8559,7 +8919,12 @@ class GameScene extends Phaser.Scene {
       this.invisibleStackActive = false;
     }
 
-    this.setGradeLineColor("green");
+    // Grade line color: orange on successful roll clear, green on fail/topout
+    if (this.rollFailedDuringRoll) {
+      this.setGradeLineColor("green");
+    } else {
+      this.setGradeLineColor("orange");
+    }
 
     // Delegate to mode-specific finish if available
     if (this.gameMode && typeof this.gameMode.finishCreditRoll === "function") {
@@ -8677,22 +9042,43 @@ class GameScene extends Phaser.Scene {
     if (this.leaderboardSaved) return;
     if (!this.selectedMode) return;
     if (typeof this.saveLeaderboardEntry !== "function") return;
+
+    // Sakura: store best stage/time/completion from mode
+    if (this.selectedMode === "tgm3_sakura" && this.gameMode) {
+      const stage = this.gameMode.bestStageReached || 0;
+      const completionRate = Number(((stage / 27) * 100).toFixed(1));
+      const bestTimeSeconds = this.gameMode.bestTimeSeconds;
+      const time =
+        bestTimeSeconds === null || bestTimeSeconds === undefined
+          ? "--:--.--"
+          : this.formatTimeValue(bestTimeSeconds);
+      const entry = { stage, completionRate, time };
+      this.saveLeaderboardEntry(this.selectedMode, entry);
+      this.leaderboardSaved = true;
+      return;
+    }
+
     // Fallback generic entry; mode-specific handlers should prefer saveLeaderboardEntry directly.
     const entry = {
       hanabi: this.gameMode && this.gameMode.hanabi !== undefined ? this.gameMode.hanabi : undefined,
       score: this.score,
       level: this.level,
+      lines: this.lines,
       grade: this.grade,
-      time: `${Math.floor(this.currentTime / 60)}:${Math.floor(
-        this.currentTime % 60,
-      )
-        .toString()
-        .padStart(2, "0")}.${Math.floor((this.currentTime % 1) * 100)
-        .toString()
-        .padStart(2, "0")}`,
+      time:
+        this.currentTime !== undefined && this.currentTime !== null
+          ? `${Math.floor(this.currentTime / 60)
+              .toString()
+              .padStart(2, "0")}:${Math.floor(this.currentTime % 60)
+              .toString()
+              .padStart(2, "0")}.${Math.floor((this.currentTime % 1) * 100)
+              .toString()
+              .padStart(2, "0")}`
+          : undefined,
       pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
     };
     this.saveLeaderboardEntry(this.selectedMode, entry);
+    this.leaderboardSaved = true;
   }
 
   getBestScore(mode) {
@@ -8712,7 +9098,9 @@ class GameScene extends Phaser.Scene {
     }
     this.gameOver = true;
     this.gameOverTimer = 0; // Start timer for 10 seconds
-    this.gameOverMessage = this.sprintCompleted ? "CONGRATULATIONS" : "GAME OVER";
+    if (!this.torikanFailActive) {
+      this.gameOverMessage = this.sprintCompleted ? "CONGRATULATIONS" : "GAME OVER";
+    }
     this.finesseActiveForPiece = false;
 
     // Show Hanabi summary if available

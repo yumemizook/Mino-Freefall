@@ -94,6 +94,12 @@ class TGM3SakuraMode extends BaseMode {
         this.effectText = '';
         this.skipHoldTimer = 0;
         this.skipTriggered = false;
+        this.bestStageReached = 0; // 1-27, 27 = ALL
+        this.bestTimeSeconds = null;
+        this.exStagesUnlocked = 3;
+        this.totalMainClearTime = 0;
+        this.xrayRevealCooldown = 0;
+        this.mainElapsedSeconds = 0;
     }
 
     isReadyGoActive() { return this.readyGoActive; }
@@ -120,12 +126,11 @@ class TGM3SakuraMode extends BaseMode {
             this.skipHoldTimer += deltaTime;
             if (this.skipHoldTimer >= 3 && !this.skipTriggered) {
                 this.skipTriggered = true;
-                if (this.mainTimer >= 30) {
-                    this.mainTimer -= 30;
-                } else {
-                    this.mainTimer = 0;
+                // Skip rule: disallow skip if total timer <30s
+                if (this.mainTimer > 30) {
+                    this.mainTimer = Math.max(0, this.mainTimer - 30);
+                    this.onSkipTriggered(gameScene);
                 }
-                this.onSkipTriggered(gameScene);
             }
         } else {
             this.skipHoldTimer = 0;
@@ -134,8 +139,9 @@ class TGM3SakuraMode extends BaseMode {
     }
 
     advanceSequenceWithHold(gameScene) {
-        const next = this.generateNextPiece(gameScene);
-        gameScene.holdPiece = next;
+        const nextType = this.generateNextPiece(gameScene);
+        // Store an actual Piece instance in hold to keep hold swapping functional
+        gameScene.holdPiece = new Piece(nextType, gameScene.rotationSystem, 0);
         gameScene.canHold = true;
     }
 
@@ -228,6 +234,26 @@ class TGM3SakuraMode extends BaseMode {
             else if (timeTaken <= 20) bonus = 5;
         }
         this.mainTimer += bonus;
+        const stageNumber = this.stageIndex + 1;
+        if (cleared) {
+            this.bestStageReached = Math.max(this.bestStageReached, stageNumber);
+            // Track main clear time for EX gating
+            if (stageNumber <= 20) {
+                this.mainElapsedSeconds += timeTaken;
+            }
+            if (stageNumber === 20) {
+                const totalTime = this.mainElapsedSeconds;
+                this.exStagesUnlocked = totalTime <= 300 ? 7 : totalTime <= 360 ? 5 : 3;
+                if (this.bestTimeSeconds === null) this.bestTimeSeconds = totalTime;
+                else this.bestTimeSeconds = Math.min(this.bestTimeSeconds, totalTime);
+            }
+            if (stageNumber === this.stages.length) {
+                // ALL clear: mark best
+                this.bestStageReached = Math.max(this.bestStageReached, stageNumber);
+            }
+        } else {
+            this.bestStageReached = Math.max(this.bestStageReached, stageNumber);
+        }
         this.showPostStage(gameScene, timeTaken, bonus);
 
         this.postSkipRequested = false;
@@ -246,7 +272,8 @@ class TGM3SakuraMode extends BaseMode {
 
     advanceStage(gameScene) {
         this.stageIndex += 1;
-        if (this.stageIndex >= this.stages.length) {
+        const maxStages = 20 + this.exStagesUnlocked;
+        if (this.stageIndex >= maxStages || this.stageIndex >= this.stages.length) {
             gameScene.showGameOverScreen();
             return;
         }
@@ -263,6 +290,17 @@ class TGM3SakuraMode extends BaseMode {
         const stage = this.stages[this.stageIndex];
         this.effectText = stage.effect || '';
         this.jewelSet.clear();
+        // Big-block effect for EX3
+        if (gameScene) {
+            const isBig = stage.effectType === 'big';
+            const isXray = stage.effectType === 'xray';
+            const isStrobe = stage.effectType === 'strobe';
+            gameScene.bigBlocksActive = isBig;
+            gameScene.xrayActive = isXray;
+            gameScene.xrayColumn = isXray ? this.xrayColumn : -1;
+            gameScene.xrayRevealCooldown = isXray ? this.xrayPause : 0;
+            gameScene.strobeActive = isStrobe;
+        }
 
         // Apply layout (top -> bottom)
         const colorMap = {
@@ -340,7 +378,9 @@ class TGM3SakuraMode extends BaseMode {
         this.destroyUI();
         if (!gameScene.add) return;
         const total = this.mainTimer.toFixed(2);
-        const text = `Stage ${this.stageIndex + 1} ${this.jewelSet.size === 0 ? 'CLEAR' : 'FAIL'}\nTime: ${timeTaken.toFixed(2)}s\nBonus: +${bonus}s\nTotal: ${total}s`;
+        const completionRate = Math.min(100, (this.bestStageReached / 27) * 100);
+        const bestTimeText = this.bestTimeSeconds != null ? `${this.bestTimeSeconds.toFixed(2)}s` : 'N/A';
+        const text = `Stage ${this.stageIndex + 1} ${this.jewelSet.size === 0 ? 'CLEAR' : 'FAIL'}\nTime: ${timeTaken.toFixed(2)}s\nBonus: +${bonus}s\nTotal: ${total}s\nBest Stage: ${this.bestStageReached}\nBest Time (main): ${bestTimeText}\nCompletion: ${completionRate.toFixed(1)}%`;
         this.ui.postText = gameScene.add.text(
             gameScene.windowWidth / 2, gameScene.windowHeight * 0.35,
             text, { fontSize: '20px', color: '#ffffff', align: 'center' }
@@ -414,6 +454,13 @@ class TGM3SakuraMode extends BaseMode {
             // Visual pulse not implemented; rendering layer would handle opacity/height
         } else {
             this.strobeTimer = 0;
+        }
+
+        if (gameScene) {
+            gameScene.xrayActive = this.isXrayStage();
+            gameScene.xrayColumn = this.isXrayStage() ? this.xrayColumn : -1;
+            gameScene.xrayRevealCooldown = this.isXrayStage() ? this.xrayPause : 0;
+            gameScene.strobeActive = this.isStrobeStage();
         }
     }
 
