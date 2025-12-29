@@ -479,25 +479,6 @@ class TGM2MasterMode extends BaseMode {
         
         // Set pieces to invisible in M-Roll
         // This would require integration with the piece rendering system
-        
-        // Show M-Roll start message
-        if (gameScene.add) {
-            const mRollText = gameScene.add.text(gameScene.windowWidth / 2, gameScene.windowHeight / 3, 'M-ROLL!', {
-                fontSize: '48px',
-                fill: '#ff0000',
-                stroke: '#000',
-                strokeThickness: 3,
-                fontFamily: 'Courier New',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
-            
-            gameScene.gameGroup.add(mRollText);
-            
-            // Fade out after 3 seconds
-            gameScene.time.delayedCall(3000, () => {
-                mRollText.destroy();
-            });
-        }
     }
     
     // Trigger grade up animation

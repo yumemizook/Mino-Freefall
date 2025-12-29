@@ -1476,8 +1476,8 @@ function getStartingLevel() {
 }
 
 class MenuScene extends Phaser.Scene {
-  constructor() {
-    super({ key: "MenuScene" });
+  constructor(config) {
+    super(config);
 
     // Mode categories and their modes
     this.modeTypes = [
@@ -3908,6 +3908,136 @@ class GameScene extends Phaser.Scene {
     this.backToBack = false;
     this.totalLines = 0;
     this.lastPieceType = null;
+    this.clearBannerGroup = null;
+    this.clearBannerLine1 = null;
+    this.clearBannerLine2 = null;
+    this.clearBannerTween = null;
+    this.clearBannerHideEvent = null;
+    this.clearBannerBaseX = 0;
+    this.clearBannerStartX = 0;
+    this.clearBannerY = 0;
+    this.clearBannerDuration = 1000;
+    this.clearBannerActive = false;
+    this.createClearBannerUI = (levelBottomY, scoreRowHeight, uiFontSize) => {
+      const line1Font = Math.max(uiFontSize + 12, 28);
+      const line2Font = Math.max(uiFontSize + 6, 22);
+      const xBase = this.borderOffsetX - 30;
+      const yBase =
+        this.borderOffsetY + this.playfieldHeight / 2 - (line1Font + line2Font) / 2;
+
+      this.clearBannerBaseX = xBase;
+      this.clearBannerStartX = xBase - 30;
+      this.clearBannerY = yBase;
+
+      this.clearBannerLine1 = this.add
+        .text(0, 0, "", {
+          fontSize: `${line1Font}px`,
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+          align: "left",
+        })
+        .setOrigin(0, 0);
+      this.clearBannerLine2 = this.add
+        .text(0, line1Font + 6, "", {
+          fontSize: `${line2Font}px`,
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+          align: "left",
+        })
+        .setOrigin(0, 0);
+      this.clearBannerGroup = this.add.container(
+        this.clearBannerStartX,
+        this.clearBannerY,
+        [this.clearBannerLine1, this.clearBannerLine2],
+      );
+      this.clearBannerGroup.setAlpha(0);
+      this.clearBannerGroup.setVisible(false);
+    };
+    this.getPieceColorHex = (type) => {
+      let colorInt = 0xffffff;
+      if (this.rotationSystem === "ARS") {
+        colorInt = ARS_COLORS[type] ?? colorInt;
+      } else if (TETROMINOES[type] && TETROMINOES[type].color != null) {
+        colorInt = TETROMINOES[type].color;
+      }
+      return `#${colorInt.toString(16).padStart(6, "0")}`;
+    };
+    this.hideClearBanner = () => {
+      if (this.clearBannerHideEvent) {
+        this.clearBannerHideEvent.remove(false);
+        this.clearBannerHideEvent = null;
+      }
+      if (this.clearBannerTween) {
+        this.clearBannerTween.stop();
+        this.clearBannerTween = null;
+      }
+      if (this.clearBannerGroup) {
+        this.clearBannerGroup.setVisible(false);
+        this.clearBannerGroup.setAlpha(0);
+        this.clearBannerGroup.x = this.clearBannerStartX || 0;
+      }
+      this.clearBannerActive = false;
+    };
+    this.showClearBanner = (clearType, spinInfo = {}, lines = 0, pieceType = null) => {
+      if (
+        !this.clearBannerGroup ||
+        !this.clearBannerLine1 ||
+        !this.clearBannerLine2
+      ) {
+        return;
+      }
+      const { isSpin } = spinInfo || {};
+      const lineCount = Number(lines) || 0;
+      if (lineCount === 0 && !isSpin) {
+        this.hideClearBanner();
+        return;
+      }
+
+      const colorHex = isSpin ? this.getPieceColorHex(pieceType) : "#ffffff";
+      const line1Text = isSpin ? `${(pieceType || "").toUpperCase()}-SPIN` : "";
+      let normalizedClear = clearType || "--";
+      if (isSpin) {
+        normalizedClear =
+          normalizedClear.replace(/t-?spin\s*/i, "").trim() || normalizedClear;
+      }
+
+      this.clearBannerLine1.setText(line1Text).setColor(colorHex);
+      this.clearBannerLine1.setVisible(!!line1Text);
+      const line2Y = isSpin ? this.clearBannerLine1.height + 6 : 0;
+      this.clearBannerLine2.setY(line2Y);
+      this.clearBannerLine2.setText(normalizedClear || "--").setColor(colorHex);
+
+      this.clearBannerGroup.setVisible(true);
+      this.clearBannerGroup.setAlpha(0);
+      this.clearBannerGroup.x = this.clearBannerStartX;
+
+      if (this.clearBannerTween) {
+        this.clearBannerTween.stop();
+        this.clearBannerTween = null;
+      }
+      if (this.clearBannerHideEvent) {
+        this.clearBannerHideEvent.remove(false);
+        this.clearBannerHideEvent = null;
+      }
+
+      this.clearBannerTween = this.tweens.add({
+        targets: this.clearBannerGroup,
+        x: this.clearBannerBaseX,
+        alpha: 1,
+        duration: 200,
+        ease: "Sine.easeOut",
+      });
+
+      this.clearBannerActive = true;
+      this.clearBannerHideEvent = this.time.delayedCall(
+        this.clearBannerDuration,
+        () => this.hideClearBanner(),
+        [],
+        this,
+      );
+    };
     this.spinRotatedWhileGrounded = false;
 
     this.isTSpin = false;
@@ -3977,6 +4107,10 @@ class GameScene extends Phaser.Scene {
     this.pieceHistoryIndex = 0; // Current position in history for rotation
     this.firstPiece = true; // Track if this is the first piece
     this.isFirstSpawn = true; // Track if this is the first spawn for level setting
+    // 7-bag randomizer queue (used by guideline-style modes)
+    this.bagQueue = [];
+    this.bagDrawCount = 0;
+    this.bagDebugSeen = new Set();
 
     // Validate piece history to ensure it's correct
     this.validatePieceHistory();
@@ -5118,6 +5252,9 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(1, 0);
 
+    // Clear banner (line clear/spin indicator) - slides in from left of matrix
+    this.createClearBannerUI(levelBottomY, scoreRowHeight, uiFontSize);
+
     // Piece per second displays - moved to right side of matrix, aligned with bottom of stack
     const ppsX = this.borderOffsetX + this.cellSize * this.board.cols + 20;
     const ppsY = this.borderOffsetY + this.playfieldHeight - 40; // Align with bottom of stack
@@ -5142,7 +5279,7 @@ class GameScene extends Phaser.Scene {
       isZenMode || isUltraMode || isSprintMode || isMarathonMode;
 
     this.pieceCountLabel = this.add
-      .text(ppsX, ppsY - 25, "PIECES", {
+      .text(ppsX, ppsY - 45, "PIECES", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#ccc",
         fontFamily: "Courier New",
@@ -5151,7 +5288,7 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setVisible(showPieceCount);
     this.pieceCountText = this.add
-      .text(ppsX, ppsY - 10, "0", {
+      .text(ppsX, ppsY - 30, "0", {
         fontSize: `${largeFontSize - 4}px`,
         fill: "#fff",
         fontFamily: "Courier New",
@@ -5532,6 +5669,7 @@ class GameScene extends Phaser.Scene {
     this.backToBack = false;
     this.lastClearType = null;
     this.lastPieceType = null;
+    if (this.hideClearBanner) this.hideClearBanner();
 
     this.level = this.startingLevel != null ? this.startingLevel : getStartingLevel();
     this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
@@ -5549,6 +5687,9 @@ class GameScene extends Phaser.Scene {
     this.pieceHistoryIndex = 0;
     this.firstPiece = true;
     this.isFirstSpawn = true;
+    this.bagQueue = [];
+    this.bagDrawCount = 0;
+    this.bagDebugSeen = new Set();
     this.validatePieceHistory();
 
     // Reset stack/credits/fade systems
@@ -5905,6 +6046,7 @@ class GameScene extends Phaser.Scene {
     this.ppsLockSampleIndices = [];
     this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
+    this.bagQueue = [];
     if (this.ppsText) this.ppsText.setText("0.00");
     if (this.pieceCountText) this.pieceCountText.setText("0");
     if (this.rawPpsText) this.rawPpsText.setText("0.00");
@@ -7246,11 +7388,20 @@ class GameScene extends Phaser.Scene {
   }
 
   generateNextPieces() {
+    const use7Bag =
+      this.selectedMode === "zen" ||
+      this.selectedMode === "marathon" ||
+      this.selectedMode === "ultra" ||
+      this.selectedMode === "sprint_40" ||
+      this.selectedMode === "sprint_100";
+
     for (let i = 0; i < 6; i++) {
       // Check if current mode supports powerup minos
       if (this.gameMode && this.gameMode.generateNextPiece) {
         const piece = this.gameMode.generateNextPiece(this);
         this.nextPieces.push(piece);
+      } else if (use7Bag) {
+        this.nextPieces.push(this.generate7BagPiece());
       } else {
         // Fallback to original TGM1 piece generation
         this.nextPieces.push(this.generateTGM1Piece());
@@ -7319,6 +7470,41 @@ class GameScene extends Phaser.Scene {
     return generatedPiece;
   }
 
+  ensureBagQueue() {
+    if (!Array.isArray(this.bagQueue)) {
+      this.bagQueue = [];
+    }
+    if (this.bagQueue.length === 0) {
+      this.bagDrawCount = 0;
+      this.bagDebugSeen = new Set();
+      const bag = ["I", "J", "L", "O", "S", "T", "Z"];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      this.bagQueue = bag;
+    }
+  }
+
+  generate7BagPiece() {
+    this.ensureBagQueue();
+    let piece = this.bagQueue.shift();
+    this.bagDrawCount++;
+    if (!this.bagDebugSeen) this.bagDebugSeen = new Set();
+    this.bagDebugSeen.add(piece);
+    if (this.bagDrawCount % 7 === 0) {
+      if (this.bagDebugSeen.size !== 7) {
+        console.warn(
+          "[7-BAG DEBUG] Incomplete bag detected:",
+          Array.from(this.bagDebugSeen),
+        );
+      }
+      this.bagDebugSeen.clear();
+    }
+    if (this.firstPiece) this.firstPiece = false;
+    return piece;
+  }
+
   lockPiece() {
     // Play lock sound
     const lockSound = this.sound.add("lock", { volume: 0.6 });
@@ -7370,8 +7556,8 @@ class GameScene extends Phaser.Scene {
     this.evaluateFinesseOnLock(this.currentPiece);
     this.finesseActiveForPiece = false;
 
-    // Check for T-spin before clearing lines
-    const isTSpin = this.detectTSpin(this.currentPiece, this.board);
+    // Check for spin (T: 3-corner, others: immobile)
+    const spinInfo = this.detectSpin(this.currentPiece, this.board);
 
     // Detect cleared lines for animation (don't clear them yet)
     const linesToClear = [];
@@ -7418,7 +7604,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update score with enhanced system
-    this.updateScore(linesToClear.length, this.currentPiece.type, isTSpin);
+    this.updateScore(linesToClear.length, this.currentPiece.type, spinInfo);
     this.updateLevel("lines", linesToClear.length);
     this.canHold = true;
 
@@ -7855,7 +8041,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  updateScore(lines, pieceType = null, isTSpin = false) {
+  updateScore(lines, pieceType = null, spinInfo = { isSpin: false, isTSpin: false }) {
     // Don't update score during credits roll
     if (this.creditsActive) {
       if (this.rollType) {
@@ -7890,62 +8076,70 @@ class GameScene extends Phaser.Scene {
       !isTwentyGMode && guidelineModes.has(selectedModeKey);
 
     if (isStandardMode) {
-      this.updateGuidelineScore(lines, pieceType, isTSpin);
+      this.updateGuidelineScore(lines, pieceType, spinInfo);
     } else {
-      this.updateTGM1Score(lines, pieceType, isTSpin);
+      this.updateTGM1Score(lines, pieceType, spinInfo);
     }
   }
 
-  updateGuidelineScore(lines, pieceType = null, isTSpin = false) {
+  updateGuidelineScore(
+    lines,
+    pieceType = null,
+    spinInfo = { isSpin: false, isTSpin: false },
+  ) {
     let points = 0;
     let clearType = null;
+    const { isSpin, isTSpin } = spinInfo || {};
 
-    // Guideline scoring with T-spin detection
-    if (lines > 0) {
-      // Base line clear points
-      const basePoints = [0, 100, 300, 500, 800][lines] || 800; // Single, Double, Triple, Tetris
-      points = basePoints * this.level;
+    // Base scoring per standardscoring.md (no level multiplier)
+    const lineBase = [0, 100, 300, 500, 800];
+    const tSpinBase = [400, 800, 1200, 1600, 2600]; // index by lines cleared (0-4)
 
-      // T-spin bonuses
+    // Compute base points for the clear
+    if (lines > 0 || isTSpin) {
       if (isTSpin) {
-        if (lines === 1) {
-          points = 800 * this.level; // T-Spin Single
-          clearType = "t-spin single";
-        } else if (lines === 2) {
-          points = 1200 * this.level; // T-Spin Double
-          clearType = "t-spin double";
-        } else if (lines === 3) {
-          points = 1600 * this.level; // T-Spin Triple
-          clearType = "t-spin triple";
-        }
+        const idx = Math.min(lines, 4);
+        points += tSpinBase[idx] || 0;
+        if (lines === 0) clearType = "spin zero";
+        else clearType = `t-spin ${["zero", "single", "double", "triple", "quad"][idx]}`;
+      } else {
+        points += lineBase[lines] || 0;
+        clearType = ["", "single", "double", "triple", "quad"][lines] || null;
       }
 
-      // Back-to-back bonus (1.5x for consecutive line clears)
-      if (this.backToBack && (lines >= 4 || (isTSpin && lines >= 2))) {
+      // Back-to-back 1.5x for difficult clears (quad or any t-spin with lines)
+      const isDifficult = lines >= 4 || (isTSpin && lines > 0);
+      if (this.backToBack && isDifficult) {
         points = Math.floor(points * 1.5);
-        clearType = clearType ? clearType + " b2b" : "b2b";
+        clearType = clearType ? `${clearType} b2b` : "b2b";
       }
+      this.backToBack = isDifficult;
 
-      // Set back-to-back flag for next clear
-      this.backToBack = lines >= 4 || (isTSpin && lines >= 2);
-
-      // Perfect clear bonus (not standard but common in implementations)
+      // All clear bonus
       const boardIsFull = this.board.grid.every((row) =>
         row.every((cell) => cell !== 0),
       );
       if (boardIsFull) {
-        points += 3500; // All Clear bonus
-        clearType = clearType ? clearType + " all clear" : "all clear";
+        points += 3500;
+        clearType = clearType ? `${clearType} all clear` : "all clear";
       }
     } else {
       this.backToBack = false;
+      this.comboCount = -1;
     }
 
-    // Soft drop bonus (1 point per row)
-    points += this.softDropRows;
+    // Combos: x * 50 where x is current combo value (start at 1 on first clear)
+    if (lines > 0) {
+      if (this.comboCount < 0) this.comboCount = 0;
+      this.comboCount += 1;
+      points += this.comboCount * 50;
+    } else {
+      this.comboCount = -1;
+    }
 
-    // Hard drop bonus (2 points per row)
-    points += this.hardDropRows * 2;
+    // Drop bonuses (flat, not level-scaled)
+    points += this.softDropRows; // 1 per soft drop cell
+    points += this.hardDropRows * 2; // 2 per hard drop cell
 
     // Reset drop counters for next piece
     this.softDropRows = 0;
@@ -7960,12 +8154,13 @@ class GameScene extends Phaser.Scene {
       this.totalLines = Math.min(this.totalLines, sprintTarget);
     }
     this.lastClearType = clearType;
+    this.showClearBanner(clearType, spinInfo, lines, pieceType);
 
     // Track piece for potential T-spin detection next time
     this.lastPieceType = pieceType;
   }
 
-  updateTGM1Score(lines, pieceType = null, isTSpin = false) {
+  updateTGM1Score(lines, pieceType = null, spinInfo = { isSpin: false, isTSpin: false }) {
     // Official TGM1 scoring formula:
     // Score = ceil([level + cleared lines]/4 + soft dropped rows + (2 * hard dropped rows))
     //        * cleared lines * combo * bravo
@@ -8449,31 +8644,86 @@ class GameScene extends Phaser.Scene {
     return internalGravity;
   }
 
-  detectTSpin(piece, board) {
-    // Simple T-spin detection
-    // A T-spin occurs when the T piece is rotated and locks with blocks in 3 of the 4 corners
-    if (piece.type !== "T") return false;
+  detectSpin(piece, board) {
+    if (!piece || !board) return { isSpin: false, isTSpin: false, spinType: null };
+    if (piece.type === "O") return { isSpin: false, isTSpin: false, spinType: null };
 
-    const corners = [
-      { x: piece.x - 1, y: piece.y - 1 },
-      { x: piece.x + 1, y: piece.y - 1 },
-      { x: piece.x - 1, y: piece.y + 1 },
-      { x: piece.x + 1, y: piece.y + 1 },
-    ];
-
-    let filledCorners = 0;
-    corners.forEach((corner) => {
-      if (
-        corner.x < 0 ||
-        corner.x >= board.cols ||
-        corner.y >= board.rows ||
-        (corner.y >= 0 && board.grid[corner.y][corner.x])
-      ) {
-        filledCorners++;
+    // Build set of current piece cells to ignore self-collision
+    const pieceCells = new Set();
+    for (let r = 0; r < piece.shape.length; r++) {
+      for (let c = 0; c < piece.shape[r].length; c++) {
+        if (!piece.shape[r][c]) continue;
+        pieceCells.add(`${piece.x + c},${piece.y + r}`);
       }
-    });
+    }
 
-    return filledCorners >= 3;
+    const cellBlocked = (x, y) => {
+      if (x < 0 || x >= board.cols || y >= board.rows) return true;
+      if (y < 0) return false; // above visible area is allowed
+      const key = `${x},${y}`;
+      if (pieceCells.has(key)) return false; // ignore current piece footprint
+      return !!board.grid[y][x];
+    };
+
+    const canMove = (dx, dy) => {
+      for (const key of pieceCells) {
+        const [px, py] = key.split(",").map(Number);
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 0 || nx >= board.cols || ny >= board.rows) return false;
+        if (ny < 0) continue; // off-screen above is ok
+        if (cellBlocked(nx, ny)) return false;
+      }
+      return true;
+    };
+
+    // T: 3-corner rule with grounding guard and self-aware occupancy
+    if (piece.type === "T") {
+      // Require grounded
+      if (canMove(0, 1)) return { isSpin: false, isTSpin: false, spinType: null };
+
+      // Require last movement to be a rotation while grounded
+      if (!this.spinRotatedWhileGrounded) {
+        return { isSpin: false, isTSpin: false, spinType: null };
+      }
+
+      const corners = [
+        [piece.x - 1, piece.y - 1],
+        [piece.x + 1, piece.y - 1],
+        [piece.x - 1, piece.y + 1],
+        [piece.x + 1, piece.y + 1],
+      ];
+      let filledCorners = 0;
+      for (const [cx, cy] of corners) {
+        if (cellBlocked(cx, cy)) filledCorners++;
+      }
+      if (filledCorners >= 3) {
+        return { isSpin: true, isTSpin: true, spinType: "t-spin" };
+      }
+      if (filledCorners === 2) {
+        return { isSpin: true, isTSpin: false, spinType: "t-spin mini" };
+      }
+      return { isSpin: false, isTSpin: false, spinType: null };
+    }
+
+    // Non-T: immobile rule as requested:
+    // must be grounded (cannot move down) AND cannot move 1 left, 1 right, or 1 up.
+
+    // Grounded check (cannot move down)
+    const isGrounded = !canMove(0, 1);
+    if (!isGrounded) return { isSpin: false, isTSpin: false, spinType: null };
+
+    const blockedLeft = !canMove(-1, 0);
+    const blockedRight = !canMove(1, 0);
+    const blockedUp = !canMove(0, -1);
+    const blockedDown = !canMove(0, 1);
+
+    const isImmobile = blockedDown && blockedLeft && blockedRight && blockedUp;
+    return {
+      isSpin: isImmobile,
+      isTSpin: false,
+      spinType: isImmobile ? `${piece.type}-spin` : null,
+    };
   }
 
   updateGrade() {
