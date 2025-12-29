@@ -33,7 +33,8 @@ class TGM3Mode extends BaseMode {
             { minLevel: 700, maxLevel: 799, are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
             { minLevel: 800, maxLevel: 899, are: 14/60, lineAre: 8/60,  das: 10/60, arr: 1/60, lock: 30/60, lineClear: 6/60 },
             { minLevel: 900, maxLevel: 999, are: 14/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
-            { minLevel: 1000, maxLevel: 1199, are: 8/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
+            { minLevel: 1000, maxLevel: 1099, are: 8/60, lineAre: 8/60,  das: 8/60,  arr: 1/60, lock: 17/60, lineClear: 6/60 },
+            { minLevel: 1100, maxLevel: 1199, are: 7/60, lineAre: 7/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 6/60 },
             { minLevel: 1200, maxLevel: 1899, are: 6/60, lineAre: 6/60,  das: 8/60,  arr: 1/60, lock: 15/60, lineClear: 6/60 },
         ];
     }
@@ -44,6 +45,7 @@ class TGM3Mode extends BaseMode {
             das: 16/60,
             arr: 1/60,
             are: 27/60,
+            lowestGrade: '9',
             lineAre: 27/60,
             lockDelay: 30/60,
             lineClearDelay: 40/60,

@@ -26,6 +26,7 @@ class TGM3ShiraseMode extends BaseMode {
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
+            lowestGrade: '',
             gravityLevelCap: 1300,
             hasGrading: false,
             specialMechanics: {

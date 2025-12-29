@@ -22,6 +22,7 @@ class TGM2MasterMode extends BaseMode {
             levelUpType: 'piece',          // Level up per piece
             lineClearBonus: 1,
             gravityLevelCap: 999,
+            lowestGrade: '9',
             specialMechanics: {
                 fadingRoll: true,          // Enable Fading Roll credit roll
                 mRoll: true,               // Enable M-Roll challenge

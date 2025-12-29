@@ -25,6 +25,7 @@ class TGM1Mode extends BaseMode {
             levelUpType: 'piece',  // TGM1: Level increases per piece
             lineClearBonus: 1,
             gravityLevelCap: 999,
+            lowestGrade: '9',
             specialMechanics: {
                 sectionStops: [99, 199, 299, 399, 499, 599, 699, 799, 899, 998],
                 gmRequirements: {

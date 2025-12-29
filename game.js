@@ -1106,6 +1106,8 @@ class Board {
             : scene.rotationSystem === "ARS"
               ? "mino_ars"
               : "mino_srs";
+          // Always dim placed stack relative to active piece (even during line clears)
+          const baseAlpha = rowAlpha * (scene.stackAlpha || 1);
           const tintColor =
             scene.monochromeActive && textureKey.startsWith("mono")
               ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
@@ -1132,7 +1134,7 @@ class Board {
             const sprite = scene.add.sprite(renderX, renderY, textureKey);
             sprite.setDisplaySize(drawCellSize, drawCellSize);
             sprite.setTint(tintColor);
-            sprite.setAlpha(rowAlpha);
+            sprite.setAlpha(baseAlpha);
             scene.gameGroup.add(sprite);
           } else {
             const graphics = scene.add.graphics();
@@ -1140,7 +1142,7 @@ class Board {
               scene.monochromeActive && textureKey.startsWith("mono")
                 ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
                 : color || 0x010101;
-            graphics.fillStyle(fillColor, rowAlpha);
+            graphics.fillStyle(fillColor, baseAlpha);
             graphics.fillRect(
               renderX - drawCellSize / 2,
               renderY - drawCellSize / 2,
@@ -1149,15 +1151,15 @@ class Board {
             );
             if (isPowerObj && cellVal.powerupType) {
               const borderColor = cellVal.borderColor || 0xffffff;
-              graphics.lineStyle(2, borderColor, rowAlpha);
+              graphics.lineStyle(2, borderColor, baseAlpha);
               graphics.strokeRect(
                 renderX - drawCellSize / 2,
                 renderY - drawCellSize / 2,
                 drawCellSize,
                 drawCellSize,
               );
-              graphics.lineStyle(3, borderColor, rowAlpha);
-              graphics.fillStyle(borderColor, rowAlpha);
+              graphics.lineStyle(3, borderColor, baseAlpha);
+              graphics.fillStyle(borderColor, baseAlpha);
               const cx = drawX;
               const cy = drawY;
               if (cellVal.powerupType === "free_fall") {
@@ -3816,7 +3818,6 @@ class LoadingScreenScene extends Phaser.Scene {
   init(data) {
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null; // Store gameMode from data
-
   }
 
   create() {
@@ -3860,14 +3861,15 @@ class GameScene extends Phaser.Scene {
     this.lockResetCount = 0; // Number of lock delay resets on current piece (SRS limit)
     // defer starting the lock timer until after the first grounded frame
     this.lockDelayBufferedStart = false;
+    this.suppressPieceRenderThisFrame = false;
     this.lastGroundedY = null; // Track last grounded row for ARS lock reset rule
     this.isGrounded = false;
     this.level = getStartingLevel(); // Set starting level from URL parameter
     this.startingLevel = this.level; // Preserve the starting level for restarts
     this.piecesPlaced = 0; // Track pieces for level system
     this.score = 0;
-    this.grade = "9";
-    this.internalGrade = 0;
+    this.grade = null;
+    this.internalGrade = null;
     this.gradeDisplay = null;
     this.gradeText = null;
     this.gradePointsText = null;
@@ -3944,6 +3946,7 @@ class GameScene extends Phaser.Scene {
     this.backToBack = false;
     this.totalLines = 0;
     this.lastPieceType = null;
+    this.lastTetrisNoCombo = false; // Tracks a fresh tetris without prior combo for SFX chaining
     this.clearBannerGroup = null;
     this.clearBannerLine1 = null;
     this.clearBannerLine2 = null;
@@ -4188,6 +4191,7 @@ class GameScene extends Phaser.Scene {
 
     // Re-apply mode timing configuration in case restart reset defaults
     this.applyModeConfiguration();
+    this.applyInitialGradeFromMode();
 
     // Credits system
     this.creditsActive = false;
@@ -4236,6 +4240,9 @@ class GameScene extends Phaser.Scene {
     this.arsMoveResetEnabled =
       (localStorage.getItem("arsMoveReset") || "false") === "true";
     this.rotationSystemDisplay = null;
+    this.initialGradeBaseline = null;
+    this.initialGradeBaselineValue = null;
+    this.initialInternalGradeBaseline = null;
 
     // Keybind and IRS display
     this.irsActivated = false;
@@ -4514,11 +4521,18 @@ class GameScene extends Phaser.Scene {
   }
 
   init(data) {
- 
+
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null;
 
- 
+    // Reset first-piece state for fresh runs (handles returning from main menu)
+    this.pieceHistory = ["Z", "Z", "S", "S"];
+    this.pieceHistoryIndex = 0;
+    this.firstPiece = true;
+    this.isFirstSpawn = true;
+    this.bagQueue = [];
+    this.bagDrawCount = 0;
+    this.bagDebugSeen = new Set();
 
     // Load mode if not provided
     if (!this.gameMode && typeof getModeManager !== "undefined") {
@@ -4554,6 +4568,58 @@ class GameScene extends Phaser.Scene {
 
     // Apply mode configuration to game settings
     this.applyModeConfiguration();
+    this.applyInitialGradeFromMode();
+  }
+
+  applyInitialGradeFromMode() {
+    const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+    const hasGrading = modeConfig.hasGrading !== false;
+
+    if (!hasGrading) {
+      this.grade = null;
+      this.internalGrade = null;
+      this.initialGradeBaseline = null;
+      this.initialGradeBaselineValue = null;
+      this.initialInternalGradeBaseline = null;
+      return;
+    }
+
+    // Reset mode grading state if supported
+    if (this.gameMode) {
+      if (typeof this.gameMode.resetGrading === "function") {
+        this.gameMode.resetGrading(this);
+      }
+      if (this.gameMode.tgm2Grading && typeof this.gameMode.tgm2Grading.reset === "function") {
+        this.gameMode.tgm2Grading.reset();
+      }
+      if (this.gameMode.tgm3Grading && typeof this.gameMode.tgm3Grading.reset === "function") {
+        this.gameMode.tgm3Grading.reset();
+      }
+    }
+
+    // Always start from the mode's lowest grade (or default "9"), ignoring any carried-over state
+    // or mode getters that might be holding previous run values.
+    const configLowestGrade =
+      (modeConfig && typeof modeConfig.lowestGrade === "string" && modeConfig.lowestGrade) ||
+      "9";
+    const baselineGrade = configLowestGrade || "9";
+    const baselineInternal =
+      typeof modeConfig.initialInternalGrade === "number"
+        ? modeConfig.initialInternalGrade
+        : 0;
+
+    this.initialGradeBaseline = baselineGrade;
+    this.initialGradeBaselineValue = this.getGradeValue(baselineGrade);
+    this.initialInternalGradeBaseline = baselineInternal;
+
+    this.grade = baselineGrade;
+    this.internalGrade = baselineInternal;
+
+    // If UI already exists, refresh visibility/text
+    this.updateGradeUIVisibility?.();
+
+    // Lock in baseline before any pieces spawn
+    this.totalPiecesPlaced = 0;
   }
 
   markGroundedSpin() {
@@ -5150,13 +5216,10 @@ class GameScene extends Phaser.Scene {
       this.gradeDisplay.lineStyle(2, 0xffffff);
       this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
       const initialDisplayedGrade =
-        this.gameMode && typeof this.gameMode.getDisplayedGrade === "function"
-          ? this.gameMode.getDisplayedGrade()
+        this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
+          ? this.initialGradeBaseline
           : this.grade;
-      this.grade =
-        initialDisplayedGrade !== undefined && initialDisplayedGrade !== null
-          ? initialDisplayedGrade
-          : this.grade;
+      this.grade = initialDisplayedGrade;
       const gradeTextValue = this.grade || "";
       const gradeVisible = !!gradeTextValue;
       this.gradeText = this.add
@@ -5610,6 +5673,8 @@ class GameScene extends Phaser.Scene {
           fontStyle: "bold",
         });
         this.sectionTrackerGroup.add(this.staffRollBonusText);
+        // Hidden by default; only shown during TGM3 credits roll
+        this.staffRollBonusText.setVisible(false);
       }
     }
 
@@ -5717,6 +5782,7 @@ class GameScene extends Phaser.Scene {
     this.isGrounded = false;
     this.lockDelay = 0;
     this.lockDelayBufferedStart = false;
+    this.stackAlpha = 0.8;
 
     // Reset randomizer / first-spawn logic so the first spawned piece does not increment level.
     this.pieceHistory = ["Z", "Z", "S", "S"];
@@ -5907,6 +5973,13 @@ class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseStartTime = null;
 
+    // Initialize game mode first so grading/config is ready
+    if (this.gameMode && this.gameMode.initializeGameState) {
+      this.gameMode.initializeForGameScene(this);
+    }
+    // Ensure grade is initialized at mode start (before UI and first piece)
+    this.applyInitialGradeFromMode();
+
     // UI
     this.setupUI();
 
@@ -5915,11 +5988,6 @@ class GameScene extends Phaser.Scene {
     this.bgmStarted = false;
     // Ensure any leftover BGM from previous scene is stopped
     this.stopCurrentBGM();
-
-    // Initialize game mode
-    if (this.gameMode && this.gameMode.initializeForGameScene) {
-      this.gameMode.initializeForGameScene(this);
-    }
 
     // Prepare next queue (but do not spawn yet)
     if (this.nextPieces.length < 6) {
@@ -6217,8 +6285,20 @@ class GameScene extends Phaser.Scene {
       this.draw();
       return;
     }
-    // During READY/GO sequence, let only UI/timers run
+    // During READY/GO sequence, still allow directional keys to be sampled for DAS/ARE carry
     if (this.readyGoPhase && !this.gameStarted) {
+      if (this.keys) {
+        const leftDown =
+          !!(this.cursors?.left && this.cursors.left.isDown) ||
+          !!(this.keys.left && this.keys.left.isDown);
+        const rightDown =
+          !!(this.cursors?.right && this.cursors.right.isDown) ||
+          !!(this.keys.right && this.keys.right.isDown);
+        const zKeyDown = !!(this.keys.left && this.keys.left.isDown);
+        const cKeyDown = !!(this.keys.right && this.keys.right.isDown);
+        this.areLeftHeld = leftDown || zKeyDown;
+        this.areRightHeld = rightDown || cKeyDown;
+      }
       this.draw();
       return;
     }
@@ -6896,6 +6976,10 @@ class GameScene extends Phaser.Scene {
     // Gravity (TGM-style curve, time-based to be FPS independent)
     if (!this.areActive) {
       // Only apply gravity when not in ARE
+      if (this.skipGravityThisFrame) {
+        this.skipGravityThisFrame = false;
+        return;
+      }
       const internalGravity = Math.max(1, this.getTGMGravitySpeed(this.level));
       if (!this.currentPiece) return;
 
@@ -6928,16 +7012,23 @@ class GameScene extends Phaser.Scene {
 
     // Count lock delay continuously when grounded (increment after initial frame)
     if (this.isGrounded && this.currentPiece && !this.areActive) {
-      // If we just spawned onto the stack in 20G, begin timing after first grounded frame
+      // If we just spawned onto the stack in 20G, start counting on the first active frame
       if (this.lockDelayBufferedStart) {
         this.lockDelayBufferedStart = false;
         this.lockDelay = this.deltaTime;
-      } else if (this.lockDelay > 0) {
+        return;
+      }
+
+      // If grounded and lock delay hasn't started, begin it now
+      if (this.lockDelay === 0) {
+        this.lockDelay = this.deltaTime;
+      } else {
         this.lockDelay += this.deltaTime;
-        if (this.lockDelay >= this.lockDelayMax) {
-          // 30 frames = 0.5 seconds
-          this.lockPiece();
-        }
+      }
+
+      if (this.lockDelay >= this.lockDelayMax) {
+        // 30 frames = 0.5 seconds
+        this.lockPiece();
       }
     }
 
@@ -6984,17 +7075,52 @@ class GameScene extends Phaser.Scene {
       const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
       const hasGrading = modeConfig.hasGrading !== false;
       if (hasGrading) {
-        if (this.gameMode && typeof this.gameMode.getDisplayedGrade === "function") {
+        // Before any piece is placed, pin grade/internalGrade to baseline and skip external getters.
+        if (this.totalPiecesPlaced === 0) {
+          if (this.initialGradeBaseline) this.grade = this.initialGradeBaseline;
+          if (typeof this.initialInternalGradeBaseline === "number") {
+            this.internalGrade = this.initialInternalGradeBaseline;
+          }
+          this.updateGradeUIVisibility();
+        } else if (this.gameMode && typeof this.gameMode.getDisplayedGrade === "function") {
           const displayedGrade = this.gameMode.getDisplayedGrade();
-          if (displayedGrade) {
+          const baselineValue =
+            typeof this.initialGradeBaselineValue === "number"
+              ? this.initialGradeBaselineValue
+              : -Infinity;
+          const currentValue = this.getGradeValue(this.grade);
+          const displayedValue = this.getGradeValue(displayedGrade);
+
+          // Only accept displayed grade if it is not below the initial baseline
+          // and not below the current grade.
+          if (
+            displayedGrade &&
+            displayedValue >= baselineValue &&
+            displayedValue >= currentValue
+          ) {
             this.grade = displayedGrade;
+          } else if (this.grade == null && this.initialGradeBaseline) {
+            this.grade = this.initialGradeBaseline;
           }
 
           if (this.gameMode && typeof this.gameMode.getInternalGrade === "function") {
             const internalGrade = this.gameMode.getInternalGrade();
             if (typeof internalGrade === "number") {
-              this.internalGrade = internalGrade;
+              // Do not overwrite with lower than baseline internal grade
+              const baselineInternal =
+                typeof this.initialInternalGradeBaseline === "number"
+                  ? this.initialInternalGradeBaseline
+                  : null;
+              if (
+                baselineInternal === null ||
+                internalGrade >= baselineInternal ||
+                this.internalGrade == null
+              ) {
+                this.internalGrade = internalGrade;
+              }
             }
+          } else if (this.internalGrade == null && this.initialInternalGradeBaseline !== null) {
+            this.internalGrade = this.initialInternalGradeBaseline;
           }
           this.updateGradeUIVisibility();
         } else {
@@ -7299,7 +7425,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Check for 20G gravity (using configuration-based detection)
+    // Check for gravity high enough to warrant instant drop-on-spawn behavior
     const internalGravity = this.getTGMGravitySpeed(this.level);
     if (internalGravity >= 5120) {
       // For 20G gravity, immediately hard drop the piece to the ground/stack
@@ -7308,13 +7434,19 @@ class GameScene extends Phaser.Scene {
       // Set grounded state since piece is now on the ground/stack
       this.isGrounded = true;
       this.lastGroundedY = this.currentPiece ? this.currentPiece.y : this.lastGroundedY;
-      this.lockDelayBufferedStart = true; // start counting on next frame to avoid instant lock
+      // Start lock delay on the next frame to avoid instant lock on spawn
+      this.lockDelayBufferedStart = true;
       this.lockDelay = 0;
-      // Do NOT call lockPiece() - let normal gameplay continue
+      // Prevent gravity and rendering the pre-drop position on the spawn frame
+      this.gravityAccum = 0;
+      this.skipGravityThisFrame = true;
+      this.suppressPieceRenderThisFrame = true;
     } else {
       // Normal spawning behavior for non-20G levels
       this.resetLockDelay();
       this.isGrounded = false;
+      // Reset gravity accumulator so falling time is measured from a clean state
+      this.gravityAccum = 0;
     }
 
     // Track piece spawn time for scoring
@@ -7435,19 +7567,34 @@ class GameScene extends Phaser.Scene {
   }
 
   generateNextPieces(minCount = 6) {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const prefersTGMRand =
+      modeIdLower.startsWith("tgm") ||
+      modeIdLower.includes("shirase") ||
+      modeIdLower.includes("death") ||
+      modeIdLower.includes("plus") ||
+      modeIdLower.includes("master20g") ||
+      modeIdLower === "20g";
+
     // Default to 7-bag whenever we're not using a custom generator.
-    const use7Bag = !(this.gameMode && this.gameMode.generateNextPiece);
+    const use7Bag = !(this.gameMode && this.gameMode.generateNextPiece) && !prefersTGMRand;
 
     while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
       if (this.gameMode && this.gameMode.generateNextPiece) {
         const piece = this.gameMode.generateNextPiece(this);
-        this.nextPieces.push(piece);
+        this.nextPieces.push(this.applyFirstPieceRestriction(piece, modeIdLower));
       } else if (use7Bag) {
-        this.nextPieces.push(this.generate7BagPiece());
+        const piece = this.generate7BagPiece();
+        this.nextPieces.push(this.applyFirstPieceRestriction(piece, modeIdLower));
       } else {
         // Fallback to original TGM1 piece generation
-        this.nextPieces.push(this.generateTGM1Piece());
+        const piece = this.generateTGM1Piece();
+        this.nextPieces.push(this.applyFirstPieceRestriction(piece, modeIdLower, true));
       }
     }
   }
@@ -7513,6 +7660,58 @@ class GameScene extends Phaser.Scene {
     return generatedPiece;
   }
 
+  applyFirstPieceRestriction(rawPiece, modeIdLower = "", enforceHistory = false) {
+    if (!this.firstPiece) return rawPiece;
+
+    const exempt =
+      modeIdLower === "ultra" ||
+      modeIdLower === "marathon" ||
+      modeIdLower === "zen" ||
+      modeIdLower.startsWith("sprint");
+
+    if (exempt) {
+      this.firstPiece = false;
+      return rawPiece;
+    }
+
+    // For all non-exempt modes, always enforce history safety on the very first piece
+    const enforceFirst = true;
+
+    const type =
+      typeof rawPiece === "string"
+        ? rawPiece.toUpperCase()
+        : typeof rawPiece?.type === "string"
+          ? rawPiece.type.toUpperCase()
+          : typeof rawPiece?.piece === "string"
+            ? rawPiece.piece.toUpperCase()
+            : null;
+
+    // If first piece in non-exempt mode, reject S/Z/O and also avoid any history collision.
+    const disallowed = ["S", "Z", "O"];
+    if (!type || disallowed.includes(type) || (enforceFirst && this.pieceHistory.includes(type))) {
+      // pick from safe set and avoid current history if possible
+      const allowed = ["I", "J", "L", "T"].filter(
+        (p) => !this.pieceHistory.includes(p),
+      );
+      const pool = allowed.length > 0 ? allowed : ["I", "J", "L", "T"];
+      const replacement = pool[Math.floor(Math.random() * pool.length)];
+
+      this.firstPiece = false;
+
+      if (typeof rawPiece === "string") {
+        return replacement;
+      }
+      if (rawPiece && typeof rawPiece === "object") {
+        return { ...rawPiece, type: replacement, piece: replacement };
+      }
+      return replacement;
+    }
+
+    // Allowed piece: keep original
+    this.firstPiece = false;
+    return rawPiece;
+  }
+
   createShuffledBag() {
     const bag = ["I", "J", "L", "O", "S", "T", "Z"];
     for (let i = bag.length - 1; i > 0; i--) {
@@ -7548,7 +7747,6 @@ class GameScene extends Phaser.Scene {
       this.bagDebugSeen = new Set();
       this.bagDrawCount = 0;
     }
-    if (this.firstPiece) this.firstPiece = false;
     return piece;
   }
 
@@ -7682,6 +7880,16 @@ class GameScene extends Phaser.Scene {
     const hadComboActive = this.comboCount > 0;
     const isTetrisClear = linesToClear.length === 4;
 
+    // SFX flags for Tetris and immediate follow-up clear
+    let playApplause = false;
+    let playComboChime = false;
+    if (linesToClear.length > 0 && this.lastTetrisNoCombo) {
+      playComboChime = true;
+    }
+    if (isTetrisClear && !hadComboActive) {
+      playApplause = true;
+    }
+
     if (!this.creditsActive && linesToClear.length === 4) {
       const sectionIndex = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
       if (sectionIndex === this.currentSection) {
@@ -7694,16 +7902,27 @@ class GameScene extends Phaser.Scene {
     this.updateLevel("lines", linesToClear.length);
     this.canHold = true;
 
-    // Play Tetris / combo sounds
+    // Play Tetris / combo sounds with explicit sequencing
     if (linesToClear.length > 0) {
       try {
-        if (isTetrisClear) {
+        if (playApplause) {
           this.sound?.add("applause", { volume: 0.8 })?.play();
-          if (hadComboActive || this.comboCount > 0) {
-            this.sound?.add("combo", { volume: 0.7 })?.play();
-          }
+        }
+        if (playComboChime) {
+          this.sound?.add("combo", { volume: 0.7 })?.play();
         }
       } catch {}
+    }
+
+    // Update Tetris->follow-up clear state
+    if (linesToClear.length === 0) {
+      this.lastTetrisNoCombo = false;
+    } else if (playComboChime) {
+      this.lastTetrisNoCombo = false; // consumed the follow-up
+    } else if (playApplause) {
+      this.lastTetrisNoCombo = true; // arm for next clear
+    } else {
+      this.lastTetrisNoCombo = false;
     }
 
     // Handle powerup effects for TGM2 mode
@@ -8306,6 +8525,18 @@ class GameScene extends Phaser.Scene {
     }
     const oldLevel = this.level;
 
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isExemptStopMode =
+      modeIdLower === "zen" ||
+      modeIdLower === "marathon" ||
+      modeIdLower.startsWith("sprint") ||
+      modeIdLower === "ultra" ||
+      modeIdLower === "tgm2_normal";
+
     if (type === "piece") {
       this.piecesPlaced++;
     }
@@ -8327,6 +8558,12 @@ class GameScene extends Phaser.Scene {
         const bonus = amount === 3 ? 1 : amount === 4 ? 2 : 0;
         newLevel += amount + bonus;
       }
+    }
+
+    // Apply level stop: at x99 only line clears may advance (non-exempt modes)
+    const atStopLevel = oldLevel % 100 === 99;
+    if (!isExemptStopMode && type === "piece" && atStopLevel) {
+      newLevel = oldLevel;
     }
 
     this.level = newLevel;
@@ -9013,8 +9250,8 @@ class GameScene extends Phaser.Scene {
     this.level = this.startingLevel || 0; // Use preserved starting level or default to 0
     this.piecesPlaced = 0; // Reset piece counter
     this.score = 0;
-    this.grade = "9";
-    this.internalGrade = 0;
+    this.grade = null;
+    this.internalGrade = null;
     this.gameOver = false;
     this.sectionCap = 99;
     this.sectionTransition = false;
@@ -9098,6 +9335,9 @@ class GameScene extends Phaser.Scene {
 
     // Validate piece history to ensure it's correct after reset
     this.validatePieceHistory();
+
+    // Reapply mode grading baseline after full reset
+    this.applyInitialGradeFromMode();
 
     // Reset time tracking; actual start time is set on GO
     this.startTime = null;
@@ -9282,6 +9522,17 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // Show roll bonus counter only for TGM3 credits roll
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const showRollBonus = modeIdLower === "tgm3" || modeIdLower === "tgm3_master";
+    if (this.staffRollBonusText) {
+      this.staffRollBonusText.setVisible(showRollBonus);
+    }
+
     // Play completion sound if GM grade achieved
     if (this.grade === "GM") {
       const completeSound = this.sound.add("complete", { volume: 0.8 });
@@ -9315,6 +9566,11 @@ class GameScene extends Phaser.Scene {
     if (this.creditsFinalized) return;
     this.creditsFinalized = true;
     this.creditsActive = false;
+
+    // Hide roll bonus counter once credits are done
+    if (this.staffRollBonusText) {
+      this.staffRollBonusText.setVisible(false);
+    }
 
     // Stop credits BGM if still playing
     if (this.creditsBGM) {
@@ -9451,26 +9707,56 @@ class GameScene extends Phaser.Scene {
     // Store the locked piece's color and position for the flash effect
     const flashColor = this.currentPiece ? this.currentPiece.color : 0xffffff;
 
-    // Create a temporary flash overlay
+    // Build a cell-precise overlay so only occupied minos flash
+    const bigBlocks = !!this.bigBlocksActive;
+    const blockSize = bigBlocks ? this.cellSize * 2 : this.cellSize;
+
+    // Create a temporary flash overlay covering only the mino cells
     const flashOverlay = this.add.graphics();
-    flashOverlay.fillStyle(0xffffff, 0.8);
-    flashOverlay.fillRect(
-      this.borderOffsetX - 4,
-      this.borderOffsetY - 3,
-      this.cellSize * this.board.cols + 4,
-      this.cellSize * this.visibleRows + 5,
-    );
+    flashOverlay.fillStyle(0xffffff, 1);
 
-    // Add flash overlay to game group
-    this.gameGroup.add(flashOverlay);
+    if (this.currentPiece) {
+      for (let r = 0; r < this.currentPiece.shape.length; r++) {
+        for (let c = 0; c < this.currentPiece.shape[r].length; c++) {
+          if (!this.currentPiece.shape[r][c]) continue;
+          const boardX = this.currentPiece.x + c;
+          const boardY = this.currentPiece.y + r;
+          if (boardY < 2) continue; // off-screen spawn rows
+          const drawX = this.matrixOffsetX + boardX * this.cellSize;
+          const drawY = this.matrixOffsetY + (boardY - 2) * this.cellSize;
+          const renderX = bigBlocks ? drawX - this.cellSize / 2 : drawX;
+          const renderY = bigBlocks ? drawY - this.cellSize / 2 : drawY;
+          const left = renderX - blockSize / 2;
+          const top = renderY - blockSize / 2;
+          flashOverlay.fillRect(left, top, blockSize, blockSize);
+        }
+      }
+    }
 
-    // Fade out the flash over 15 frames (0.25 seconds)
+    // Render above board and independent of gameGroup clearing
+    flashOverlay.setDepth(9999);
+
+    // Three-phase flash: snap to white, settle near 80% opacity feeling, brief hold, then fade out
     this.tweens.add({
       targets: flashOverlay,
-      alpha: 0,
-      duration: 250, // 0.25 seconds
+      alpha: 0.2, // light overlay to approximate ~80% final brightness
+      duration: 80,
       onComplete: () => {
-        flashOverlay.destroy();
+        this.tweens.add({
+          targets: flashOverlay,
+          alpha: 0.2,
+          duration: 80, // brief hold at ~80%
+          onComplete: () => {
+            this.tweens.add({
+              targets: flashOverlay,
+              alpha: 0,
+              duration: 120,
+              onComplete: () => {
+                flashOverlay.destroy();
+              },
+            });
+          },
+        });
       },
     });
   }
@@ -9655,129 +9941,138 @@ class GameScene extends Phaser.Scene {
     }
 
     // Create scrolling credits text behind the tetrominos (under the matrix)
-    const creditsText = [
-      { text: "CREDITS", type: "title" },
-      { text: "", type: "empty" },
-      { text: "Game Developer", type: "section" },
-      { text: "Tetris Grand Master Implementation", type: "content" },
-      { text: "", type: "empty" },
+    const creditsLayout = [
+      { text: "MINO FREEFALL Pre-beta", type: "title" },
+      { text: "WORK IN PROGRESS", type: "title"},
+      { text: "", type: "spacer" },
+      { text: "Created by", type: "section" },
+      { text:"The Colorbleed Neon team", type: "content"},
+      { text: "Neneko, the one and only", type:"content"},
+      { text: "member of the team", type:"content"},
+      { text: "", type: "spacer" },
       { text: "Special Thanks", type: "section" },
-      {
-        text: "To all Tetris players who strive for perfection",
-        type: "content",
-      },
-      {
-        text: "The Tetris Company for creating this amazing game",
-        type: "content",
-      },
-      { text: "", type: "empty" },
+      { text: "Caithness", type: "content" },
+      { text: "switchpalacecorner A.K.A spc", type: "content" },
+      { text: "EdenGT", type: "content" },
+      { text: "colour_thief", type: "content" },
+      { text: "ItzBlack", type: "content" },
+      { text: "Shard Nguyen", type: "content" },
+      { text: "Vz61", type: "content" },
+      { text: "And everyone from the", type: "content" },
+      { text: "THEABSOLUTE.PLUS Discord server", type: "content" },
+      { text: "As well as", type: "section" },
+      { text: "Friends & Family", type: "content" },
+      { text: "LumiBach, the ICT teacher", type: "content" },
+      { text: "", type: "spacer" },
       { text: "Music & Sound", type: "section" },
-      { text: "Original TGM Soundtrack", type: "content" },
-      { text: "", type: "empty" },
+      { text: "Taken from Texmaster", type: "content" },
+      { text: "and various games", type: "content" },
+      { text: "Original BGMs", type: "content" },
+      { text: "is coming soon", type: "content" },
+      { text: "", type: "spacer" },
       { text: "Inspired by", type: "section" },
       { text: "Tetris: The Grand Master Series", type: "content" },
-      { text: "", type: "empty" },
+      { text: "Texmaster 2009", type: "content" },
+      { text: "TETR.IO", type: "content" },
+      { text: "", type: "spacer" },
       { text: "Technical Implementation", type: "section" },
       { text: "Phaser 3 Game Framework", type: "content" },
-      { text: "SRS (Super Rotation System)", type: "content" },
-      { text: "TGM1 Mechanics", type: "content" },
-      { text: "", type: "empty" },
-      { text: "Level System", type: "section" },
-      { text: "Internal Gravity Curves", type: "content" },
-      { text: "TGM-Style Grading", type: "content" },
-      { text: "", type: "empty" },
+      { text: "from phaser.io", type: "content" },
+      { text: "TGM mechanics", type: "content" },
+      { text: "12 hours of coding a day", type: "content" },
+      { text: "Grade Recognition System", type: "section" },
+      { text: "20G Gravity", type: "content" },
+      { text: "", type: "spacer" },
       { text: "Piece Randomizer", type: "section" },
-      { text: "TGM1 4-Piece History System", type: "content" },
-      { text: "", type: "empty" },
-      { text: "Achievement System", type: "section" },
-      { text: "Grand Master Grade Requirements", type: "content" },
-      { text: "", type: "empty" },
+      { text: "TGM History Checking System", type: "content" },
+      { text: "Also called IRM", type: "content" },
+      { text: "", type: "spacer" },
+      { text: "If you have made it this far", type: "closing" },
+      { text: "You are pretty good at this game", type: "closing" },
+      { text: "", type: "spacer" },
       { text: "Thank you for playing!", type: "closing" },
-      { text: "Continue striving for perfection!", type: "closing" },
+      { text: "-- Created by Colorbleed Neon --", type: "closing" },
     ];
 
-    // Calculate scroll speed so credits end exactly when last line moves to top
-    // The visible matrix area is 20 rows high, credits should scroll through this area in 61.60 seconds
+    // Per-type styling to keep layout modifiable
+    const lineStyles = {
+      title: { fontSize: 36, color: "#ffff00", lineHeight: 44 },
+      section: { fontSize: 24, color: "#00ffff", lineHeight: 34 },
+      content: { fontSize: 20, color: "#ffffff", lineHeight: 30 },
+      closing: { fontSize: 22, color: "#ff00ff", lineHeight: 32 },
+      spacer: { fontSize: 20, color: "#ffffff", lineHeight: 20 },
+    };
+
+    // Build positioned lines so we can preserve order (including spacers)
+    const lines = creditsLayout.map((entry) => {
+      const style = lineStyles[entry.type] || lineStyles.content;
+      return {
+        ...entry,
+        style,
+        height: style.lineHeight,
+      };
+    });
+
     const visibleMatrixHeight = this.cellSize * this.visibleRows; // Height of visible matrix area
-
-    // Count only non-empty lines for height calculation
-    const nonEmptyLines = creditsText.filter(
-      (line) => line.type !== "empty",
-    ).length;
-    const creditsHeight = nonEmptyLines * 45; // Total height of credits text (increased spacing for larger fonts)
-    const totalScrollDistance = visibleMatrixHeight + creditsHeight; // Distance to scroll from bottom to top
-    this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
-
-    // Calculate scroll progress - start with 0 and increase over time
-    const scrollProgress =
-      (this.creditsTimer * this.creditsScrollSpeed * 60) % totalScrollDistance;
-
-    // Position credits to scroll through the matrix area from bottom to top
+    const totalCreditsHeight = lines.reduce((sum, line) => sum + line.height, 0);
     const matrixBottomY = this.borderOffsetY + this.playfieldHeight;
     const matrixTopY = this.borderOffsetY;
-
-    // Start from below the matrix and scroll upward through it
-    // First line (CREDITS) should appear first at the bottom
-    const creditsStartY = matrixBottomY + creditsHeight; // Start from below matrix by the full credits height
     const centerX =
       this.matrixOffsetX + (this.cellSize * this.board.cols) / 2 - 5; // Center horizontally over matrix, shifted 5px left
 
-    for (let i = 0, visibleLineIndex = 0; i < creditsText.length; i++) {
-      const line = creditsText[i];
+    // Start just below the matrix so the first line scrolls in immediately
+    const firstLineHeight = lines[0]?.height || 30;
+    const startGap = 8; // small gap so first line begins offscreen
+    const creditsStartY = matrixBottomY + firstLineHeight / 2 + startGap;
 
-      // Skip empty lines in positioning but count them for display
-      if (line.type === "empty") {
+    // Compute total distance so the last line fully clears the top exactly at creditsDuration
+    let cumulative = 0;
+    const lastIndex = lines.length - 1;
+    const lastLineHeight = lines[lastIndex]?.height || 30;
+    const lastLineCenterOffset =
+      lines.reduce((acc, line, idx) => {
+        const offset = acc.offset + line.height / 2;
+        acc.positions.push(offset);
+        acc.offset += line.height;
+        return acc;
+      }, { offset: 0, positions: [] }).positions[lastIndex] || 0;
+
+    const totalScrollDistance =
+      creditsStartY + lastLineCenterOffset + lastLineHeight / 2 - matrixTopY;
+    this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
+
+    // Clamp to duration so we don't loop; end position aligns with creditsDuration
+    const scrollProgress =
+      Math.min(this.creditsTimer, this.creditsDuration) *
+      this.creditsScrollSpeed *
+      60;
+
+    // Draw lines in order; keep spacing by using cumulative offsets
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineCenterOffset = cumulative + line.height / 2;
+      const y = creditsStartY - scrollProgress + lineCenterOffset;
+      cumulative += line.height;
+
+      // Only draw if within or overlapping the matrix area
+      if (y + line.height / 2 < matrixTopY || y - line.height / 2 > matrixBottomY) {
         continue;
       }
 
-      // Calculate the position of this line relative to the scroll progress
-      // First visible line (CREDITS) should appear at bottom first
-      const lineStartY = creditsStartY - visibleLineIndex * 45;
-      const y = lineStartY - scrollProgress;
-      visibleLineIndex++;
-
-      // Only draw if within the matrix area (strict bounds checking)
-      if (y > matrixTopY && y < matrixBottomY) {
-        let fontSize, fillColor;
-
-        // Assign colors and font sizes based on text type
-        switch (line.type) {
-          case "title":
-            fontSize = 36; // Increased from 28
-            fillColor = "#ffff00"; // Yellow
-            break;
-          case "section":
-            fontSize = 24; // Increased from 18
-            fillColor = "#00ffff"; // Cyan
-            break;
-          case "content":
-            fontSize = 20; // Increased from 18
-            fillColor = "#ffffff"; // White
-            break;
-          case "closing":
-            fontSize = 22; // Increased from 18
-            fillColor = "#ff00ff"; // Magenta
-            break;
-          default:
-            fontSize = 20;
-            fillColor = "#ffffff";
-        }
-
-        // Wrap text to matrix width with proper margin
-        const text = this.add
-          .text(centerX, y, line.text, {
-            fontSize: `${fontSize}px`,
-            fill: fillColor,
-            stroke: "#000000",
-            strokeThickness: 2,
-            fontFamily: "Courier New",
-            fontStyle: "bold", // All text is now bold
-            wordWrap: { width: this.cellSize * this.board.cols - 30 }, // Wrap to matrix width with margin
-            align: "center",
-          })
-          .setOrigin(0.5);
-        this.gameGroup.add(text);
-      }
+      const { fontSize, color } = line.style;
+      const textObj = this.add
+        .text(centerX, y, line.text, {
+          fontSize: `${fontSize}px`,
+          fill: color,
+          stroke: "#000000",
+          strokeThickness: 2,
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+          wordWrap: { width: this.cellSize * this.board.cols - 30 },
+          align: "center",
+        })
+        .setOrigin(0.5);
+      this.gameGroup.add(textObj);
     }
   }
 
@@ -9946,7 +10241,9 @@ class GameScene extends Phaser.Scene {
     const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
     const hasGrading = modeConfig.hasGrading !== false;
 
-    // Clear previous game elements
+    // Capture and immediately clear one-frame render suppression so it never persists
+    const suppressRender = this.suppressPieceRenderThisFrame;
+    this.suppressPieceRenderThisFrame = false;
     this.gameGroup.clear(true, true);
 
     // Show loading text during loading phase
@@ -10007,7 +10304,7 @@ class GameScene extends Phaser.Scene {
       const fadeProgress = this.areTimer / this.areDelay; // 0 to 1
       const fadeAlpha = Math.max(0.2, 1.0 - fadeProgress); // Fade from 1.0 to 0.2
 
-      // Draw cleared lines with fading effect
+      // Draw cleared lines with fading effect, respecting stack dimming
       for (const lineRow of this.clearedLines) {
         // Only draw if line is in visible area (row 2 and below)
         if (lineRow >= 2) {
@@ -10018,6 +10315,10 @@ class GameScene extends Phaser.Scene {
             const textureSource = texture && texture.source ? texture.source[0] : null;
             const hasValidTextureSource =
               !!texture && !!textureSource && !!textureSource.image;
+
+            // Apply stack dimming to cleared cells so brightness is consistent
+            const cellAlpha = fadeAlpha * (this.stackAlpha || 1);
+
             if (hasValidTextureSource) {
               const sprite = this.add.sprite(
                 this.matrixOffsetX + col * this.cellSize,
@@ -10026,11 +10327,11 @@ class GameScene extends Phaser.Scene {
               );
               sprite.setDisplaySize(this.cellSize, this.cellSize);
               sprite.setTint(0xffffff); // White for cleared lines
-              sprite.setAlpha(fadeAlpha);
+              sprite.setAlpha(cellAlpha);
               this.gameGroup.add(sprite);
             } else {
               const graphics = this.add.graphics();
-              graphics.fillStyle(0xffffff, fadeAlpha);
+              graphics.fillStyle(0xffffff, cellAlpha);
               graphics.fillRect(
                 this.matrixOffsetX + col * this.cellSize - this.cellSize / 2,
                 this.matrixOffsetY + (lineRow - 2) * this.cellSize -
@@ -10045,7 +10346,13 @@ class GameScene extends Phaser.Scene {
       }
     }
     // Draw current/ghost only during active play; during game over fading we already merged the active piece into the board
-    if (this.currentPiece && !this.gameOver && !this.minoFadeActive && !this.fadingComplete) {
+    if (
+      this.currentPiece &&
+      !this.gameOver &&
+      !this.minoFadeActive &&
+      !this.fadingComplete &&
+      !suppressRender
+    ) {
       // Ghost piece only visible from levels 0-100 in TGM1
       if (this.level <= 100) {
         const ghost = this.currentPiece.getGhostPosition(this.board);
@@ -10061,7 +10368,9 @@ class GameScene extends Phaser.Scene {
       // Calculate alpha for lock delay fade effect
       let pieceAlpha = 1;
       if (this.isGrounded && this.lockDelay > 0) {
-        pieceAlpha = 1 - (this.lockDelay / 0.5) * 0.5; // Fade from 1 to 0.5 over 0.5 seconds
+        // Fade from 100% to 40% over the configured lock delay window
+        const fadeFrac = Math.min(this.lockDelay / (this.lockDelayMax || 0.5), 1);
+        pieceAlpha = 1 - fadeFrac * 0.6;
       }
 
       this.currentPiece.draw(
@@ -10072,6 +10381,31 @@ class GameScene extends Phaser.Scene {
         false,
         pieceAlpha,
       );
+
+      // Blinking yellow border around active piece
+      const blinkAlpha = 0.5 + 0.5 * Math.sin(this.time.now * 0.02);
+      const bigBlocks = !!this.bigBlocksActive;
+      const outlineCellSize = bigBlocks ? this.cellSize * 2 : this.cellSize;
+      for (let r = 0; r < this.currentPiece.shape.length; r++) {
+        for (let c = 0; c < this.currentPiece.shape[r].length; c++) {
+          if (!this.currentPiece.shape[r][c]) continue;
+          const pieceY = this.currentPiece.y + r;
+          if (pieceY < 2) continue; // off-screen spawn rows
+          const drawX = this.matrixOffsetX + (this.currentPiece.x + c) * this.cellSize;
+          const drawY = this.matrixOffsetY + (pieceY - 2) * this.cellSize;
+          const renderX = bigBlocks ? drawX - this.cellSize / 2 : drawX;
+          const renderY = bigBlocks ? drawY - this.cellSize / 2 : drawY;
+          const outline = this.add.graphics();
+          outline.lineStyle(2, 0xffff00, blinkAlpha);
+          outline.strokeRect(
+            renderX - outlineCellSize / 2,
+            renderY - outlineCellSize / 2,
+            outlineCellSize,
+            outlineCellSize,
+          );
+          this.gameGroup.add(outline);
+        }
+      }
     }
 
     // Update UI
@@ -10225,19 +10559,13 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      if (!isTgm2Normal && !isMarathonMode && this.halfTimeTexts && this.halfTimeTexts.length === 2) {
+      if (this.halfTimeTexts && this.halfTimeTexts.length >= 2) {
         const firstHalf = sectionTimesArray
           .slice(0, 5)
-          .reduce(
-            (sum, t) => (t !== null && t !== undefined ? sum + t : sum),
-            0,
-          );
+          .reduce((sum, t) => (t !== null && t !== undefined ? sum + t : sum), 0);
         const secondHalf = sectionTimesArray
           .slice(5)
-          .reduce(
-            (sum, t) => (t !== null && t !== undefined ? sum + t : sum),
-            0,
-          );
+          .reduce((sum, t) => (t !== null && t !== undefined ? sum + t : sum), 0);
 
         this.halfTimeTexts[0].time.setText(this.formatTimeValue(firstHalf || 0));
         this.halfTimeTexts[1].time.setText(this.formatTimeValue(secondHalf || 0));

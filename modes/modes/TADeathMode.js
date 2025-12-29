@@ -15,6 +15,7 @@ class TADeathMode extends BaseMode {
             ghostEnabled: true,             // Ghost piece enabled
             levelUpType: 'piece',           // Level up per piece
             lineClearBonus: 1,
+            lowestGrade: '',
             gravityLevelCap: 999,
             specialMechanics: {
                 fixed20G: true,             // Fixed 20G gravity throughout
