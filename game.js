@@ -1635,6 +1635,7 @@ class MenuScene extends Phaser.Scene {
     this.leaderboardContainer = null;
     this.leaderboardTitle = null;
     this.leaderboardEntries = [];
+    this.leaderboardPlaceholder = null;
     this.startButton = null;
     this.settingsButton = null;
     this.settingsBorder = null;
@@ -1734,6 +1735,23 @@ class MenuScene extends Phaser.Scene {
       leaderboardBaseX + leaderboardOffsetX,
       leaderboardBaseY + leaderboardOffsetY,
     );
+
+    // Placeholder for modes without leaderboards (e.g., Zen)
+    this.leaderboardPlaceholder = this.add
+      .text(
+        leaderboardBaseX + leaderboardOffsetX,
+        leaderboardBaseY + leaderboardOffsetY + 10,
+        "Sandbox mode - experiment and have fun! No leaderboards.",
+        {
+          fontSize: "18px",
+          fill: "#cccccc",
+          fontFamily: "Courier New",
+          align: "center",
+          wordWrap: { width: 240 },
+        },
+      )
+      .setOrigin(0.5)
+      .setVisible(false);
 
     // Leaderboard title - anchored relative to the container, pushed further down
     this.leaderboardTitle = this.add
@@ -2099,6 +2117,7 @@ class MenuScene extends Phaser.Scene {
   updateMenuDisplay() {
     const currentModeType = this.modeTypes[this.currentModeTypeIndex];
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+    const modeId = currentSubmode.id;
 
     // Update submode display
     this.submodeTitle.setText(currentSubmode.name);
@@ -2116,8 +2135,25 @@ class MenuScene extends Phaser.Scene {
     // Recreate mode type list with updated selection highlighting
     this.createModeTypeListDisplay();
 
-    // Update leaderboard
-    this.updateLeaderboardDisplay();
+    // Update leaderboard (hide for Zen)
+    if (modeId === "zen") {
+      if (this.leaderboardEntries && this.leaderboardEntries.length > 0) {
+        this.leaderboardEntries.forEach((entry) => {
+          Object.values(entry).forEach((t) => t && t.destroy && t.destroy());
+        });
+      }
+      this.leaderboardEntries = [];
+      if (this.leaderboardContainer) this.leaderboardContainer.setVisible(false);
+      if (this.leaderboardTitle) this.leaderboardTitle.setVisible(false);
+      if (this.leaderboardPlaceholder)
+        this.leaderboardPlaceholder.setVisible(true);
+    } else {
+      if (this.leaderboardContainer) this.leaderboardContainer.setVisible(true);
+      if (this.leaderboardTitle) this.leaderboardTitle.setVisible(true);
+      if (this.leaderboardPlaceholder)
+        this.leaderboardPlaceholder.setVisible(false);
+      this.updateLeaderboardDisplay();
+    }
   }
 
   startSelectedMode() {
@@ -5687,10 +5723,15 @@ class GameScene extends Phaser.Scene {
     this.pieceHistoryIndex = 0;
     this.firstPiece = true;
     this.isFirstSpawn = true;
-    this.bagQueue = [];
+    this.bagQueue = this.createShuffledBag();
     this.bagDrawCount = 0;
     this.bagDebugSeen = new Set();
     this.validatePieceHistory();
+
+    // Seed the next queue from the initial bag without consuming a draw cycle,
+    // then force the next bag to be freshly shuffled when generation continues.
+    this.nextPieces = [...this.bagQueue];
+    this.bagQueue = [];
 
     // Reset stack/credits/fade systems
     this.invisibleStackActive = false;
@@ -6046,7 +6087,6 @@ class GameScene extends Phaser.Scene {
     this.ppsLockSampleIndices = [];
     this.ppsSampleTimer = 0;
     this.lastPpsRecordedPieceCount = 0;
-    this.bagQueue = [];
     if (this.ppsText) this.ppsText.setText("0.00");
     if (this.pieceCountText) this.pieceCountText.setText("0");
     if (this.rawPpsText) this.rawPpsText.setText("0.00");
@@ -6248,7 +6288,7 @@ class GameScene extends Phaser.Scene {
       this.lKeyPressed = false;
       this.xKeyPressed = false;
       if (justDown(this.restartKey)) {
-        this.scene.start("MenuScene");
+        this.goToMenu();
         return;
       }
       // Let game-over logic (fade/timers/UI) run below, but skip movement/rotation.
@@ -6685,7 +6725,8 @@ class GameScene extends Phaser.Scene {
       if (this.gameOverTimer >= 10) {
         // 10 seconds
         this.saveBestScore();
-        this.scene.start("MenuScene");
+        this.goToMenu();
+        return;
       }
     }
 
@@ -6704,7 +6745,8 @@ class GameScene extends Phaser.Scene {
       }
       // Return to menu after 10s from fail start
       if (this.torikanFailTimer >= 10) {
-        this.scene.start("MenuScene");
+        this.goToMenu();
+        return;
       }
       // Skip further update logic during staged fail
       this.draw();
@@ -6749,7 +6791,7 @@ class GameScene extends Phaser.Scene {
     // Skip ALL game logic if paused or game over
     if (this.isPaused) {
       if (justDown(this.keys.menu)) {
-        this.scene.start("MenuScene");
+        this.goToMenu();
         return;
       }
     }
@@ -7114,6 +7156,11 @@ class GameScene extends Phaser.Scene {
     }
     pieceType = pieceType.toUpperCase();
 
+    // Immediately top up queue so previews stay at 6 after consuming one
+    if (this.nextPieces.length < 6) {
+      this.generateNextPieces();
+    }
+
     // Determine mode and powerup gating (TGM2 Normal only)
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
     const isTgm2Normal =
@@ -7387,15 +7434,11 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  generateNextPieces() {
-    const use7Bag =
-      this.selectedMode === "zen" ||
-      this.selectedMode === "marathon" ||
-      this.selectedMode === "ultra" ||
-      this.selectedMode === "sprint_40" ||
-      this.selectedMode === "sprint_100";
+  generateNextPieces(minCount = 6) {
+    // Default to 7-bag whenever we're not using a custom generator.
+    const use7Bag = !(this.gameMode && this.gameMode.generateNextPiece);
 
-    for (let i = 0; i < 6; i++) {
+    while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
       if (this.gameMode && this.gameMode.generateNextPiece) {
         const piece = this.gameMode.generateNextPiece(this);
@@ -7470,39 +7513,82 @@ class GameScene extends Phaser.Scene {
     return generatedPiece;
   }
 
-  ensureBagQueue() {
-    if (!Array.isArray(this.bagQueue)) {
-      this.bagQueue = [];
+  createShuffledBag() {
+    const bag = ["I", "J", "L", "O", "S", "T", "Z"];
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
     }
-    if (this.bagQueue.length === 0) {
-      this.bagDrawCount = 0;
-      this.bagDebugSeen = new Set();
-      const bag = ["I", "J", "L", "O", "S", "T", "Z"];
-      for (let i = bag.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [bag[i], bag[j]] = [bag[j], bag[i]];
-      }
-      this.bagQueue = bag;
-    }
+    return bag;
   }
 
   generate7BagPiece() {
-    this.ensureBagQueue();
-    let piece = this.bagQueue.shift();
-    this.bagDrawCount++;
+    if (!Array.isArray(this.bagQueue)) {
+      this.bagQueue = [];
+    }
+    // Refill only when a bag is fully consumed to keep bags separate and unique.
+    if (this.bagQueue.length === 0) {
+      this.bagQueue = this.createShuffledBag();
+      this.bagDrawCount = 0;
+      this.bagDebugSeen = new Set();
+    }
     if (!this.bagDebugSeen) this.bagDebugSeen = new Set();
+
+    const piece = this.bagQueue.shift();
+    this.bagDrawCount++;
     this.bagDebugSeen.add(piece);
-    if (this.bagDrawCount % 7 === 0) {
+
+    if (this.bagDrawCount === 7) {
       if (this.bagDebugSeen.size !== 7) {
         console.warn(
           "[7-BAG DEBUG] Incomplete bag detected:",
           Array.from(this.bagDebugSeen),
         );
       }
-      this.bagDebugSeen.clear();
+      this.bagDebugSeen = new Set();
+      this.bagDrawCount = 0;
     }
     if (this.firstPiece) this.firstPiece = false;
     return piece;
+  }
+
+  // Developer harness: logs and returns the first n bags to verify uniqueness.
+  debugLogBags(bagCount = 3) {
+    const results = [];
+    // Preserve live state so gameplay is not affected.
+    const originalQueue = Array.isArray(this.bagQueue) ? [...this.bagQueue] : [];
+    const originalDrawCount = this.bagDrawCount;
+    const originalDebugSeen = this.bagDebugSeen ? new Set(this.bagDebugSeen) : null;
+    const originalFirstPiece = this.firstPiece;
+
+    this.bagQueue = [];
+    this.bagDrawCount = 0;
+    this.bagDebugSeen = new Set();
+    this.firstPiece = originalFirstPiece;
+
+    for (let i = 0; i < bagCount; i++) {
+      const pieces = [];
+      for (let j = 0; j < 7; j++) {
+        pieces.push(this.generate7BagPiece());
+      }
+      const unique = new Set(pieces);
+      results.push({
+        bag: i + 1,
+        pieces: pieces.join(""),
+        size: unique.size,
+        hasDuplicate: unique.size !== 7,
+      });
+    }
+
+    console.table(results);
+
+    // Restore live state.
+    this.bagQueue = originalQueue;
+    this.bagDrawCount = originalDrawCount;
+    this.bagDebugSeen = originalDebugSeen;
+    this.firstPiece = originalFirstPiece;
+
+    return results;
   }
 
   lockPiece() {
@@ -9093,11 +9179,10 @@ class GameScene extends Phaser.Scene {
       // Pausing: record the pause start time
       this.pauseStartTime = Date.now();
     } else {
-      // Resuming: adjust startTime to exclude paused time
       if (this.pauseStartTime && this.startTime) {
         const now = Date.now();
         const pausedDuration = now - this.pauseStartTime;
-        this.startTime += pausedDuration; // Push startTime forward by paused duration
+        this.startTime += pausedDuration;
         this.pauseStartTime = null;
       }
     }
@@ -9108,6 +9193,55 @@ class GameScene extends Phaser.Scene {
         this.currentBGM.pause();
       } else {
         this.currentBGM.resume();
+      }
+    }
+  }
+
+  goToMenu() {
+    // Centralized safe return to menu to avoid stale scenes causing blank screens
+    const mgr = this.scene;
+    const rootMgr = this.game && this.game.scene ? this.game.scene : mgr;
+
+    ["AssetLoaderScene", "LoadingScreenScene", "GameScene"].forEach((key) => {
+      if (rootMgr.isActive(key)) rootMgr.stop(key);
+    });
+
+    // Fully restart MenuScene to ensure it is active/visible
+    let menu = rootMgr.getScene("MenuScene");
+    const hasMenuKey = rootMgr.keys && rootMgr.keys["MenuScene"];
+    if (!menu || !hasMenuKey) {
+      try {
+        const menuInstance = new MenuScene({ key: "MenuScene" });
+        rootMgr.add("MenuScene", menuInstance, true);
+        menu = rootMgr.getScene("MenuScene");
+      } catch (e) {
+        console.error("[goToMenu] failed to add MenuScene", e);
+      }
+    } else if (rootMgr.isActive("MenuScene") || rootMgr.isSleeping("MenuScene")) {
+      rootMgr.stop("MenuScene");
+      menu = null;
+    }
+
+    try {
+      if (!rootMgr.isActive("MenuScene")) {
+        rootMgr.start("MenuScene");
+      }
+    } catch (e) {
+      console.error("[goToMenu] start MenuScene failed", e);
+    }
+    if (rootMgr.isActive("MenuScene")) {
+      rootMgr.bringToTop("MenuScene");
+      rootMgr.resume("MenuScene");
+    }
+    menu = rootMgr.getScene("MenuScene");
+    if (menu && menu.scene) {
+      menu.scene.setVisible(true);
+      menu.scene.wake();
+      if (typeof menu.setupKeyboardControls === "function") {
+        menu.setupKeyboardControls();
+      }
+      if (menu.cameras && menu.cameras.main) {
+        menu.cameras.main.visible = true;
       }
     }
   }
