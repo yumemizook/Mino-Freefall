@@ -236,6 +236,12 @@ class TGM3GradingSystem {
         return this.gradeMapping[effectiveIndex]?.display || base;
     }
 
+    // TAP-style display without COOL/REGRET bonuses
+    getBaseDisplayedGrade() {
+        const gradeIndex = Math.min(this.internalGrade, this.gradeMapping.length - 1);
+        return this.gradeMapping[gradeIndex]?.display || '9';
+    }
+
     getGradePoints() {
         return this.gradePoints;
     }

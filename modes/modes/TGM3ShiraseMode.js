@@ -10,6 +10,7 @@ class TGM3ShiraseMode extends BaseMode {
         this.sectionTimes = {};
         this.sectionGrades = {};
         this.rollReached = false;
+        this.currentTiming = this.getTimingForLevel(0);
     }
 
     getModeConfig() {
@@ -42,6 +43,25 @@ class TGM3ShiraseMode extends BaseMode {
         };
     }
 
+    getTimingForLevel(level) {
+        // Table from tgm3modes.md (frames at 60fps)
+        const frame = (n) => n / 60;
+        if (level < 100) return { are: frame(12), lineAre: frame(8), das: frame(10), lock: frame(18), lineClear: frame(6) };
+        if (level < 200) return { are: frame(12), lineAre: frame(7), das: frame(8), lock: frame(18), lineClear: frame(5) };
+        if (level < 300) return { are: frame(12), lineAre: frame(6), das: frame(8), lock: frame(17), lineClear: frame(4) };
+        if (level < 500) return { are: frame(6), lineAre: frame(6), das: frame(8), lock: frame(15), lineClear: frame(4) };
+        if (level < 600) return { are: frame(6), lineAre: frame(5), das: frame(6), lock: frame(13), lineClear: frame(3) };
+        if (level < 1100) return { are: frame(6), lineAre: frame(5), das: frame(6), lock: frame(12), lineClear: frame(3) };
+        if (level < 1200) return { are: frame(6), lineAre: frame(5), das: frame(6), lock: frame(10), lineClear: frame(3) };
+        if (level < 1300) return { are: frame(6), lineAre: frame(5), das: frame(6), lock: frame(8), lineClear: frame(3) };
+        // 1300 roll
+        return { are: frame(6), lineAre: frame(6), das: frame(6), lock: frame(15), lineClear: frame(6) };
+    }
+
+    updateTiming(level) {
+        this.currentTiming = this.getTimingForLevel(level);
+    }
+
     getName() { return this.modeName; }
     getModeId() { return this.modeId; }
 
@@ -67,6 +87,9 @@ class TGM3ShiraseMode extends BaseMode {
             this.rollReached = true;
         }
 
+        // Refresh timings based on next level
+        this.updateTiming(nextLevel);
+
         return nextLevel;
     }
 
@@ -88,12 +111,12 @@ class TGM3ShiraseMode extends BaseMode {
         }
     }
 
-    getARE() { return this.config.are; }
-    getLineARE() { return this.config.lineAre; }
-    getDAS() { return this.config.das; }
+    getARE() { return this.currentTiming?.are ?? this.config.are; }
+    getLineARE() { return this.currentTiming?.lineAre ?? this.config.lineAre; }
+    getDAS() { return this.currentTiming?.das ?? this.config.das; }
     getARR() { return this.config.arr; }
-    getLockDelay() { return this.config.lockDelay; }
-    getLineClearDelay() { return this.config.lineClearDelay; }
+    getLockDelay() { return this.currentTiming?.lock ?? this.config.lockDelay; }
+    getLineClearDelay() { return this.currentTiming?.lineClear ?? this.config.lineClearDelay; }
 }
 
 // Export

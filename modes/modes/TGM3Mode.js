@@ -177,8 +177,6 @@ class TGM3Mode extends BaseMode {
     // Section COOL/REGRET hooks (timing thresholds to be provided by game scene)
     onSectionCool() {
         this.coolBonus += 100;
-        this.internalLevel += 100;
-        this.updateTimingPhase(this.internalLevel);
         if (this.tgm3Grading) {
             this.tgm3Grading.applySectionCool();
         }
@@ -192,15 +190,25 @@ class TGM3Mode extends BaseMode {
         this.sectionPerformance.push('REGRET');
     }
 
-    evaluateSectionPerformance(sectionIndex, sectionTimeSec) {
-        // No section COOL/REGRET after section 900+
-        if (sectionIndex >= 9) return null;
-        const coolThreshold = this.coolTimes[sectionIndex] ?? null;
-        const regretThreshold = this.regretTimes[sectionIndex] ?? null;
+    evaluateSectionPerformance(sectionIndex, sectionTimeSec, coolTimeSec = null) {
+        // Treat inputs as 1-based section indices, but keep 0-based thresholds (0-8)
+        const lookupIndex = Math.max(0, sectionIndex - 1);
+        if (lookupIndex > 8) return null; // only 9 sections evaluated
+        const coolThreshold = this.coolTimes[lookupIndex] ?? null;
+        const regretThreshold = this.regretTimes[lookupIndex] ?? null;
         // COOL also requires within +2s of previous section time if available
-        const prevTime = sectionIndex > 0 ? this.sectionTimes?.[sectionIndex - 1] : null;
-        const withinPrevious = prevTime == null || sectionTimeSec <= prevTime + 2;
-        if (coolThreshold !== null && sectionTimeSec <= coolThreshold && withinPrevious) {
+        const prevTime = lookupIndex > 0 ? this.sectionTimes?.[lookupIndex - 1] : null;
+        const prevCool = lookupIndex > 0 ? this.sectionCoolTimes?.[lookupIndex - 1] : null;
+        const coolTime = coolTimeSec != null ? coolTimeSec : sectionTimeSec;
+        const baselineForDelta =
+            coolThreshold != null && prevCool != null
+                ? Math.min(coolThreshold, prevCool)
+                : coolThreshold != null
+                    ? coolThreshold
+                    : prevCool;
+        const withinPrevious =
+            baselineForDelta == null ? true : coolTime <= baselineForDelta + 2;
+        if (coolThreshold !== null && coolTime <= coolThreshold && withinPrevious) {
             return 'cool';
         }
         if (regretThreshold !== null && sectionTimeSec > regretThreshold) {
@@ -211,6 +219,7 @@ class TGM3Mode extends BaseMode {
 
     handleLineClear(gameScene, linesCleared, pieceType = null) {
         if (!this.tgm3Grading || !gameScene) return;
+        // Debug: confirm handleLineClear fired and grading exists
         const comboSize = Math.max(1, (gameScene.comboCount ?? -1) + 1);
         const isTetris = linesCleared === 4;
         this.tgm3Grading.awardPoints(linesCleared, comboSize, gameScene.level, isTetris);
