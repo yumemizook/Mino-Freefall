@@ -178,6 +178,175 @@ const SEGA_ROTATIONS = {
   },
 };
 
+// Fallback difficulty colors for mode types (used across scenes)
+const FALLBACK_MODE_TYPE_COLORS = {
+  easy: "#00ff00", // green
+  standard: "#0088ff", // blue
+  master: "#888888", // grey
+  "20g": "#ffff00", // yellow
+  race: "#ff8800", // orange
+  "all clear": "#ff69b4", // pink
+  puzzle: "#8800ff", // purple
+};
+
+const MODE_TYPE_BY_ID = {
+  tgm2_normal: "EASY",
+  tgm3_easy: "EASY",
+  sprint_40: "STANDARD",
+  sprint_100: "STANDARD",
+  ultra: "STANDARD",
+  marathon: "STANDARD",
+  zen: "STANDARD",
+  tgm1: "MASTER",
+  tgm2: "MASTER",
+  tgm_plus: "MASTER",
+  tgm3: "MASTER",
+  tgm4: "MASTER",
+  "20g": "20G",
+  tadeath: "20G",
+  shirase: "20G",
+  master20g: "20G",
+  asuka_easy: "RACE",
+  asuka_normal: "RACE",
+  asuka_hard: "RACE",
+  konoha_easy: "ALL CLEAR",
+  konoha_hard: "ALL CLEAR",
+  tgm3_sakura: "PUZZLE",
+  flashpoint: "PUZZLE",
+};
+
+function getModeTypeNameFromId(modeId) {
+  if (!modeId) return "";
+  const key = modeId.toLowerCase();
+  return MODE_TYPE_BY_ID[key] || "";
+}
+
+// Shared Git commit fetcher (cached)
+async function fetchLastCommitDateCached() {
+  if (window.__lastCommitDatePromise) return window.__lastCommitDatePromise;
+  window.__lastCommitDatePromise = fetch(
+    "https://api.github.com/repos/yumemizook/Mino-Freefall/commits?per_page=1",
+  )
+    .then((res) => res.json())
+    .then((data) => {
+      const isoDate =
+        Array.isArray(data) &&
+        data[0] &&
+        data[0].commit &&
+        data[0].commit.author &&
+        data[0].commit.author.date
+          ? data[0].commit.author.date
+          : null;
+      if (!isoDate) return "Last commit: unknown";
+      const formatted = new Date(isoDate).toLocaleString();
+      return `Last commit: ${formatted}`;
+    })
+    .catch(() => "Last commit: unavailable");
+  return window.__lastCommitDatePromise;
+}
+
+function getModeTypeColor(modeTypeName) {
+  if (!modeTypeName) return "#ffffff";
+  if (typeof getModeManager !== "undefined") {
+    const modeManager = getModeManager();
+    const color =
+      modeManager?.difficultyColors?.[modeTypeName.toLowerCase()] || null;
+    if (color) return color;
+  }
+  return FALLBACK_MODE_TYPE_COLORS[modeTypeName.toLowerCase()] || "#ffffff";
+}
+
+function buildModeInfo(modeId, modeNameHint = "") {
+  const modeLabelName = modeNameHint || modeId || "—";
+  const modeTypeName = getModeTypeNameFromId(modeId);
+  return { modeLabel: `Mode: ${modeLabelName}`, modeTypeName };
+}
+
+function getUserAgentText() {
+  return navigator?.userAgent || "User agent: unknown";
+}
+
+function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
+  const camera = scene.cameras?.main;
+  if (!camera) return;
+  const padding = 12;
+  const width = camera.width;
+  const height = camera.height;
+
+  if (!scene.globalOverlayTexts) {
+    const titleText = scene.add
+      .text(padding, padding, "Mino Freefall - pre-beta", {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(10000);
+
+    const modeText = scene.add
+      .text(width - padding, padding, "", {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "right",
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(10000);
+
+    const commitText = scene.add
+      .text(padding, height - padding, "Last commit: loading...", {
+        fontSize: "14px",
+        fill: "#bbbbbb",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0, 1)
+      .setScrollFactor(0)
+      .setDepth(10000);
+
+    const userAgentText = scene.add
+      .text(width - padding, height - padding, getUserAgentText(), {
+        fontSize: "14px",
+        fill: "#bbbbbb",
+        fontFamily: "Courier New",
+        align: "right",
+      })
+      .setOrigin(1, 1)
+      .setScrollFactor(0)
+      .setDepth(10000);
+
+    scene.globalOverlayTexts = {
+      titleText,
+      modeText,
+      commitText,
+      userAgentText,
+    };
+
+    fetchLastCommitDateCached().then((text) => {
+      if (scene.globalOverlayTexts?.commitText) {
+        scene.globalOverlayTexts.commitText.setText(text);
+      }
+    });
+  }
+
+  const { modeLabel = "Mode: —", modeTypeName = "" } = modeInfo;
+  const modeColor = getModeTypeColor(modeTypeName);
+  scene.globalOverlayTexts.modeText
+    .setText(modeLabel)
+    .setStyle({ fill: modeColor });
+
+  // Reposition on demand
+  scene.globalOverlayTexts.modeText.setPosition(width - padding, padding);
+  scene.globalOverlayTexts.commitText.setPosition(padding, height - padding);
+  scene.globalOverlayTexts.userAgentText.setText(getUserAgentText());
+  scene.globalOverlayTexts.userAgentText.setPosition(
+    width - padding,
+    height - padding,
+  );
+}
+
 // Simple snapshot test for kick tables (SRS and ARS) to help verify tables in other environments.
 function runKickTableSnapshotTest() {
   const expect = {
@@ -1338,9 +1507,8 @@ class Piece {
   }
 
   playGroundSound(scene) {
-    if (scene && scene.sound) {
-      const groundSound = scene.sound.add("ground", { volume: 0.4 });
-      groundSound.play();
+    if (scene && scene.sound && typeof scene.playSfx === "function") {
+      scene.playSfx("ground", 0.4);
     }
   }
 
@@ -1478,8 +1646,8 @@ function getStartingLevel() {
 }
 
 class MenuScene extends Phaser.Scene {
-  constructor(config) {
-    super(config);
+  constructor() {
+    super({ key: "MenuScene" });
 
     // Mode categories and their modes
     this.modeTypes = [
@@ -1649,6 +1817,14 @@ class MenuScene extends Phaser.Scene {
     this.tPieceX = centerX;
     this.tPieceY = centerY - 90;
 
+    this.events.on("wake", () => {
+      this.updateMenuDisplay();
+    });
+
+    this.events.on("resume", () => {
+      this.updateMenuDisplay();
+    });
+
     this.events.once("shutdown", () => {
       if (this.input && this.input.keyboard && this.input.keyboard.removeAllListeners) {
         this.input.keyboard.removeAllListeners();
@@ -1676,6 +1852,8 @@ class MenuScene extends Phaser.Scene {
     this.createMenuUI();
     this.updateMenuDisplay();
     this.setupKeyboardControls();
+
+    createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
   }
 
   createMenuUI() {
@@ -1823,7 +2001,7 @@ class MenuScene extends Phaser.Scene {
       .setInteractive();
 
     this.settingsButton.on("pointerdown", () => {
-      // Settings functionality to be implemented
+      this.scene.start("SettingsScene");
     });
 
     this.settingsButton.on("pointerover", () => {
@@ -1832,10 +2010,6 @@ class MenuScene extends Phaser.Scene {
 
     this.settingsButton.on("pointerout", () => {
       this.settingsButton.setStyle({ fill: "#ffffff" });
-    });
-
-    this.settingsButton.on("pointerdown", () => {
-      this.scene.start("SettingsScene");
     });
 
     // Arrow click handlers
@@ -1920,6 +2094,8 @@ class MenuScene extends Phaser.Scene {
         buttonHeight,
       );
     }
+
+    createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
   }
 
   setupKeyboardControls() {
@@ -1970,6 +2146,12 @@ class MenuScene extends Phaser.Scene {
     this.currentSubmodeIndex =
       (this.currentSubmodeIndex + direction + numSubmodes) % numSubmodes;
     this.updateMenuDisplay();
+  }
+
+  getOverlayModeInfo() {
+    const currentModeType = this.modeTypes[this.currentModeTypeIndex];
+    const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+    return buildModeInfo(currentSubmode.id, currentSubmode.name || currentSubmode.id);
   }
 
   createModeTypeListDisplay() {
@@ -2116,6 +2298,11 @@ class MenuScene extends Phaser.Scene {
     });
   }
 
+  updateLeaderboard(modeId) {
+    // modeId is accepted for compatibility; display uses current selection
+    this.updateLeaderboardDisplay();
+  }
+
   updateMenuDisplay() {
     const currentModeType = this.modeTypes[this.currentModeTypeIndex];
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
@@ -2154,13 +2341,15 @@ class MenuScene extends Phaser.Scene {
       if (this.leaderboardTitle) this.leaderboardTitle.setVisible(true);
       if (this.leaderboardPlaceholder)
         this.leaderboardPlaceholder.setVisible(false);
-      this.updateLeaderboardDisplay();
+      this.updateLeaderboard(currentSubmode.id);
     }
   }
 
   startSelectedMode() {
     const currentModeType = this.modeTypes[this.currentModeTypeIndex];
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
+    const modeId = currentSubmode.id;
+    this.selectedMode = modeId;
 
     // Initialize mode manager and load the selected mode
     if (typeof getModeManager === "undefined") {
@@ -2173,24 +2362,20 @@ class MenuScene extends Phaser.Scene {
     }
 
     const modeManager = getModeManager();
-    const gameMode = modeManager.loadMode(currentSubmode.id);
+    const mode = modeManager.getMode(modeId);
 
-    if (!gameMode) {
-      console.error(`Failed to load mode: ${currentSubmode.id}`);
-      // Fallback to TGM1 mode
-      this.scene.start("AssetLoaderScene", { mode: "tgm1" });
+    if (!mode) {
+      console.error("[MenuScene] Mode not found", { modeId });
+      // Still proceed to asset loader so it can fail gracefully or show message
+      this.scene.start("AssetLoaderScene", { mode: modeId });
       return;
     }
 
-    // Store the mode information for later use
-    this.selectedMode = gameMode;
-    this.selectedModeId = currentSubmode.id;
+    this.selectedModeId = modeId;
 
-    // Start the AssetLoaderScene with the mode information
-    this.scene.start("AssetLoaderScene", {
-      mode: currentSubmode.id,
-      gameMode: gameMode,
-    });
+    // Start the AssetLoaderScene first; it will continue to LoadingScreenScene -> GameScene
+    console.log("[MenuScene] starting AssetLoaderScene", { mode: modeId });
+    this.scene.start("AssetLoaderScene", { mode: modeId, gameMode: mode });
   }
 
   isPuzzleMode(modeId) {
@@ -2518,6 +2703,11 @@ class MenuScene extends Phaser.Scene {
       this.windowHeight = currentWindowHeight;
       this.updateMenuLayout();
     }
+
+    // Keep overlay in sync (e.g., in case of external changes)
+    if (this.globalOverlayTexts) {
+      createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
+    }
   }
 }
 
@@ -2591,11 +2781,20 @@ class SettingsScene extends Phaser.Scene {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
 
+    console.log("[SettingsScene] create start", {
+      key: this.scene.key,
+      visible: this.scene.settings.visible,
+      active: this.scene.settings.active,
+      sleeping: this.scene.settings.isSleeping,
+    });
+
     this.events.once("shutdown", () => {
       if (this.input && this.input.keyboard) {
         this.input.keyboard.off("keydown", this.onKeyDown, this);
       }
     });
+
+    createOrUpdateGlobalOverlay(this, { modeLabel: "Mode: —", modeTypeName: "" });
 
     // Title - moved up 50px
     this.add
@@ -2782,12 +2981,22 @@ class SettingsScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     this.mainVolumeSlider.on("pointerdown", (pointer) => {
+      this.draggingMainVolume = true;
       this.updateMainVolumeFromPointer(pointer);
     });
     this.mainVolumeSlider.on("pointermove", (pointer) => {
       if (pointer.isDown) {
+        this.draggingMainVolume = true;
         this.updateMainVolumeFromPointer(pointer);
       }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingMainVolume && pointer.isDown) {
+        this.updateMainVolumeFromPointer(pointer);
+      }
+    });
+    this.input.on("pointerup", () => {
+      this.draggingMainVolume = false;
     });
 
     // BGM Volume
@@ -2856,12 +3065,22 @@ class SettingsScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     this.bgmVolumeSlider.on("pointerdown", (pointer) => {
+      this.draggingBGMVolume = true;
       this.updateBGMVolumeFromPointer(pointer);
     });
     this.bgmVolumeSlider.on("pointermove", (pointer) => {
       if (pointer.isDown) {
+        this.draggingBGMVolume = true;
         this.updateBGMVolumeFromPointer(pointer);
       }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingBGMVolume && pointer.isDown) {
+        this.updateBGMVolumeFromPointer(pointer);
+      }
+    });
+    this.input.on("pointerup", () => {
+      this.draggingBGMVolume = false;
     });
 
     // SFX Volume
@@ -2930,12 +3149,22 @@ class SettingsScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     this.sfxVolumeSlider.on("pointerdown", (pointer) => {
+      this.draggingSFXVolume = true;
       this.updateSFXVolumeFromPointer(pointer);
     });
     this.sfxVolumeSlider.on("pointermove", (pointer) => {
       if (pointer.isDown) {
+        this.draggingSFXVolume = true;
         this.updateSFXVolumeFromPointer(pointer);
       }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingSFXVolume && pointer.isDown) {
+        this.updateSFXVolumeFromPointer(pointer);
+      }
+    });
+    this.input.on("pointerup", () => {
+      this.draggingSFXVolume = false;
     });
 
     // Reset to defaults button - moved down 70px
@@ -2977,6 +3206,15 @@ class SettingsScene extends Phaser.Scene {
       .setInteractive();
 
     this.backButton.on("pointerdown", () => {
+      const mgr = this.scene && this.scene.manager;
+      const activeScenes =
+        mgr && typeof mgr.getScenes === "function"
+          ? mgr.getScenes(true).map((s) => s.scene.key)
+          : [];
+      console.log("[SettingsScene] Back to Menu clicked", {
+        activeScenes,
+        pointerContext: "backButton",
+      });
       this.scene.start("MenuScene");
     });
 
@@ -3117,82 +3355,37 @@ class SettingsScene extends Phaser.Scene {
     const clampedVolume = Math.max(0, Math.min(1, volume));
     localStorage.setItem("masterVolume", clampedVolume.toString());
     this.updateMainVolumeDisplay();
-
-    // Apply master volume to all sounds
-    if (this.sound) {
-      this.sound.setVolume(clampedVolume);
-    }
+    this.applyEffectiveVolumes();
   }
 
   setBGMVolume(volume) {
     const clampedVolume = Math.max(0, Math.min(1, volume));
     localStorage.setItem("bgmVolume", clampedVolume.toString());
     this.updateBGMVolumeDisplay();
-
-    // Apply volume to BGM sounds
-    if (this.sound) {
-      // Update all BGM sounds
-      const bgmSounds = [
-        "stage1",
-        "stage2",
-        "tgm2_stage1",
-        "tgm2_stage2",
-        "tgm2_stage3",
-        "tgm2_stage4",
-        "credits",
-      ];
-      bgmSounds.forEach((soundKey) => {
-        const sound = this.sound.get(soundKey);
-        if (sound) {
-          const masterVolume = this.getMasterVolume();
-          sound.setVolume(clampedVolume * masterVolume * 0.5); // Base volume 0.5, limited by master
-        }
-      });
-    }
+    this.applyEffectiveVolumes();
   }
 
   setSFXVolume(volume) {
     const clampedVolume = Math.max(0, Math.min(1, volume));
     localStorage.setItem("sfxVolume", clampedVolume.toString());
     this.updateSFXVolumeDisplay();
+    this.applyEffectiveVolumes();
+  }
 
-    // Apply volume to SFX sounds
-    if (this.sound) {
-      // Update all SFX sounds
-      const sfxSounds = [
-        "ready",
-        "go",
-        "gradeup",
-        "complete",
-        "clear",
-        "fall",
-        "sectionchange",
-        "IRS",
-        "ground",
-        "lock",
-        "sound_s",
-        "sound_z",
-        "sound_t",
-        "sound_j",
-        "sound_l",
-        "sound_o",
-        "sound_i",
-      ];
-      sfxSounds.forEach((soundKey) => {
-        const sound = this.sound.get(soundKey);
-        if (sound) {
-          const masterVolume = this.getMasterVolume();
-          sound.setVolume(clampedVolume * masterVolume * 0.7); // Base volume 0.7, limited by master
-        }
-      });
+  applyEffectiveVolumes() {
+    // SettingsScene adjusts the global sound manager (master only)
+    const master = this.getMasterVolume();
+    if (this.sound && typeof this.sound.setVolume === "function") {
+      this.sound.setVolume(master);
     }
   }
 
   updateMainVolumeFromPointer(pointer) {
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300; // Main slider X position
     const sliderWidth = 200;
-    const sliderY = centerY - 20; // Main slider Y position
+    const sliderY = centerY - 120; // Match slider draw position
 
     // Calculate volume based on pointer position
     const relativeX = pointer.x - (sliderX - sliderWidth / 2);
@@ -3203,9 +3396,10 @@ class SettingsScene extends Phaser.Scene {
 
   updateBGMVolumeFromPointer(pointer) {
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300; // BGM slider X position
     const sliderWidth = 200;
-    const sliderY = centerY + 80; // BGM slider Y position (moved down 20px)
+    const sliderY = centerY - 20; // Match slider draw position
 
     // Calculate volume based on pointer position
     const relativeX = pointer.x - (sliderX - sliderWidth / 2);
@@ -3216,9 +3410,10 @@ class SettingsScene extends Phaser.Scene {
 
   updateSFXVolumeFromPointer(pointer) {
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300; // SFX slider X position
     const sliderWidth = 200;
-    const sliderY = centerY + 200; // SFX slider Y position (moved down 20px)
+    const sliderY = centerY + 100; // Match slider draw position
 
     // Calculate volume based on pointer position
     const relativeX = pointer.x - (sliderX - sliderWidth / 2);
@@ -3230,9 +3425,10 @@ class SettingsScene extends Phaser.Scene {
   updateMainVolumeDisplay() {
     const volume = this.getMasterVolume();
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300;
     const sliderWidth = 200;
-    const sliderY = centerY - 20;
+    const sliderY = centerY - 120;
 
     // Update slider fill
     if (this.mainVolumeSliderFill) {
@@ -3266,9 +3462,10 @@ class SettingsScene extends Phaser.Scene {
   updateBGMVolumeDisplay() {
     const volume = this.getBGMVolume();
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300;
     const sliderWidth = 200;
-    const sliderY = centerY + 80;
+    const sliderY = centerY - 20;
 
     // Update slider fill
     if (this.bgmVolumeSliderFill) {
@@ -3302,9 +3499,10 @@ class SettingsScene extends Phaser.Scene {
   updateSFXVolumeDisplay() {
     const volume = this.getSFXVolume();
     const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
     const sliderX = centerX + 300;
     const sliderWidth = 200;
-    const sliderY = centerY + 200;
+    const sliderY = centerY + 100;
 
     // Update slider fill
     if (this.sfxVolumeSliderFill) {
@@ -3345,10 +3543,12 @@ class SettingsScene extends Phaser.Scene {
       const currentKey = this.getCurrentKeybind(action);
       this.keybindTexts[action].setText(currentKey);
     });
-    // Reset volume displays
+    // updateVolumeDisplay() {
     this.updateMainVolumeDisplay();
     this.updateBGMVolumeDisplay();
     this.updateSFXVolumeDisplay();
+
+    this.applyEffectiveVolumes();
   }
 
   resetHighScores() {
@@ -3668,11 +3868,12 @@ class AssetLoaderScene extends Phaser.Scene {
   init(data) {
     this.selectedMode = data.mode || "Mode 1";
     this.gameMode = data.gameMode || null; // Store gameMode from data
-
-
+    this.gameModeName = data.gameModeName || null; // Store gameModeName from data
   }
 
   preload() {
+    console.log("[AssetLoaderScene] preload start", { mode: this.selectedMode });
+
     // Show loading text
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
@@ -3684,6 +3885,11 @@ class AssetLoaderScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+
+    createOrUpdateGlobalOverlay(
+      this,
+      buildModeInfo(this.selectedMode, this.gameMode?.getName?.() || this.selectedMode),
+    );
 
     const ensureImageTexture = (key, url) => {
       if (this.textures.exists(key)) {
@@ -3716,6 +3922,7 @@ class AssetLoaderScene extends Phaser.Scene {
       ];
       bgmLoads.forEach(([key, path]) => {
         if (!this.cache.audio.exists(key)) {
+          console.log("[AssetLoaderScene] queue BGM", { key, path });
           this.load.audio(key, path);
         }
       });
@@ -3724,79 +3931,45 @@ class AssetLoaderScene extends Phaser.Scene {
     }
 
     // Load all sound effects
-    if (!this.cache.audio.exists("ready")) {
-      this.load.audio("ready", "sfx/ready.wav");
-    }
-    if (!this.cache.audio.exists("go")) {
-      this.load.audio("go", "sfx/go.wav");
-    }
-    if (!this.cache.audio.exists("gradeup")) {
-      this.load.audio("gradeup", "sfx/gradeup.wav");
-    }
-    if (!this.cache.audio.exists("complete")) {
-      this.load.audio("complete", "sfx/complete.wav");
-    }
-    if (!this.cache.audio.exists("clear")) {
-      this.load.audio("clear", "sfx/clear.wav");
-    }
-    if (!this.cache.audio.exists("fall")) {
-      this.load.audio("fall", "sfx/fall.wav");
-    }
-    if (!this.cache.audio.exists("sectionchange")) {
-      this.load.audio("sectionchange", "sfx/sectionchange.wav");
-    }
+    const sfxLoads = [
+      ["ready", "sfx/ready.wav"],
+      ["go", "sfx/go.wav"],
+      ["gradeup", "sfx/gradeup.wav"],
+      ["complete", "sfx/complete.wav"],
+      ["clear", "sfx/clear.wav"],
+      ["fall", "sfx/fall.wav"],
+      ["sectionchange", "sfx/sectionchange.wav"],
+      ["IRS", "sfx/IRS.wav"],
+      ["ground", "sfx/ground.wav"],
+      ["lock", "sfx/lock.wav"],
+      ["sound_s", "sfx/s.wav"],
+      ["sound_z", "sfx/z.wav"],
+      ["sound_t", "sfx/t.wav"],
+      ["sound_j", "sfx/j.wav"],
+      ["sound_l", "sfx/l.wav"],
+      ["sound_o", "sfx/o.wav"],
+      ["sound_i", "sfx/i.wav"],
+      ["IHS", "sfx/IHS.wav"],
+      ["bell", "sfx/bell.wav"],
+      ["applause", "sfx/applause.wav"],
+      ["combo", "sfx/combo.wav"],
+      ["jewelclear", "sfx/jewelclear.wav"],
+      ["firework", "sfx/firework.wav"],
+    ];
+    sfxLoads.forEach(([key, path]) => {
+      if (!this.cache.audio.exists(key)) {
+        console.log("[AssetLoaderScene] queue SFX", { key, path });
+        this.load.audio(key, path);
+      }
+    });
 
-    if (!this.cache.audio.exists("IRS")) {
-      this.load.audio("IRS", "sfx/IRS.wav");
-    }
-    if (!this.cache.audio.exists("ground")) {
-      this.load.audio("ground", "sfx/ground.wav");
-    }
-    if (!this.cache.audio.exists("lock")) {
-      this.load.audio("lock", "sfx/lock.wav");
-    }
-    if (!this.cache.audio.exists("sound_s")) {
-      this.load.audio("sound_s", "sfx/s.wav");
-    }
-    if (!this.cache.audio.exists("sound_z")) {
-      this.load.audio("sound_z", "sfx/z.wav");
-    }
-    if (!this.cache.audio.exists("sound_t")) {
-      this.load.audio("sound_t", "sfx/t.wav");
-    }
-    if (!this.cache.audio.exists("sound_j")) {
-      this.load.audio("sound_j", "sfx/j.wav");
-    }
-    if (!this.cache.audio.exists("sound_l")) {
-      this.load.audio("sound_l", "sfx/l.wav");
-    }
-    if (!this.cache.audio.exists("sound_o")) {
-      this.load.audio("sound_o", "sfx/o.wav");
-    }
-    if (!this.cache.audio.exists("sound_i")) {
-      this.load.audio("sound_i", "sfx/i.wav");
-    }
-    if (!this.cache.audio.exists("IHS")) {
-      this.load.audio("IHS", "sfx/IHS.wav");
-    }
-    if (!this.cache.audio.exists("bell")) {
-      this.load.audio("bell", "sfx/bell.wav");
-    }
-    if (!this.cache.audio.exists("applause")) {
-      this.load.audio("applause", "sfx/applause.wav");
-    }
-    if (!this.cache.audio.exists("combo")) {
-      this.load.audio("combo", "sfx/combo.wav");
-    }
-    if (!this.cache.audio.exists("jewelclear")) {
-      this.load.audio("jewelclear", "sfx/jewelclear.wav");
-    }
-    if (!this.cache.audio.exists("firework")) {
-      this.load.audio("firework", "sfx/firework.wav");
-    }
+    this.load.once("complete", () => {
+      console.log("[AssetLoaderScene] load complete");
+    });
   }
 
   create() {
+    console.log("[AssetLoaderScene] create", { mode: this.selectedMode });
     // Remove loading text and start game scene
     if (this.loadingText) {
       this.loadingText.destroy();
@@ -3823,6 +3996,11 @@ class LoadingScreenScene extends Phaser.Scene {
   create() {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
+
+    createOrUpdateGlobalOverlay(
+      this,
+      buildModeInfo(this.selectedMode, this.gameMode?.getName?.() || this.selectedMode),
+    );
 
     // Show loading text briefly, then proceed directly to GameScene
     const loading = this.add
@@ -4301,6 +4479,18 @@ class GameScene extends Phaser.Scene {
     return 0xffffff; // Default white
   }
 
+  getOverlayModeInfo() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeNameHint =
+      (this.gameMode && typeof this.gameMode.getName === "function"
+        ? this.gameMode.getName()
+        : this.selectedMode) || modeId;
+    return buildModeInfo(modeId, modeNameHint);
+  }
+
   formatTimeValue(seconds) {
     if (seconds === null || seconds === undefined) return "--:--.--";
     const minutes = Math.floor(seconds / 60);
@@ -4569,6 +4759,16 @@ class GameScene extends Phaser.Scene {
     // Apply mode configuration to game settings
     this.applyModeConfiguration();
     this.applyInitialGradeFromMode();
+
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeNameHint =
+      (this.gameMode && typeof this.gameMode.getName === "function"
+        ? this.gameMode.getName()
+        : this.selectedMode) || modeId;
+    createOrUpdateGlobalOverlay(this, buildModeInfo(modeId, modeNameHint));
   }
 
   applyInitialGradeFromMode() {
@@ -5160,6 +5360,10 @@ class GameScene extends Phaser.Scene {
     // Store window dimensions for UI positioning
     this.windowWidth = windowWidth;
     this.windowHeight = windowHeight;
+
+    if (this.globalOverlayTexts) {
+      createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
+    }
   }
 
   setupUI() {
@@ -5719,7 +5923,7 @@ class GameScene extends Phaser.Scene {
     ); // Height reduced by 1px, width expanded 1px left
   }
 
-   create() {
+  create() {
     // Initialize game elements here (spawn deferred until after READY/GO)
     this.gameGroup = this.add.group();
     // Overlay group for transient UI (e.g., READY/GO) that must survive draw() clears
@@ -5798,6 +6002,19 @@ class GameScene extends Phaser.Scene {
     // then force the next bag to be freshly shuffled when generation continues.
     this.nextPieces = [...this.bagQueue];
     this.bagQueue = [];
+    // Enforce first-piece restriction on the initial queue (before READY/GO preview)
+    if (this.firstPiece && this.nextPieces.length > 0) {
+      const modeId =
+        (this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode) || "";
+      const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+      this.nextPieces[0] = this.applyFirstPieceRestriction(
+        this.nextPieces[0],
+        modeIdLower,
+        true,
+      );
+    }
 
     // Reset stack/credits/fade systems
     this.invisibleStackActive = false;
@@ -5988,6 +6205,7 @@ class GameScene extends Phaser.Scene {
     this.bgmStarted = false;
     // Ensure any leftover BGM from previous scene is stopped
     this.stopCurrentBGM();
+    this.applyEffectiveVolumesScene();
 
     // Prepare next queue (but do not spawn yet)
     if (this.nextPieces.length < 6) {
@@ -5997,12 +6215,17 @@ class GameScene extends Phaser.Scene {
     // Show READY/GO; spawn will occur after GO
     this.loadingPhase = false;
     this.showReadyGo();
+
+    createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
   }
 
   initializeBGM() {
     try {
-      const addTrack = (key, opts = {}) =>
-        this.sound.add(key, { loop: false, volume: 0.5, ...opts });
+      const addTrack = (key, opts = {}) => {
+        const base = 0.5;
+        const vol = base * this.getMasterVolumeSetting() * this.getBGMVolumeSetting();
+        return this.sound.add(key, { loop: false, volume: vol, ...opts });
+      };
       this.bgmTracks = {
         tm1_1: addTrack("tm1_1", { loop: true }),
         tm1_2: addTrack("tm1_2", { loop: true }),
@@ -6033,6 +6256,59 @@ class GameScene extends Phaser.Scene {
   updateBGM() {
     if (!this.bgmEnabled || !this.bgmStarted) return;
     this.updateModeBGM();
+  }
+
+  getMasterVolumeSetting() {
+    const v = localStorage.getItem("masterVolume");
+    return v ? parseFloat(v) : 1.0;
+  }
+
+  getBGMVolumeSetting() {
+    const v = localStorage.getItem("bgmVolume");
+    return v ? parseFloat(v) : 1.0;
+  }
+
+  getSFXVolumeSetting() {
+    const v = localStorage.getItem("sfxVolume");
+    return v ? parseFloat(v) : 1.0;
+  }
+
+  getSfxVolumeFactor(base = 1) {
+    return base * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
+  }
+
+  playSfx(key, baseVolume = 1) {
+    const vol = this.getSfxVolumeFactor(baseVolume);
+    try {
+      return this.sound?.add(key, { volume: vol })?.play();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  applyEffectiveVolumesScene() {
+    const master = this.getMasterVolumeSetting();
+    const bgm = this.getBGMVolumeSetting();
+    const sfx = this.getSFXVolumeSetting();
+
+    if (this.sound && typeof this.sound.setVolume === "function") {
+      // Manager volume applies master only; per-sound uses sfx/base
+      this.sound.setVolume(master);
+    }
+
+    if (this.bgmTracks) {
+      Object.entries(this.bgmTracks).forEach(([key, track]) => {
+        if (track && track.setVolume) {
+          const base = 0.5; // consistent base
+          track.setVolume(base * master * bgm);
+        }
+      });
+    }
+
+    if (this.currentBGM && this.currentBGM.setVolume) {
+      const base = 0.5;
+      this.currentBGM.setVolume(base * master * bgm);
+    }
   }
 
   getBgmSchedule(modeId) {
@@ -6198,7 +6474,8 @@ class GameScene extends Phaser.Scene {
     this.overlayGroup.add(readyText);
     readyText.setDepth(9999);
 
-    this.sound?.add("ready", { volume: 0.7 })?.play();
+    const sfxReadyVol = 0.7 * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
+    this.sound?.add("ready", { volume: sfxReadyVol })?.play();
 
     this.time.delayedCall(1000, () => {
       readyText.destroy();
@@ -6215,9 +6492,10 @@ class GameScene extends Phaser.Scene {
       this.overlayGroup.add(goText);
       goText.setDepth(9999);
 
-      this.sound?.add("go", { volume: 0.7 })?.play();
+      const sfxGoVol = 0.7 * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
+      this.sound?.add("go", { volume: sfxGoVol })?.play();
 
-      this.time.delayedCall(1000, () => {
+      this.time.delayedCall(500, () => {
         goText.destroy();
         this.readyGoPhase = false;
         this.gameStarted = true;
@@ -7363,17 +7641,7 @@ class GameScene extends Phaser.Scene {
         nextSoundType = "I";
       }
       const nextPieceSoundKey = `sound_${nextSoundType.toLowerCase()}`;
-      if (this.sound && this.sound.get(nextPieceSoundKey)) {
-        const pieceSound = this.sound.add(nextPieceSoundKey, { volume: 0.4 });
-        pieceSound.play();
-      } else if (this.sound) {
-        try {
-          const pieceSound = this.sound.add(nextPieceSoundKey, { volume: 0.4 });
-          pieceSound.play();
-        } catch (error) {
-          // Sound file not found, continue silently
-        }
-      }
+      this.playSfx(nextPieceSoundKey, 0.4);
     }
 
     if (
@@ -7533,8 +7801,7 @@ class GameScene extends Phaser.Scene {
     // Log IRS+IHS combination
     // Play IRS sound if piece was pre-rotated
     if (wasPreRotated) {
-      const irsSound = this.sound.add("IRS", { volume: 0.5 });
-      irsSound.play();
+      this.playSfx("IRS", 0.5);
     }
 
     // Reset finesse tracking for the freshly active piece
@@ -7791,8 +8058,7 @@ class GameScene extends Phaser.Scene {
 
   lockPiece() {
     // Play lock sound
-    const lockSound = this.sound.add("lock", { volume: 0.6 });
-    lockSound.play();
+    this.playSfx("lock", 0.6);
 
     // Track pieces placed for PPS calculation
     this.totalPiecesPlaced++;
@@ -7958,8 +8224,7 @@ class GameScene extends Phaser.Scene {
       this.areHoldPressed = false;
 
       // Play clear sound
-      const clearSound = this.sound.add("clear", { volume: 0.7 });
-      clearSound.play();
+      this.playSfx("clear", 0.7);
     } else {
       // Start normal ARE (use mode timing if available)
       const normalARE =
@@ -8879,8 +9144,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Play section change sound
-    const sectionChangeSound = this.sound.add("sectionchange", { volume: 0.6 });
-    sectionChangeSound.play();
+    this.playSfx("sectionchange", 0.6);
 
     // Section completion messages removed - uncomment if needed for other modes
     /*
@@ -9105,10 +9369,21 @@ class GameScene extends Phaser.Scene {
     else if (score >= 400) newGrade = "8";
     // Keep grade 9 for scores below 400 points
 
+    const previousGrade = this.grade;
+    const previousDisplayedGrade =
+      this.gradeText && typeof this.gradeText.text === "string"
+        ? this.gradeText.text.trim()
+        : previousGrade;
+    const previousDisplayedValue = this.getGradeValue(previousDisplayedGrade);
+    const newGradeValue = this.getGradeValue(newGrade);
+    const previousGradeValue = this.getGradeValue(previousGrade);
+
     // Update grade if it improved (only upgrade, don't downgrade)
-    if (this.getGradeValue(newGrade) > this.getGradeValue(this.grade)) {
+    if (newGradeValue > previousGradeValue) {
       this.grade = newGrade;
-      this.animateGradeUpgrade();
+      if (newGradeValue > previousDisplayedValue) {
+        this.animateGradeUpgrade();
+      }
       this.gradeHistory.push({
         grade: newGrade,
         level: this.level,
@@ -9202,8 +9477,7 @@ class GameScene extends Phaser.Scene {
 
   animateGradeUpgrade() {
     // Play grade up sound
-    const gradeUpSound = this.sound.add("gradeup", { volume: 0.6 });
-    gradeUpSound.play();
+    this.playSfx("gradeup", 0.6);
 
     // Simple flash animation (only if grade text exists)
     if (this.gradeText) {
@@ -9442,6 +9716,20 @@ class GameScene extends Phaser.Scene {
     const mgr = this.scene;
     const rootMgr = this.game && this.game.scene ? this.game.scene : mgr;
 
+    try {
+      const activeBefore = rootMgr && typeof rootMgr.getScenes === "function"
+        ? rootMgr.getScenes(true).map((s) => s.scene.key)
+        : [];
+      console.log("[goToMenu] invoked", {
+        activeScenes: activeBefore,
+        hasMenuKey: rootMgr?.keys?.["MenuScene"] ?? false,
+        isMenuActive: rootMgr?.isActive?.("MenuScene"),
+        isMenuSleeping: rootMgr?.isSleeping?.("MenuScene"),
+      });
+    } catch (e) {
+      console.warn("[goToMenu] failed to inspect scene state", e);
+    }
+
     ["AssetLoaderScene", "LoadingScreenScene", "GameScene"].forEach((key) => {
       if (rootMgr.isActive(key)) rootMgr.stop(key);
     });
@@ -9483,6 +9771,13 @@ class GameScene extends Phaser.Scene {
       if (menu.cameras && menu.cameras.main) {
         menu.cameras.main.visible = true;
       }
+      console.log("[goToMenu] MenuScene ready", {
+        sceneKey: menu.scene.key,
+        visible: menu.scene.settings.visible,
+        asleep: menu.scene.settings.isSleeping,
+        active: menu.scene.settings.active,
+        cameraVisible: menu.cameras?.main?.visible,
+      });
     }
   }
 
@@ -9535,8 +9830,7 @@ class GameScene extends Phaser.Scene {
 
     // Play completion sound if GM grade achieved
     if (this.grade === "GM") {
-      const completeSound = this.sound.add("complete", { volume: 0.8 });
-      completeSound.play();
+      this.playSfx("complete", 0.8);
     }
 
     // Load credits BGM if available
