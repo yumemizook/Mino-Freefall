@@ -259,7 +259,7 @@ function getModeTypeColor(modeTypeName) {
 function buildModeInfo(modeId, modeNameHint = "") {
   const modeLabelName = modeNameHint || modeId || "—";
   const modeTypeName = getModeTypeNameFromId(modeId);
-  return { modeLabel: `Mode: ${modeLabelName}`, modeTypeName };
+  return { modeLabel: modeLabelName, modeTypeName };
 }
 
 function getUserAgentText() {
@@ -331,11 +331,16 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
     });
   }
 
-  const { modeLabel = "Mode: —", modeTypeName = "" } = modeInfo;
+  const { modeLabel = "", modeTypeName = "", showMode = true } = modeInfo;
   const modeColor = getModeTypeColor(modeTypeName);
-  scene.globalOverlayTexts.modeText
-    .setText(modeLabel)
-    .setStyle({ fill: modeColor });
+  scene.globalOverlayTexts.modeText.setVisible(showMode);
+  if (showMode) {
+    scene.globalOverlayTexts.modeText.setText(modeLabel || "");
+    scene.globalOverlayTexts.modeText.setColor(modeColor);
+    scene.globalOverlayTexts.modeText.setStyle({ fontStyle: "bold" });
+  } else {
+    scene.globalOverlayTexts.modeText.setText("");
+  }
 
   // Reposition on demand
   scene.globalOverlayTexts.modeText.setPosition(width - padding, padding);
@@ -1853,7 +1858,7 @@ class MenuScene extends Phaser.Scene {
     this.updateMenuDisplay();
     this.setupKeyboardControls();
 
-    createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
+    createOrUpdateGlobalOverlay(this, { ...this.getOverlayModeInfo(), showMode: false });
   }
 
   createMenuUI() {
@@ -2342,7 +2347,9 @@ class MenuScene extends Phaser.Scene {
       if (this.leaderboardPlaceholder)
         this.leaderboardPlaceholder.setVisible(false);
       this.updateLeaderboard(currentSubmode.id);
-    }
+
+    createOrUpdateGlobalOverlay(this, { ...this.getOverlayModeInfo(), showMode: false });
+  }
   }
 
   startSelectedMode() {
@@ -2706,7 +2713,7 @@ class MenuScene extends Phaser.Scene {
 
     // Keep overlay in sync (e.g., in case of external changes)
     if (this.globalOverlayTexts) {
-      createOrUpdateGlobalOverlay(this, this.getOverlayModeInfo());
+      createOrUpdateGlobalOverlay(this, { ...this.getOverlayModeInfo(), showMode: false });
     }
   }
 }
