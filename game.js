@@ -263,7 +263,25 @@ function buildModeInfo(modeId, modeNameHint = "") {
 }
 
 function getUserAgentText() {
-  return navigator?.userAgent || "User agent: unknown";
+  const ua = navigator?.userAgent || "";
+  const uaData = navigator?.userAgentData;
+
+  const detailedFromUA = () => {
+    const match = ua.match(/\(([^)]+)\)/);
+    if (match && match[1]) {
+      const parts = match[1].split(";").map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 0) return parts.join("; ");
+    }
+    return null;
+  };
+
+  const platform =
+    detailedFromUA() ||
+    uaData?.platform ||
+    navigator?.platform ||
+    ua ||
+    "unknown";
+  return `OS: ${platform}`;
 }
 
 function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
