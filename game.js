@@ -2817,6 +2817,38 @@ class SettingsScene extends Phaser.Scene {
 
     // ARS lock reset mode toggle
     this.arsResetModeText = null;
+
+    // Timing sliders (frames)
+    this.dasLabel = null;
+    this.dasText = null;
+    this.dasSlider = null;
+    this.dasSliderFill = null;
+    this.dasSliderKnob = null;
+    this.draggingDAS = false;
+    this.draggingARR = false;
+    this.draggingARE = false;
+    this.draggingLineARE = false;
+    this.draggingSDF = false;
+    this.arrLabel = null;
+    this.arrText = null;
+    this.arrSlider = null;
+    this.arrSliderFill = null;
+    this.arrSliderKnob = null;
+    this.areLabel = null;
+    this.areText = null;
+    this.areSlider = null;
+    this.areSliderFill = null;
+    this.areSliderKnob = null;
+    this.lineAreLabel = null;
+    this.lineAreText = null;
+    this.lineAreSlider = null;
+    this.lineAreSliderFill = null;
+    this.lineAreSliderKnob = null;
+    this.sdfLabel = null;
+    this.sdfText = null;
+    this.sdfSlider = null;
+    this.sdfSliderFill = null;
+    this.sdfSliderKnob = null;
   }
 
   preload() {
@@ -3223,7 +3255,392 @@ class SettingsScene extends Phaser.Scene {
     });
     this.input.on("pointerup", () => {
       this.draggingSFXVolume = false;
+      this.draggingDAS = false;
+      this.draggingARR = false;
+      this.draggingARE = false;
+      this.draggingLineARE = false;
+      this.draggingSDF = false;
     });
+
+    // Timing sliders (right column, aligned with master volume)
+    const timingX = volumeX + 240; // move timing sliders further right of audio sliders
+    const timingY = volumeY - 50; // so DAS slider center lines up with master volume slider
+    const timingSliderWidth = 200;
+    const timingSliderHeight = 10;
+
+    // DAS slider
+    this.dasLabel = this.add
+      .text(timingX, timingY, "DAS (frames)", {
+        fontSize: "20px",
+        fill: "#ffff00",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+    const dasValue = this.getStoredTiming("timing_das_frames", 10);
+    const dasSliderY = timingY + 30;
+
+    this.dasSlider = this.add.graphics();
+    this.dasSlider.fillStyle(0x333333);
+    this.dasSlider.fillRect(
+      timingX - timingSliderWidth / 2,
+      dasSliderY - timingSliderHeight / 2,
+      timingSliderWidth,
+      timingSliderHeight,
+    );
+
+    this.dasSliderFill = this.add.graphics();
+    this.dasSliderFill.fillStyle(0x00ff00);
+    this.dasSliderFill.fillRect(
+      timingX - timingSliderWidth / 2,
+      dasSliderY - timingSliderHeight / 2,
+      timingSliderWidth * this.timingToPct(dasValue, 1, 20),
+      timingSliderHeight,
+    );
+
+    this.dasSliderKnob = this.add.graphics();
+    this.dasSliderKnob.fillStyle(0xffffff);
+    this.dasSliderKnob.fillCircle(
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(dasValue, 1, 20),
+      dasSliderY,
+      8,
+    );
+
+    this.dasText = this.add
+      .text(timingX, dasSliderY + 25, `${dasValue.toFixed(1)}f`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.dasSlider.setInteractive(
+      new Phaser.Geom.Rectangle(
+        timingX - timingSliderWidth / 2,
+        dasSliderY - timingSliderHeight / 2,
+        timingSliderWidth,
+        timingSliderHeight,
+      ),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.dasSlider.on("pointerdown", (pointer) => {
+      this.draggingDAS = true;
+      this.updateDASFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: dasSliderY });
+    });
+    this.dasSlider.on("pointermove", (pointer) => {
+      if (pointer.isDown) {
+        this.draggingDAS = true;
+        this.updateDASFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: dasSliderY });
+      }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingDAS && pointer.isDown) {
+        this.updateDASFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: dasSliderY });
+      }
+    });
+    // Initial visual sync for DAS
+    this.updateDASDisplay(dasValue, { x: timingX, width: timingSliderWidth, y: dasSliderY });
+
+    // ARR slider
+    const arrValue = this.getStoredTiming("timing_arr_frames", 2);
+    const arrSliderY = dasSliderY + 70;
+    this.arrLabel = this.add
+      .text(timingX, arrSliderY - 30, "ARR (frames)", {
+        fontSize: "20px",
+        fill: "#ffff00",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.arrSlider = this.add.graphics();
+    this.arrSlider.fillStyle(0x333333);
+    this.arrSlider.fillRect(
+      timingX - timingSliderWidth / 2,
+      arrSliderY - timingSliderHeight / 2,
+      timingSliderWidth,
+      timingSliderHeight,
+    );
+
+    this.arrSliderFill = this.add.graphics();
+    this.arrSliderFill.fillStyle(0x00ff00);
+    this.arrSliderFill.fillRect(
+      timingX - timingSliderWidth / 2,
+      arrSliderY - timingSliderHeight / 2,
+      timingSliderWidth * this.timingToPct(arrValue, 0, 5),
+      timingSliderHeight,
+    );
+
+    this.arrSliderKnob = this.add.graphics();
+    this.arrSliderKnob.fillStyle(0xffffff);
+    this.arrSliderKnob.fillCircle(
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(arrValue, 0, 5),
+      arrSliderY,
+      8,
+    );
+
+    this.arrText = this.add
+      .text(timingX, arrSliderY + 25, `${arrValue.toFixed(1)}f`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.arrSlider.setInteractive(
+      new Phaser.Geom.Rectangle(
+        timingX - timingSliderWidth / 2,
+        arrSliderY - timingSliderHeight / 2,
+        timingSliderWidth,
+        timingSliderHeight,
+      ),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.arrSlider.on("pointerdown", (pointer) => {
+      this.draggingARR = true;
+      this.updateARRFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: arrSliderY });
+    });
+    this.arrSlider.on("pointermove", (pointer) => {
+      if (pointer.isDown) {
+        this.draggingARR = true;
+        this.updateARRFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: arrSliderY });
+      }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingARR && pointer.isDown) {
+        this.updateARRFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: arrSliderY });
+      }
+    });
+    this.updateARRDisplay(arrValue, { x: timingX, width: timingSliderWidth, y: arrSliderY });
+
+    // ARE slider
+    const areValue = this.getStoredTiming("timing_are_frames", 7);
+    const areSliderY = arrSliderY + 70;
+    this.areLabel = this.add
+      .text(timingX, areSliderY - 30, "ARE (frames)", {
+        fontSize: "20px",
+        fill: "#ffff00",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.areSlider = this.add.graphics();
+    this.areSlider.fillStyle(0x333333);
+    this.areSlider.fillRect(
+      timingX - timingSliderWidth / 2,
+      areSliderY - timingSliderHeight / 2,
+      timingSliderWidth,
+      timingSliderHeight,
+    );
+
+    this.areSliderFill = this.add.graphics();
+    this.areSliderFill.fillStyle(0x00ff00);
+    this.areSliderFill.fillRect(
+      timingX - timingSliderWidth / 2,
+      areSliderY - timingSliderHeight / 2,
+      timingSliderWidth * this.timingToPct(areValue, 0, 60),
+      timingSliderHeight,
+    );
+
+    this.areSliderKnob = this.add.graphics();
+    this.areSliderKnob.fillStyle(0xffffff);
+    this.areSliderKnob.fillCircle(
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(areValue, 0, 60),
+      areSliderY,
+      8,
+    );
+
+    this.areText = this.add
+      .text(timingX, areSliderY + 25, `${areValue.toFixed(0)}f`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.areSlider.setInteractive(
+      new Phaser.Geom.Rectangle(
+        timingX - timingSliderWidth / 2,
+        areSliderY - timingSliderHeight / 2,
+        timingSliderWidth,
+        timingSliderHeight,
+      ),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.areSlider.on("pointerdown", (pointer) => {
+      this.draggingARE = true;
+      this.updateAREFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: areSliderY });
+    });
+    this.areSlider.on("pointermove", (pointer) => {
+      if (pointer.isDown) {
+        this.draggingARE = true;
+        this.updateAREFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: areSliderY });
+      }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingARE && pointer.isDown) {
+        this.updateAREFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: areSliderY });
+      }
+    });
+    this.updateAREDisplay(areValue, { x: timingX, width: timingSliderWidth, y: areSliderY });
+
+    // Line ARE / Line Clear Delay slider
+    const lineAreValue = this.getStoredTiming("timing_line_are_frames", 7);
+    const lineAreSliderY = areSliderY + 70;
+    this.lineAreLabel = this.add
+      .text(timingX, lineAreSliderY - 30, "Line ARE / LCD (frames)", {
+        fontSize: "20px",
+        fill: "#ffff00",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.lineAreSlider = this.add.graphics();
+    this.lineAreSlider.fillStyle(0x333333);
+    this.lineAreSlider.fillRect(
+      timingX - timingSliderWidth / 2,
+      lineAreSliderY - timingSliderHeight / 2,
+      timingSliderWidth,
+      timingSliderHeight,
+    );
+
+    this.lineAreSliderFill = this.add.graphics();
+    this.lineAreSliderFill.fillStyle(0x00ff00);
+    this.lineAreSliderFill.fillRect(
+      timingX - timingSliderWidth / 2,
+      lineAreSliderY - timingSliderHeight / 2,
+      timingSliderWidth * this.timingToPct(lineAreValue, 0, 60),
+      timingSliderHeight,
+    );
+
+    this.lineAreSliderKnob = this.add.graphics();
+    this.lineAreSliderKnob.fillStyle(0xffffff);
+    this.lineAreSliderKnob.fillCircle(
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(lineAreValue, 0, 60),
+      lineAreSliderY,
+      8,
+    );
+
+    this.lineAreText = this.add
+      .text(timingX, lineAreSliderY + 25, `${lineAreValue.toFixed(0)}f`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.lineAreSlider.setInteractive(
+      new Phaser.Geom.Rectangle(
+        timingX - timingSliderWidth / 2,
+        lineAreSliderY - timingSliderHeight / 2,
+        timingSliderWidth,
+        timingSliderHeight,
+      ),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.lineAreSlider.on("pointerdown", (pointer) => {
+      this.draggingLineARE = true;
+      this.updateLineAREFromPointer(pointer, {
+        x: timingX,
+        width: timingSliderWidth,
+        y: lineAreSliderY,
+      });
+    });
+    this.lineAreSlider.on("pointermove", (pointer) => {
+      if (pointer.isDown) {
+        this.draggingLineARE = true;
+        this.updateLineAREFromPointer(pointer, {
+          x: timingX,
+          width: timingSliderWidth,
+          y: lineAreSliderY,
+        });
+      }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingLineARE && pointer.isDown) {
+        this.updateLineAREFromPointer(pointer, {
+          x: timingX,
+          width: timingSliderWidth,
+          y: lineAreSliderY,
+        });
+      }
+    });
+    this.updateLineAREDisplay(lineAreValue, {
+      x: timingX,
+      width: timingSliderWidth,
+      y: lineAreSliderY,
+    });
+
+    // SDF slider (5x–40x and 20G)
+    const sdfDefault = 6; // 6x default
+    const sdfValue = this.getStoredTiming("timing_sdf_mult", sdfDefault);
+    const sdfSliderY = lineAreSliderY + 70;
+    this.sdfLabel = this.add
+      .text(timingX, sdfSliderY - 30, "SDF (x speed)", {
+        fontSize: "20px",
+        fill: "#ffff00",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.sdfSlider = this.add.graphics();
+    this.sdfSlider.fillStyle(0x333333);
+    this.sdfSlider.fillRect(
+      timingX - timingSliderWidth / 2,
+      sdfSliderY - timingSliderHeight / 2,
+      timingSliderWidth,
+      timingSliderHeight,
+    );
+
+    this.sdfSliderFill = this.add.graphics();
+    this.sdfSliderFill.fillStyle(0x00ff00);
+    this.sdfSliderFill.fillRect(
+      timingX - timingSliderWidth / 2,
+      sdfSliderY - timingSliderHeight / 2,
+      timingSliderWidth * this.timingToPct(sdfValue, 5, 100),
+      timingSliderHeight,
+    );
+
+    this.sdfSliderKnob = this.add.graphics();
+    this.sdfSliderKnob.fillStyle(0xffffff);
+    this.sdfSliderKnob.fillCircle(
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(sdfValue, 5, 100),
+      sdfSliderY,
+      8,
+    );
+
+    const sdfDisplay = this.formatSDFDisplay(sdfValue);
+    this.sdfText = this.add
+      .text(timingX, sdfSliderY + 25, sdfDisplay, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.sdfSlider.setInteractive(
+      new Phaser.Geom.Rectangle(
+        timingX - timingSliderWidth / 2,
+        sdfSliderY - timingSliderHeight / 2,
+        timingSliderWidth,
+        timingSliderHeight,
+      ),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.sdfSlider.on("pointerdown", (pointer) => {
+      this.draggingSDF = true;
+      this.updateSDFFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
+    });
+    this.sdfSlider.on("pointermove", (pointer) => {
+      if (pointer.isDown) {
+        this.draggingSDF = true;
+        this.updateSDFFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
+      }
+    });
+    this.input.on("pointermove", (pointer) => {
+      if (this.draggingSDF && pointer.isDown) {
+        this.updateSDFFromPointer(pointer, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
+      }
+    });
+    this.updateSDFDisplay(sdfValue, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
 
     // Reset to defaults button - moved down 70px
     this.resetButton = this.add
@@ -3335,22 +3752,12 @@ class SettingsScene extends Phaser.Scene {
       try {
         const parsed = JSON.parse(stored);
         return { ...defaultKeybinds, ...parsed };
-      } catch (error) {
-        console.warn("Failed to parse stored keybinds:", error);
+      } catch (e) {
+        console.error("Failed to parse stored keybinds:", e);
       }
     }
+
     return defaultKeybinds;
-  }
-
-  startListeningForKey(action) {
-    if (this.listeningForKey) {
-      // Cancel previous listening
-      this.keybindTexts[this.listeningForKey].setStyle({ fill: "#00ff00" });
-    }
-
-    this.listeningForKey = action;
-    this.keybindTexts[action].setStyle({ fill: "#ffff00" });
-    this.keybindTexts[action].setText("Press a key...");
   }
 
   onKeyDown(event) {
@@ -3375,6 +3782,11 @@ class SettingsScene extends Phaser.Scene {
   resetKeybindsToDefaults() {
     localStorage.removeItem("keybinds");
     localStorage.removeItem("masterVolume");
+    localStorage.removeItem("timing_das_frames");
+    localStorage.removeItem("timing_arr_frames");
+    localStorage.removeItem("timing_are_frames");
+    localStorage.removeItem("timing_line_are_frames");
+    localStorage.removeItem("timing_sdf_mult");
     // Refresh all keybind displays
     Object.keys(this.keybindActions).forEach((action) => {
       const currentKey = this.getCurrentKeybind(action);
@@ -3382,6 +3794,32 @@ class SettingsScene extends Phaser.Scene {
     });
     // Reset volume display
     this.updateVolumeDisplay();
+    // Reset timing displays
+    this.updateDASDisplay(10, {
+      x: this.dasSlider ? this.dasSlider.getBounds().centerX : 0,
+      width: this.dasSlider ? this.dasSlider.getBounds().width : 200,
+      y: this.dasSlider ? this.dasSlider.getBounds().centerY : 0,
+    });
+    this.updateARRDisplay(2, {
+      x: this.arrSlider ? this.arrSlider.getBounds().centerX : 0,
+      width: this.arrSlider ? this.arrSlider.getBounds().width : 200,
+      y: this.arrSlider ? this.arrSlider.getBounds().centerY : 0,
+    });
+    this.updateAREDisplay(7, {
+      x: this.areSlider ? this.areSlider.getBounds().centerX : 0,
+      width: this.areSlider ? this.areSlider.getBounds().width : 200,
+      y: this.areSlider ? this.areSlider.getBounds().centerY : 0,
+    });
+    this.updateLineAREDisplay(7, {
+      x: this.lineAreSlider ? this.lineAreSlider.getBounds().centerX : 0,
+      width: this.lineAreSlider ? this.lineAreSlider.getBounds().width : 200,
+      y: this.lineAreSlider ? this.lineAreSlider.getBounds().centerY : 0,
+    });
+    this.updateSDFDisplay(6, {
+      x: this.sdfSlider ? this.sdfSlider.getBounds().centerX : 0,
+      width: this.sdfSlider ? this.sdfSlider.getBounds().width : 200,
+      y: this.sdfSlider ? this.sdfSlider.getBounds().centerY : 0,
+    });
   }
 
   // Volume control methods
@@ -3469,6 +3907,204 @@ class SettingsScene extends Phaser.Scene {
     const volume = Math.max(0, Math.min(1, relativeX / sliderWidth));
 
     this.setSFXVolume(volume);
+  }
+
+  getStoredTiming(key, defaultValue) {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return defaultValue;
+    const parsed = parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+  }
+
+  setStoredTiming(key, value) {
+    localStorage.setItem(key, value);
+  }
+
+  clampStep(value, min, max, step) {
+    const clamped = Math.min(Math.max(value, min), max);
+    const stepped = Math.round(clamped / step) * step;
+    return Math.min(Math.max(stepped, min), max);
+  }
+
+  timingToPct(value, min, max) {
+    const clamped = Math.min(Math.max(value, min), max);
+    return (clamped - min) / (max - min || 1);
+  }
+
+  formatSDFDisplay(value) {
+    if (value >= 100) return "20G";
+    return `${value.toFixed(0)}x`;
+  }
+
+  updateDASFromPointer(pointer, slider) {
+    if (!slider) return;
+    const { x, width } = slider;
+    const min = 1;
+    const max = 20;
+    const step = 0.1;
+    const relativeX = pointer.x - (x - width / 2);
+    const pct = Math.max(0, Math.min(1, relativeX / width));
+    const raw = min + pct * (max - min);
+    const value = this.clampStep(raw, min, max, step);
+    this.setStoredTiming("timing_das_frames", value);
+    this.updateDASDisplay(value, { x, width, y: slider.y });
+  }
+
+  updateDASDisplay(value, slider) {
+    if (!slider) return;
+    const { x, width, y } = slider;
+    const pct = this.timingToPct(value, 1, 20);
+    if (this.dasSliderFill) {
+      this.dasSliderFill.clear();
+      this.dasSliderFill.fillStyle(0x00ff00);
+      this.dasSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+    }
+    if (this.dasSliderKnob) {
+      this.dasSliderKnob.clear();
+      this.dasSliderKnob.fillStyle(0xffffff);
+      this.dasSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+    }
+    if (this.dasText) {
+      this.dasText.setText(`${value.toFixed(1)}f`);
+    }
+  }
+
+  updateARRFromPointer(pointer, slider) {
+    if (!slider) return;
+    const { x, width } = slider;
+    const min = 0;
+    const max = 5;
+    const step = 0.1;
+    const relativeX = pointer.x - (x - width / 2);
+    const pct = Math.max(0, Math.min(1, relativeX / width));
+    const raw = min + pct * (max - min);
+    const value = this.clampStep(raw, min, max, step);
+    this.setStoredTiming("timing_arr_frames", value);
+    this.updateARRDisplay(value, { x, width, y: slider.y });
+  }
+
+  updateARRDisplay(value, slider) {
+    if (!slider) return;
+    const { x, width, y } = slider;
+    const pct = this.timingToPct(value, 0, 5);
+    if (this.arrSliderFill) {
+      this.arrSliderFill.clear();
+      this.arrSliderFill.fillStyle(0x00ff00);
+      this.arrSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+    }
+    if (this.arrSliderKnob) {
+      this.arrSliderKnob.clear();
+      this.arrSliderKnob.fillStyle(0xffffff);
+      this.arrSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+    }
+    if (this.arrText) {
+      this.arrText.setText(`${value.toFixed(1)}f`);
+    }
+  }
+
+  updateAREFromPointer(pointer, slider) {
+    if (!slider) return;
+    const { x, width } = slider;
+    const min = 0;
+    const max = 60;
+    const step = 1;
+    const relativeX = pointer.x - (x - width / 2);
+    const pct = Math.max(0, Math.min(1, relativeX / width));
+    const raw = min + pct * (max - min);
+    const value = this.clampStep(raw, min, max, step);
+    this.setStoredTiming("timing_are_frames", value);
+    this.updateAREDisplay(value, { x, width, y: slider.y });
+  }
+
+  updateAREDisplay(value, slider) {
+    if (!slider) return;
+    const { x, width, y } = slider;
+    const pct = this.timingToPct(value, 0, 60);
+    if (this.areSliderFill) {
+      this.areSliderFill.clear();
+      this.areSliderFill.fillStyle(0x00ff00);
+      this.areSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+    }
+    if (this.areSliderKnob) {
+      this.areSliderKnob.clear();
+      this.areSliderKnob.fillStyle(0xffffff);
+      this.areSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+    }
+    if (this.areText) {
+      this.areText.setText(`${value.toFixed(0)}f`);
+    }
+  }
+
+  updateLineAREFromPointer(pointer, slider) {
+    if (!slider) return;
+    const { x, width } = slider;
+    const min = 0;
+    const max = 60;
+    const step = 1;
+    const relativeX = pointer.x - (x - width / 2);
+    const pct = Math.max(0, Math.min(1, relativeX / width));
+    const raw = min + pct * (max - min);
+    const value = this.clampStep(raw, min, max, step);
+    this.setStoredTiming("timing_line_are_frames", value);
+    this.updateLineAREDisplay(value, { x, width, y: slider.y });
+  }
+
+  updateLineAREDisplay(value, slider) {
+    if (!slider) return;
+    const { x, width, y } = slider;
+    const pct = this.timingToPct(value, 0, 60);
+    if (this.lineAreSliderFill) {
+      this.lineAreSliderFill.clear();
+      this.lineAreSliderFill.fillStyle(0x00ff00);
+      this.lineAreSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+    }
+    if (this.lineAreSliderKnob) {
+      this.lineAreSliderKnob.clear();
+      this.lineAreSliderKnob.fillStyle(0xffffff);
+      this.lineAreSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+    }
+    if (this.lineAreText) {
+      this.lineAreText.setText(`${value.toFixed(0)}f`);
+    }
+  }
+
+  shouldAllowAREInputs() {
+    const lineAre = this.lineAreOverride || 0;
+    const lineClearDelay = this.lineClearDelayOverride || 0;
+    return this.areDelay > 0 || this.pendingLineAREDelay > 0 || lineAre > 0 || lineClearDelay > 0;
+  }
+
+  updateSDFFromPointer(pointer, slider) {
+    if (!slider) return;
+    const { x, width } = slider;
+    const min = 5;
+    const max = 100; // 100 represents 20G
+    const step = 1;
+    const relativeX = pointer.x - (x - width / 2);
+    const pct = Math.max(0, Math.min(1, relativeX / width));
+    const raw = min + pct * (max - min);
+    const value = this.clampStep(raw, min, max, step);
+    this.setStoredTiming("timing_sdf_mult", value);
+    this.updateSDFDisplay(value, { x, width, y: slider.y });
+  }
+
+  updateSDFDisplay(value, slider) {
+    if (!slider) return;
+    const { x, width, y } = slider;
+    const pct = this.timingToPct(value, 5, 100);
+    if (this.sdfSliderFill) {
+      this.sdfSliderFill.clear();
+      this.sdfSliderFill.fillStyle(0x00ff00);
+      this.sdfSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+    }
+    if (this.sdfSliderKnob) {
+      this.sdfSliderKnob.clear();
+      this.sdfSliderKnob.fillStyle(0xffffff);
+      this.sdfSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+    }
+    if (this.sdfText) {
+      this.sdfText.setText(this.formatSDFDisplay(value));
+    }
   }
 
   updateMainVolumeDisplay() {
@@ -4144,6 +4780,7 @@ class GameScene extends Phaser.Scene {
     // DAS (Delayed Auto Shift) variables - will be set by mode
     this.dasDelay = 16 / 60; // seconds until auto-repeat starts
     this.arrDelay = 1 / 60; // seconds between repeats
+    this.softDropMultiplier = 6; // soft drop speed multiplier (5–100, 100 = 20G)
     this.leftKeyPressed = false;
     this.rightKeyPressed = false;
     this.leftTimer = 0;
@@ -5194,6 +5831,26 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isEligibleTimingOverride = ["sprint_40", "sprint_100", "ultra", "zen", "marathon"].some(
+      (id) => modeIdLower.includes(id),
+    );
+
+    const readTiming = (key) => {
+      const raw = localStorage.getItem(key);
+      const parsed = raw !== null ? parseFloat(raw) : NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const getStoredTiming = (key, defaultValue) => {
+      const raw = localStorage.getItem(key);
+      return readTiming(key) !== null ? readTiming(key) : defaultValue;
+    };
+
     // Rotation system + ARS reset behavior
     const storedRotation = localStorage.getItem("rotationSystem") || "SRS";
     const configRotation = config.rotationSystem || null;
@@ -5213,14 +5870,54 @@ class GameScene extends Phaser.Scene {
       this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
         ? this.gameMode.getDAS()
         : config.das || 16 / 60;
+    if (isEligibleTimingOverride) {
+      const storedDasFrames = this.getStoredTiming("timing_das_frames", null);
+      if (storedDasFrames !== null) {
+        const clamped = Math.min(Math.max(storedDasFrames, 1), 20);
+        this.dasDelay = clamped / 60;
+      }
+    }
     this.arrDelay =
       this.gameMode.getARR && typeof this.gameMode.getARR === "function"
         ? this.gameMode.getARR()
         : config.arr || 1 / 60;
+    if (isEligibleTimingOverride) {
+      const storedArrFrames = this.getStoredTiming("timing_arr_frames", null);
+      if (storedArrFrames !== null) {
+        const clamped = Math.min(Math.max(storedArrFrames, 0), 5);
+        this.arrDelay = clamped / 60;
+      }
+    }
     this.areDelay =
       this.gameMode.getARE && typeof this.gameMode.getARE === "function"
         ? this.gameMode.getARE()
         : config.are || 30 / 60;
+    if (isEligibleTimingOverride) {
+      const storedAreFrames = this.getStoredTiming("timing_are_frames", null);
+      if (storedAreFrames !== null) {
+        const clamped = Math.min(Math.max(storedAreFrames, 0), 60);
+        this.areDelay = clamped / 60;
+      }
+    }
+    this.lineAreOverride = null;
+    this.lineClearDelayOverride = null;
+    if (isEligibleTimingOverride) {
+      const storedLineAreFrames = this.getStoredTiming("timing_line_are_frames", null);
+      if (storedLineAreFrames !== null) {
+        const clamped = Math.min(Math.max(storedLineAreFrames, 0), 60);
+        this.lineAreOverride = clamped / 60;
+        this.lineClearDelayOverride = clamped / 60;
+      }
+    }
+    // Soft drop speed multiplier
+    this.softDropMultiplier = config.softDropMultiplier || 6;
+    if (isEligibleTimingOverride) {
+      const storedSdf = this.getStoredTiming("timing_sdf_mult", null);
+      if (storedSdf !== null) {
+        const clamped = Math.min(Math.max(storedSdf, 5), 100);
+        this.softDropMultiplier = clamped;
+      }
+    }
     this.lockDelayMax =
       this.gameMode.getLockDelay &&
       typeof this.gameMode.getLockDelay === "function"
@@ -5363,6 +6060,12 @@ class GameScene extends Phaser.Scene {
           byAsc(parseNumTime(a.time), parseNumTime(b.time))
         );
     }
+  }
+
+  shouldAllowAREInputs() {
+    const lineAre = this.lineAreOverride || 0;
+    const lineClearDelay = this.lineClearDelayOverride || 0;
+    return this.areDelay > 0 || this.pendingLineAREDelay > 0 || lineAre > 0 || lineClearDelay > 0;
   }
 
   getLeaderboard(modeId) {
@@ -7578,38 +8281,47 @@ class GameScene extends Phaser.Scene {
     this.updatePlacementHint();
 
     // Handle ARE input tracking - allow during loading for initial piece handling
+    const allowAreInputs = this.shouldAllowAREInputs();
     if (this.areActive || !this.currentPiece) {
-      this.areLeftHeld = leftDown || zKeyDown;
-      this.areRightHeld = rightDown || cKeyDown;
-      this.areRotationKeys.k = kKeyDown;
-      this.areRotationKeys.space = spaceKeyDown;
-      this.areRotationKeys.l = lKeyDown;
+      if (allowAreInputs) {
+        this.areLeftHeld = leftDown || zKeyDown;
+        this.areRightHeld = rightDown || cKeyDown;
+        this.areRotationKeys.k = kKeyDown;
+        this.areRotationKeys.space = spaceKeyDown;
+        this.areRotationKeys.l = lKeyDown;
 
-      // Determine rotation direction based on currently held keys during ARE
-      // Priority: K (clockwise) > Space/L (counter-clockwise)
-      // Deactivate if keys are released during ARE
-      if (kKeyDown) {
-        this.areRotationDirection = 1;
-        if (!this.irsActivated) {
-          this.irsActivated = true;
+        // Determine rotation direction based on currently held keys during ARE
+        // Priority: K (clockwise) > Space/L (counter-clockwise)
+        // Deactivate if keys are released during ARE
+        if (kKeyDown) {
+          this.areRotationDirection = 1;
+          if (!this.irsActivated) {
+            this.irsActivated = true;
+          }
+        } else if (spaceKeyDown || lKeyDown) {
+          this.areRotationDirection = -1;
+          if (!this.irsActivated) {
+            this.irsActivated = true;
+          }
+        } else {
+          this.areRotationDirection = 0;
+          if (this.irsActivated) {
+            this.irsActivated = false;
+          }
         }
-      } else if (spaceKeyDown || lKeyDown) {
-        this.areRotationDirection = -1;
-        if (!this.irsActivated) {
-          this.irsActivated = true;
+
+        // Hold functionality for ARE - check if hold key is currently held during ARE
+        const holdCurrentlyHeld = this.holdEnabled && isDown(this.keys.hold);
+        if (holdCurrentlyHeld && !this.areHoldPressed) {
+          this.areHoldPressed = true;
+        } else if (!holdCurrentlyHeld && this.areHoldPressed) {
+          this.areHoldPressed = false;
         }
       } else {
+        // ARE inputs disabled when delays are 0
+        this.areRotationKeys = { k: false, space: false, l: false };
         this.areRotationDirection = 0;
-        if (this.irsActivated) {
-          this.irsActivated = false;
-        }
-      }
-
-      // Hold functionality for ARE - check if hold key is currently held during ARE
-      const holdCurrentlyHeld = this.holdEnabled && isDown(this.keys.hold);
-      if (holdCurrentlyHeld && !this.areHoldPressed) {
-        this.areHoldPressed = true;
-      } else if (!holdCurrentlyHeld && this.areHoldPressed) {
+        this.irsActivated = false;
         this.areHoldPressed = false;
       }
     } else {
@@ -7762,38 +8474,57 @@ class GameScene extends Phaser.Scene {
       // Allow DAS during loading for initial piece handling
       // Soft drop handling - only when s key is held
       if (downDown || sKeyDown) {
-        if (this.currentPiece.move(this.board, 0, 1)) {
-          this.resetLockDelay();
-          this.softDropRows += 1; // Track soft drop rows for scoring
-          this.wasGroundedDuringSoftDrop = false; // Reset flag when piece can move
-        } else if (!this.isGrounded) {
-          // Piece just became grounded
-          if (this.rotationSystem === "ARS") {
-            // In ARS, soft drop locks immediately on contact
-            if (!this.wasGroundedDuringSoftDrop && this.currentPiece.isTouchingGround(this.board)) {
-              this.currentPiece.playGroundSound(this);
-            }
-            this.lockPiece();
-            this.wasGroundedDuringSoftDrop = true;
+        const maxSteps =
+          this.softDropMultiplier >= 100 ? 200 : Math.max(1, Math.floor(this.softDropMultiplier));
+        let movedRows = 0;
+        for (let i = 0; i < maxSteps; i++) {
+          if (this.currentPiece.move(this.board, 0, 1)) {
+            movedRows += 1;
+            this.resetLockDelay();
+            this.wasGroundedDuringSoftDrop = false;
+            this.softDropRows += 1;
           } else {
-            // SRS (or others): start lock delay and play ground sound once
-            this.isGrounded = true;
-            this.lockDelay += this.deltaTime;
-            if (this.lockDelay >= this.lockDelayMax) {
-              // 30 frames = 0.5 seconds
-              this.lockPiece();
-            }
-            if (
-              !this.wasGroundedDuringSoftDrop &&
-              this.currentPiece.isTouchingGround(this.board)
-            ) {
-              this.currentPiece.playGroundSound(this);
-              this.wasGroundedDuringSoftDrop = true;
-            }
+            break;
           }
-        } else {
-          // Piece is already grounded - don't play ground sound again during soft drop
-          // This prevents the annoying repetitive ground sound when holding soft drop
+        }
+
+        const canMoveFurther = this.board.isValidPosition(
+          this.currentPiece,
+          this.currentPiece.x,
+          this.currentPiece.y + 1,
+        );
+
+        if (!canMoveFurther) {
+          if (!this.isGrounded) {
+            if (this.rotationSystem === "ARS") {
+              if (
+                !this.wasGroundedDuringSoftDrop &&
+                this.currentPiece.isTouchingGround(this.board)
+              ) {
+                this.currentPiece.playGroundSound(this);
+              }
+              this.lockPiece();
+              this.wasGroundedDuringSoftDrop = true;
+            } else {
+              this.isGrounded = true;
+              this.lockDelay += this.deltaTime;
+              if (this.lockDelay >= this.lockDelayMax) {
+                this.lockPiece();
+              }
+              if (
+                !this.wasGroundedDuringSoftDrop &&
+                this.currentPiece.isTouchingGround(this.board)
+              ) {
+                this.currentPiece.playGroundSound(this);
+                this.wasGroundedDuringSoftDrop = true;
+              }
+            }
+          } else {
+            // Already grounded; avoid repeated ground sounds
+          }
+        } else if (movedRows === 0) {
+          // No movement, still airborne
+          this.wasGroundedDuringSoftDrop = false;
         }
         // If piece was already grounded, don't increment lock delay
       } else {
@@ -8324,31 +9055,30 @@ class GameScene extends Phaser.Scene {
     this.pieceActiveTime = 0;
 
     // Preserve ARE input states so we can apply IRS/IHS correctly after swapping
-    const rotationDirectionAtSpawn = this.areRotationDirection;
-    const rotationKeysAtSpawn = { ...this.areRotationKeys };
-    const holdPressedAtSpawn = this.areHoldPressed;
+    const allowAreInputs = this.shouldAllowAREInputs();
+    const rotationDirectionAtSpawn = allowAreInputs ? this.areRotationDirection : 0;
+    const rotationKeysAtSpawn = allowAreInputs ? { ...this.areRotationKeys } : {};
+    const holdPressedAtSpawn = allowAreInputs ? this.areHoldPressed : false;
 
     // Reset ARE rotation and hold tracking for the next cycle
     this.areRotationDirection = 0;
     this.areHoldPressed = false;
 
-
     // Handle ARE hold (Initial Hold System) for modes that support hold
-    if (this.holdEnabled && holdPressedAtSpawn) {
+    if (allowAreInputs && this.holdEnabled && holdPressedAtSpawn) {
       this.performHoldSwap({ bypassCanHold: true, isIHS: true });
       // Consume the request so it doesn't double-trigger after spawn
       this.holdRequest = false;
     }
 
-
     const irsRotationDirection = rotationDirectionAtSpawn;
 
     // Apply IRS to the spawning piece (which may have been swapped by IHS)
-    if (irsRotationDirection === 1) {
+    if (allowAreInputs && irsRotationDirection === 1) {
       this.currentPiece.rotation = 1; // Clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
-    } else if (irsRotationDirection === -1) {
+    } else if (allowAreInputs && irsRotationDirection === -1) {
       this.currentPiece.rotation = 3; // Counter-clockwise 90 degrees
       this.currentPiece.shape = this.currentPiece.getRotatedShape();
       wasPreRotated = true;
@@ -8356,13 +9086,13 @@ class GameScene extends Phaser.Scene {
 
     // Prevent the held rotation key from rotating again on the first active frame after spawn.
     // Otherwise, the piece can rotate twice (IRS + immediate input rotation), which can apply kicks (often +1Y).
-    if (rotationKeysAtSpawn.k) {
+    if (allowAreInputs && rotationKeysAtSpawn.k) {
       this.kKeyPressed = true;
     }
-    if (rotationKeysAtSpawn.space) {
+    if (allowAreInputs && rotationKeysAtSpawn.space) {
       this.spaceKeyPressed = true;
     }
-    if (rotationKeysAtSpawn.l) {
+    if (allowAreInputs && rotationKeysAtSpawn.l) {
       this.lKeyPressed = true;
     }
 
