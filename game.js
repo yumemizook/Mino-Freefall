@@ -4382,6 +4382,8 @@ class GameScene extends Phaser.Scene {
     this.finesseEnabled = false;
     this.finesseErrors = 0;
     this.finessePieces = 0;
+    this.finesseCleanPieces = 0;
+    this.finesseInputCount = 0;
     this.finesseStreak = 0;
     this.finesseCurrentInputs = { moves: 0, rotations: 0 };
     this.finesseTexts = {
@@ -4389,6 +4391,8 @@ class GameScene extends Phaser.Scene {
       streakAcc: null,
       errors: null,
     };
+    this.finesseInputText = null;
+    this.finesseInputLabel = null;
     this.finesseActiveForPiece = false;
     this.finesseLastAccuracy = 0;
 
@@ -4629,15 +4633,19 @@ class GameScene extends Phaser.Scene {
       return;
     }
     const actual = computeFinesseActual(piece);
-    const isError = actual.moves > minimalMoves || actual.rotations > minimalRotations;
+    const moveOveruse = Math.max(0, actual.moves - minimalMoves);
+    const rotationOveruse = Math.max(0, actual.rotations - minimalRotations);
+    const pieceErrors = moveOveruse + rotationOveruse; // each extra input counts as 1 error
+
     this.finessePieces += 1;
-    if (isError) {
-      this.finesseErrors += 1;
+    if (pieceErrors > 0) {
+      this.finesseErrors += pieceErrors;
       this.finesseStreak = 0;
     } else {
+      this.finesseCleanPieces += 1;
       this.finesseStreak += 1;
     }
-    const clean = Math.max(0, this.finessePieces - this.finesseErrors);
+    const clean = Math.max(0, this.finesseCleanPieces);
     this.finesseLastAccuracy =
       this.finessePieces > 0 ? (clean / this.finessePieces) * 100 : 100;
     this.updateFinesseUI();
@@ -4659,6 +4667,15 @@ class GameScene extends Phaser.Scene {
     const errorVal = this.finesseErrors;
     streakAcc.setText(`${streakVal.toString()}   ${accVal.toFixed(1)}%`);
     errors.setText(`${errorVal} errors`);
+  }
+
+  updateFinesseInputUI() {
+    const show = !!(this.finesseEnabled && this.finesseInputLabel && this.finesseInputText);
+    if (!this.finesseInputLabel || !this.finesseInputText) return;
+    this.finesseInputLabel.setVisible(show);
+    this.finesseInputText.setVisible(show);
+    if (!show) return;
+    this.finesseInputText.setText(`${this.finesseInputCount || 0}`);
   }
 
   getMaxSectionsForTracker() {
@@ -5242,10 +5259,13 @@ class GameScene extends Phaser.Scene {
     if (!this.finesseEnabled) {
       this.finesseErrors = 0;
       this.finessePieces = 0;
+      this.finesseCleanPieces = 0;
+      this.finesseInputCount = 0;
       this.finesseStreak = 0;
       this.finesseCurrentInputs = { moves: 0, rotations: 0 };
       this.finesseActiveForPiece = false;
       this.finesseLastAccuracy = 0;
+      this.updateFinesseInputUI?.();
     }
 
   }
@@ -5696,12 +5716,78 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setVisible(false);
-    uiParent.addMultiple([
+    const attackUIElements = [
       this.attackLabel,
       this.attackTotalText,
       this.attackPerMinLabel,
       this.attackPerMinText,
       this.spikeText,
+    ];
+    // Show attack metrics only in Zen; hide elsewhere
+    const showAttackUI = isZenMode;
+    attackUIElements.forEach((el) => {
+      el.setVisible(showAttackUI);
+      if (isZenMode) {
+        el.setDepth(2000);
+      }
+    });
+    uiParent.addMultiple(attackUIElements);
+
+    // Finesse tracking display (sprint/ultra with SRS)
+    const finesseVisible = !!this.finesseEnabled;
+    const finesseY = ppsY - 110;
+    const inputY = finesseY - 70;
+    this.finesseInputLabel = this.add
+      .text(ppsX, inputY, "INPUTS", {
+        fontSize: `${uiFontSize - 6}px`,
+        fill: "#cccccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.finesseInputText = this.add
+      .text(ppsX, inputY + 15, "0", {
+        fontSize: `${uiFontSize - 2}px`,
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.finesseTexts.header = this.add
+      .text(ppsX, finesseY, "FINESSE", {
+        fontSize: `${uiFontSize - 4}px`,
+        fill: "#ffdd55",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.finesseTexts.streakAcc = this.add
+      .text(ppsX, finesseY + 15, "0   100.0%", {
+        fontSize: `${uiFontSize - 2}px`,
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.finesseTexts.errors = this.add
+      .text(ppsX, finesseY + 30, "0 errors", {
+        fontSize: `${uiFontSize - 6}px`,
+        fill: "#cccccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    uiParent.addMultiple([
+      this.finesseInputLabel,
+      this.finesseInputText,
+      this.finesseTexts.header,
+      this.finesseTexts.streakAcc,
+      this.finesseTexts.errors,
     ]);
 
     // B2B chain display on left side, lower than clear banner
@@ -7249,6 +7335,9 @@ class GameScene extends Phaser.Scene {
         this.leftInRepeat = false;
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
+          this.incrementFinesseMove();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
           this.spinRotatedWhileGrounded = false;
         }
@@ -7260,6 +7349,9 @@ class GameScene extends Phaser.Scene {
         this.rightInRepeat = false;
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
+          this.incrementFinesseMove();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
           this.spinRotatedWhileGrounded = false;
         }
@@ -7281,6 +7373,9 @@ class GameScene extends Phaser.Scene {
         this.leftInRepeat = false;
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
+          this.incrementFinesseMove();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
@@ -7291,6 +7386,9 @@ class GameScene extends Phaser.Scene {
         this.rightInRepeat = false;
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
+          this.incrementFinesseMove();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
@@ -7309,6 +7407,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece &&
           this.currentPiece.rotate(this.board, 1, this.rotationSystem)
         ) {
+          this.incrementFinesseRotation();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -7325,6 +7426,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece &&
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
+          this.incrementFinesseRotation();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
@@ -7343,6 +7447,9 @@ class GameScene extends Phaser.Scene {
           this.currentPiece &&
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
+          this.incrementFinesseRotation();
+          this.finesseInputCount += 1; // Count key press, not DAS
+          this.updateFinesseInputUI();
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
@@ -7396,17 +7503,22 @@ class GameScene extends Phaser.Scene {
           }
         }
       } else {
-        // Handle ARR (Auto Repeat Rate)
-        if (this.leftTimer >= this.arrDelay) {
-          this.leftTimer = 0;
-          if (this.currentPiece) {
-            const moved = this.currentPiece.move(this.board, -1, 0);
-            if (moved) {
-              this.resetLockDelay();
-            } else {
-              // Piece tried to move left during ARR - no ground sound for movement failures
+        if (this.leftInRepeat) {
+          // Handle ARR (Auto Repeat Rate)
+          if (this.leftTimer >= this.arrDelay) {
+            this.leftTimer = 0;
+            if (this.currentPiece) {
+              const moved = this.currentPiece.move(this.board, -1, 0);
+              if (moved) {
+                this.incrementFinesseMove();
+                this.finesseInputCount += 1; // Count key press, not DAS
+                this.updateFinesseInputUI();
+                this.resetLockDelay();
+              } else {
+                // Piece tried to move left during ARR - no ground sound for movement failures
+              }
+              // Don't set grounded state here - let gravity/soft drop logic handle it
             }
-            // Don't set grounded state here - let gravity/soft drop logic handle it
           }
         }
       }
