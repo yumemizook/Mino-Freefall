@@ -4100,12 +4100,18 @@ class GameScene extends Phaser.Scene {
     this.sectionPerformance = [];
     this.coolAnnouncementsTargets = {};
     this.coolAnnouncementsShown = new Set();
+    this.tgm3BagQueue = [];
+    this.tgm3DroughtCounters = null;
+    this.bgmInternalLevelBuffer = 0;
     this.regretAnnouncementsPending = {};
     this.regretAnnouncementsShown = new Set();
     this.coolDebugLogged = false;
     this.coolRegretText = null;
     this.coolRegretBlinkEvent = null;
     this.coolRegretHideEvent = null;
+    this.bravoText = null;
+    this.bravoHideEvent = null;
+    this.bravoActive = false;
     this.sectionPerfTexts = [];
     this.sectionTimes = [];
     this.torikanFailed = false;
@@ -4174,11 +4180,26 @@ class GameScene extends Phaser.Scene {
 
     // Enhanced scoring system
     this.comboCount = -1; // -1 means no combo active
+    this.standardComboCount = -1;
     this.lastClearType = null; // 'single', 'double', 'triple', 'tetris', 'tspin'
     this.backToBack = false;
     this.totalLines = 0;
     this.lastPieceType = null;
     this.lastTetrisNoCombo = false; // Tracks a fresh tetris without prior combo for SFX chaining
+    this.lastActionWasRotation = false;
+    this.totalAttack = 0;
+    this.attackSpike = 0;
+    this.lastAttackTime = 0;
+    this.attackTotalText = null;
+    this.attackPerMinText = null;
+    this.spikeText = null;
+    this.spikeFadeTween = null;
+    this.b2bChainText = null;
+    this.b2bChainCount = -1;
+    this.standardComboText = null;
+    this.standardComboFadeTween = null;
+    this.standardComboLastLineTime = 0;
+    this.standardComboCount = -1;
     this.clearBannerGroup = null;
     this.clearBannerLine1 = null;
     this.clearBannerLine2 = null;
@@ -4192,12 +4213,12 @@ class GameScene extends Phaser.Scene {
     this.createClearBannerUI = (levelBottomY, scoreRowHeight, uiFontSize) => {
       const line1Font = Math.max(uiFontSize + 12, 28);
       const line2Font = Math.max(uiFontSize + 6, 22);
-      const xBase = this.borderOffsetX - 30;
+      const xBase = this.borderOffsetX - 80; // 50px further left
       const yBase =
         this.borderOffsetY + this.playfieldHeight / 2 - (line1Font + line2Font) / 2;
 
       this.clearBannerBaseX = xBase;
-      this.clearBannerStartX = xBase - 30;
+      this.clearBannerStartX = xBase + 30; // start right, slide left
       this.clearBannerY = yBase;
 
       this.clearBannerLine1 = this.add
@@ -4225,6 +4246,7 @@ class GameScene extends Phaser.Scene {
       );
       this.clearBannerGroup.setAlpha(0);
       this.clearBannerGroup.setVisible(false);
+      this.clearBannerGroup.setDepth(2000);
     };
     this.getPieceColorHex = (type) => {
       let colorInt = 0xffffff;
@@ -4273,6 +4295,7 @@ class GameScene extends Phaser.Scene {
         normalizedClear =
           normalizedClear.replace(/t-?spin\s*/i, "").trim() || normalizedClear;
       }
+      normalizedClear = normalizedClear.toUpperCase();
 
       this.clearBannerLine1.setText(line1Text).setColor(colorHex);
       this.clearBannerLine1.setVisible(!!line1Text);
@@ -5628,6 +5651,102 @@ class GameScene extends Phaser.Scene {
     // Piece per second displays - moved to right side of matrix, aligned with bottom of stack
     const ppsX = this.borderOffsetX + this.cellSize * this.board.cols + 20;
     const ppsY = this.borderOffsetY + this.playfieldHeight - 40; // Align with bottom of stack
+    const spikeY = this.borderOffsetY + this.playfieldHeight * 0.5;
+
+    // Attack metrics (above PPS)
+    const atkLabelStyle = {
+      fontSize: `${uiFontSize - 4}px`,
+      fill: "#ffdd55",
+      fontFamily: "Courier New",
+      fontStyle: "bold",
+    };
+    const atkValueStyle = {
+      fontSize: `${largeFontSize}px`,
+      fill: "#ffffff",
+      fontFamily: "Courier New",
+      fontStyle: "bold",
+    };
+    const atkSubStyle = {
+      fontSize: `${uiFontSize - 6}px`,
+      fill: "#cccccc",
+      fontFamily: "Courier New",
+      fontStyle: "bold",
+    };
+
+    const uiParent = this.overlayGroup || this.gameGroup;
+    this.attackLabel = this.add.text(ppsX, ppsY - 140, "ATK", atkLabelStyle).setOrigin(0, 0);
+    this.attackTotalText = this.add.text(ppsX, ppsY - 125, "0", atkValueStyle).setOrigin(0, 0);
+    this.attackPerMinLabel = this.add
+      .text(ppsX, ppsY - 95, "ATK/MIN", atkSubStyle)
+      .setOrigin(0, 0);
+    this.attackPerMinText = this.add
+      .text(ppsX, ppsY - 80, "0.00", {
+        fontSize: `${largeFontSize - 6}px`,
+        fill: "#cccccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0);
+    this.spikeText = this.add
+      .text(ppsX, spikeY, "SPIKE 0", {
+        fontSize: `${uiFontSize - 4}px`,
+        fill: "#ffaa33",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(false);
+    uiParent.addMultiple([
+      this.attackLabel,
+      this.attackTotalText,
+      this.attackPerMinLabel,
+      this.attackPerMinText,
+      this.spikeText,
+    ]);
+
+    // B2B chain display on left side, lower than clear banner
+    const b2bX = this.borderOffsetX - 80; // align above stack near clear banner
+    const b2bY = this.borderOffsetY + this.playfieldHeight / 2 - uiFontSize - 10;
+    this.b2bChainText = this.add
+      .text(b2bX, b2bY, "B2B x0", {
+        fontSize: `${uiFontSize - 2}px`,
+        fill: "#ffff55",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0)
+      .setDepth(2000)
+      .setVisible(false);
+    uiParent.add(this.b2bChainText);
+
+    // Standard combo display (for sprint/ultra/marathon/zen)
+    this.standardComboNumberText = this.add
+      .text(0, 0, "0", {
+        fontSize: `${uiFontSize}px`,
+        fill: "#88ff88",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0);
+    this.standardComboLabelText = this.add
+      .text(this.standardComboNumberText.width + 6, 2, "COMBO", {
+        fontSize: `${uiFontSize - 4}px`,
+        fill: "#88ff88",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0);
+    this.standardComboText = this.add
+      .container(b2bX, b2bY - 24, [
+        this.standardComboNumberText,
+        this.standardComboLabelText,
+      ])
+      .setVisible(false);
+    uiParent.add(this.standardComboText);
+
     this.hanabiLabel = this.add
       .text(ppsX, ppsY - 40, "HANABI", {
         fontSize: `${uiFontSize - 4}px`,
@@ -5916,7 +6035,7 @@ class GameScene extends Phaser.Scene {
             fontFamily: "Courier New",
             fontStyle: "bold",
           });
-          const perfText = this.add.text(200, y, "", {
+          const perfText = this.add.text(200, y + 3, "", {
             fontSize: `${Math.max(sectionLabelFontSize - 2, 12)}px`,
             fill: "#ffff55",
             fontFamily: "Courier New",
@@ -6077,6 +6196,29 @@ class GameScene extends Phaser.Scene {
     this.backToBack = false;
     this.lastClearType = null;
     this.lastPieceType = null;
+    this.totalAttack = 0;
+    this.attackSpike = 0;
+    this.lastAttackTime = 0;
+    this.b2bChainCount = -1;
+    this.standardComboCount = -1;
+    this.standardComboLastLineTime = 0;
+    if (this.standardComboNumberText && this.standardComboLabelText) {
+      this.standardComboNumberText.setText("0");
+      this.standardComboLabelText.setText("COMBO");
+      this.standardComboLabelText.setX(this.standardComboNumberText.width + 6);
+    }
+    if (this.standardComboText) {
+      this.standardComboText.setVisible(false);
+      this.standardComboText.setAlpha(1);
+      this.standardComboText.setScale(1);
+    }
+    if (this.b2bChainText) {
+      this.b2bChainText.setText("B2B x0");
+      this.b2bChainText.setVisible(false);
+      this.b2bChainText.setColor("#ffff55");
+      this.b2bChainText.setAlpha(1);
+      this.b2bChainText.setScale(1);
+    }
     if (this.hideClearBanner) this.hideClearBanner();
 
     this.level = this.startingLevel != null ? this.startingLevel : getStartingLevel();
@@ -6290,6 +6432,20 @@ class GameScene extends Phaser.Scene {
     this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.currentSectionTetrisCount = 0;
     this.section70Captured = new Set();
+    if (Array.isArray(this.sectionCoolTimes)) {
+      this.sectionCoolTimes = [];
+    }
+    this.tgm3BagQueue = [];
+    this.tgm3DroughtCounters = null;
+    this.bravoActive = false;
+    if (this.bravoHideEvent) {
+      this.bravoHideEvent.remove(false);
+      this.bravoHideEvent = null;
+    }
+    if (this.bravoText) {
+      this.bravoText.setVisible(false);
+    }
+    this.bgmInternalLevelBuffer = 0;
     this.totalPausedTime = 0;
     this.isPaused = false;
     this.pauseStartTime = null;
@@ -6428,12 +6584,6 @@ class GameScene extends Phaser.Scene {
     this.coolRegretText.setAlpha(1);
     this.coolRegretText.setColor("#ffff55");
     this.children.bringToTop(this.coolRegretText);
-    console.log("[COOL/REGRET] banner show", {
-      kind: upperKind,
-      time: this.currentTime,
-      section: this.currentSection,
-      level: this.level,
-    });
 
     // Blink between yellow and white every 150ms for 3s total
     let toggle = false;
@@ -6443,14 +6593,6 @@ class GameScene extends Phaser.Scene {
       callback: () => {
         toggle = !toggle;
         this.coolRegretText.setColor(toggle ? "#ffffff" : "#ffff55");
-        if (toggle) {
-          console.log("[COOL/REGRET] banner blink", {
-            kind: upperKind,
-            time: this.currentTime,
-            section: this.currentSection,
-            level: this.level,
-          });
-        }
       },
     });
     this.coolRegretHideEvent = this.time.delayedCall(
@@ -6461,12 +6603,6 @@ class GameScene extends Phaser.Scene {
           this.coolRegretBlinkEvent = null;
         }
         this.coolRegretText.setVisible(false);
-        console.log("[COOL/REGRET] banner hide", {
-          kind: upperKind,
-          time: this.currentTime,
-          section: this.currentSection,
-          level: this.level,
-        });
       },
       [],
       this,
@@ -6476,6 +6612,97 @@ class GameScene extends Phaser.Scene {
     if (upperKind === "COOL") {
       this.playSfx("cool", 0.7);
     }
+  }
+
+  isBoardCompletelyEmpty() {
+    if (!this.board || !Array.isArray(this.board.grid)) return false;
+    // Treat any falsy cell (0, null, undefined) as empty to avoid mismatches across modes
+    return this.board.grid.every((row) => row.every((cell) => !cell));
+  }
+
+  isAllClearAfterLines(linesToClear) {
+    if (!this.board || !Array.isArray(this.board.grid)) return false;
+    if (!Array.isArray(linesToClear) || linesToClear.length === 0) return false;
+    const cleared = new Set(linesToClear);
+    for (let r = 0; r < this.board.rows; r++) {
+      if (cleared.has(r)) continue; // these rows will be removed
+      const row = this.board.grid[r];
+      if (!row || !row.every((cell) => !cell)) {
+        return false; // found occupancy outside cleared rows
+      }
+    }
+    return true;
+  }
+
+  showBravoBanner() {
+    // Reuse if exists
+    if (!this.bravoText) {
+      const fontSize = this.timeText?.style?.fontSize || `${Math.max(this.uiScale * 28, 20)}px`;
+      this.bravoText = this.add
+        .text(
+          this.borderOffsetX + this.playfieldWidth / 2,
+          this.borderOffsetY + this.playfieldHeight / 2,
+          "BRAVO!!",
+          {
+            fontSize,
+            fill: "#ffdd44",
+            fontFamily: "Courier New",
+            fontStyle: "bold",
+            align: "center",
+          },
+        )
+        .setOrigin(0.5, 0.5)
+        .setDepth(9999)
+        .setAlpha(0);
+      if (this.overlayGroup) {
+        this.overlayGroup.add(this.bravoText);
+      } else {
+        this.gameGroup.add(this.bravoText);
+      }
+    }
+
+    if (this.bravoHideEvent) {
+      this.bravoHideEvent.remove(false);
+      this.bravoHideEvent = null;
+    }
+
+    this.bravoActive = true;
+    this.bravoText.setText("BRAVO!!");
+    this.bravoText.setAlpha(0);
+    this.bravoText.setScale(0);
+    this.bravoText.setAngle(0);
+    this.bravoText.setVisible(true);
+    this.children.bringToTop(this.bravoText);
+
+    try {
+      this.sound?.add("firework", { volume: 0.85 })?.play();
+    } catch {}
+
+    // Timeline: grow + spin in 1s, then fade and slightly shrink over 3s
+    const tl = this.tweens.createTimeline();
+    tl.add({
+      targets: this.bravoText,
+      scale: { from: 0, to: 1 },
+      alpha: { from: 0, to: 1 },
+      angle: { from: 0, to: 360 },
+      duration: 1000,
+      ease: "Cubic.easeOut",
+    });
+    tl.add({
+      targets: this.bravoText,
+      scale: { from: 1, to: 0.9 },
+      alpha: { from: 1, to: 0 },
+      duration: 3000,
+      ease: "Cubic.easeInOut",
+    });
+    tl.setCallback("onComplete", () => {
+      if (this.bravoText) {
+        this.bravoText.setVisible(false);
+      }
+      this.bravoActive = false;
+      this.bravoHideEvent = null;
+    });
+    tl.play();
   }
 
   checkCoolRegretAnnouncements() {
@@ -6489,25 +6716,7 @@ class GameScene extends Phaser.Scene {
       if (typeof target !== "number" || this.coolAnnouncementsShown.has(sec)) return;
       const windowStart = target;
       const windowEnd = target + 11; // 80–90 inclusive if target is 80–90
-      if (basis < windowStart) {
-        console.log("[COOL/REGRET] COOL banner pending", {
-          section: sec,
-          level: this.level,
-          basis,
-          target,
-          windowStart,
-          windowEnd,
-        });
-      }
       if (basis >= windowStart && basis <= windowEnd) {
-        console.log("[COOL/REGRET] COOL banner fired", {
-          section: sec,
-          level: this.level,
-          basis,
-          target,
-          windowStart,
-          windowEnd,
-        });
         this.showCoolRegretBanner("COOL");
         this.coolAnnouncementsShown.add(sec);
         delete this.coolAnnouncementsTargets[sec];
@@ -6570,7 +6779,7 @@ class GameScene extends Phaser.Scene {
         segments: [
           { end: 499, key: "tm1_1" },
           { end: 799, key: "tm1_2" },
-          { end: 999, key: "tm3_4" },
+          { end: 1899, key: "tm2_4" },
         ],
         credits: "tm1_endroll",
       },
@@ -6624,7 +6833,14 @@ class GameScene extends Phaser.Scene {
     if (!schedule || !schedule.segments || !schedule.segments.length) return;
 
     const maxSegment = schedule.segments[schedule.segments.length - 1];
-    const level = this.level;
+    const internalLevel =
+      this.gameMode && typeof this.gameMode.internalLevel === "number"
+        ? this.gameMode.internalLevel
+        : this.level;
+    const level = Math.max(
+      internalLevel,
+      typeof this.bgmInternalLevelBuffer === "number" ? this.bgmInternalLevelBuffer : 0,
+    );
     let segment = schedule.segments.find((s) => level <= s.end);
     if (!segment) segment = maxSegment;
     const isLast = segment === maxSegment;
@@ -6935,6 +7151,8 @@ class GameScene extends Phaser.Scene {
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
+          } else {
+            this.spinRotatedWhileGrounded = false;
           }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -6954,6 +7172,8 @@ class GameScene extends Phaser.Scene {
             this.resetLockDelay();
             if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
               this.markGroundedSpin();
+            } else {
+              this.spinRotatedWhileGrounded = false;
             }
           } else {
             this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -6973,6 +7193,8 @@ class GameScene extends Phaser.Scene {
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
+          } else {
+            this.spinRotatedWhileGrounded = false;
           }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -6991,6 +7213,8 @@ class GameScene extends Phaser.Scene {
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
+          } else {
+            this.spinRotatedWhileGrounded = false;
           }
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -7012,6 +7236,7 @@ class GameScene extends Phaser.Scene {
           this.lockDelay = this.deltaTime;
           this.lockDelayBufferedStart = false;
           this.currentPiece.playGroundSound(this);
+          this.spinRotatedWhileGrounded = false;
         }
       } else if (!xKeyDown && this.xKeyPressed) {
         this.xKeyPressed = false;
@@ -7025,6 +7250,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
           this.resetLockDelay();
+          this.spinRotatedWhileGrounded = false;
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
@@ -7035,6 +7261,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
           this.resetLockDelay();
+          this.spinRotatedWhileGrounded = false;
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
@@ -7369,6 +7596,9 @@ class GameScene extends Phaser.Scene {
 
     // Update time tracking using Date.now() for reliability
     this.updateTimer();
+    this.tickAttackDecay(this.currentTime || 0);
+    this.tickStandardCombo(this.currentTime || 0);
+    this.updateAttackUI();
 
     // Handle BGM first play vs loop mode
     this.manageBGMLoopMode();
@@ -7793,6 +8023,8 @@ class GameScene extends Phaser.Scene {
     // Reset lock reset tracking for new piece
     this.lockResetCount = 0;
     this.lastGroundedY = null;
+    // Reset spin tracking for new piece
+    this.spinRotatedWhileGrounded = false;
 
     // Sanitize next piece entry
     const rawNext = this.nextPieces.shift();
@@ -8109,33 +8341,45 @@ class GameScene extends Phaser.Scene {
     const monoActive = isShiraseMode && this.level >= 1000;
     const monoTextureKey = this.rotationSystem === "ARS" ? "mono_ars" : "mono";
 
-    // Default to 7-bag whenever we're not using a custom generator.
-    const use7Bag = !(this.gameMode && this.gameMode.generateNextPiece) && !prefersTGMRand;
+    const isTgm3Mode =
+      modeIdLower === "tgm3" ||
+      modeIdLower === "tgm3_master" ||
+      modeIdLower === "tgm3_easy" ||
+      modeIdLower === "tgm3_sakura" ||
+      modeIdLower === "tgm3_shirase" ||
+      modeIdLower === "shirase";
+    // Default to 7-bag whenever we're not using a custom generator or TGM3 35-bag.
+    const use7Bag =
+      !(this.gameMode && this.gameMode.generateNextPiece) && !prefersTGMRand && !isTgm3Mode;
 
     while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
+      let piece;
       if (this.gameMode && this.gameMode.generateNextPiece) {
-        const piece = this.gameMode.generateNextPiece(this);
-        if (monoActive && piece && typeof piece === "object" && !piece.textureKey) {
-          piece.textureKey = monoTextureKey;
-        }
-        this.nextPieces.push(this.applyFirstPieceRestriction(piece, modeIdLower));
+        piece = this.gameMode.generateNextPiece(this);
+      } else if (isTgm3Mode) {
+        piece = this.generateTgm3Piece();
       } else if (use7Bag) {
-        const piece = this.generate7BagPiece();
-        const entry =
-          monoActive && typeof piece === "string"
-            ? { type: piece, textureKey: monoTextureKey }
-            : piece;
-        this.nextPieces.push(this.applyFirstPieceRestriction(entry, modeIdLower));
+        piece = this.generate7BagPiece();
       } else {
-        // Fallback to original TGM1 piece generation
-        const piece = this.generateTGM1Piece();
-        const entry =
-          monoActive && typeof piece === "string"
+        piece = this.generateTGM1Piece();
+      }
+
+      const entry =
+        monoActive && piece && typeof piece === "object" && !piece.textureKey
+          ? { ...piece, textureKey: monoTextureKey }
+          : monoActive && typeof piece === "string"
             ? { type: piece, textureKey: monoTextureKey }
             : piece;
-        this.nextPieces.push(this.applyFirstPieceRestriction(entry, modeIdLower, true));
-      }
+
+      const applyHistory = !use7Bag && !isTgm3Mode && !(this.gameMode && this.gameMode.generateNextPiece);
+      this.nextPieces.push(
+        this.applyFirstPieceRestriction(
+          entry,
+          modeIdLower,
+          applyHistory, // enforce history only on TGM1 generator path
+        ),
+      );
     }
   }
 
@@ -8198,6 +8442,67 @@ class GameScene extends Phaser.Scene {
     }
 
     return generatedPiece;
+  }
+
+  generateTgm3Piece() {
+    const PIECES = ["I", "J", "L", "O", "S", "T", "Z"];
+
+    if (!this.tgm3DroughtCounters) {
+      this.tgm3DroughtCounters = {};
+      PIECES.forEach((p) => {
+        this.tgm3DroughtCounters[p] = 0;
+      });
+    }
+    if (!Array.isArray(this.tgm3BagQueue)) {
+      this.tgm3BagQueue = [];
+    }
+
+    const pickMaxDroughtPiece = () => {
+      let max = -1;
+      let chosen = "I";
+      PIECES.forEach((p) => {
+        const d = this.tgm3DroughtCounters[p] ?? 0;
+        if (d > max || (d === max && p < chosen)) {
+          max = d;
+          chosen = p;
+        }
+      });
+      return chosen;
+    };
+
+    const shuffleArray = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    const ensureBag = () => {
+      if (this.tgm3BagQueue.length === 0) {
+        const bag = [];
+        for (let i = 0; i < 5; i++) {
+          bag.push(...PIECES);
+        }
+        this.tgm3BagQueue = shuffleArray(bag);
+      }
+    };
+
+    ensureBag();
+
+    const piece = this.tgm3BagQueue.shift();
+
+    // Update drought counters
+    PIECES.forEach((p) => {
+      this.tgm3DroughtCounters[p] = (this.tgm3DroughtCounters[p] ?? 0) + 1;
+    });
+    this.tgm3DroughtCounters[piece] = 0;
+
+    // Append current max-drought piece to keep bag length at 35
+    const droughtPiece = pickMaxDroughtPiece();
+    this.tgm3BagQueue.push(droughtPiece);
+
+    return piece;
   }
 
   applyFirstPieceRestriction(rawPiece, modeIdLower = "", enforceHistory = false) {
@@ -8438,7 +8743,49 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update score with enhanced system
+    const prevBackToBack = this.backToBack;
     this.updateScore(linesToClear.length, this.currentPiece.type, spinInfo);
+    const triggeredBravo = linesToClear.length > 0 && this.isAllClearAfterLines(linesToClear);
+    if (triggeredBravo) {
+      const modeId =
+        (this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode) || "unknown";
+      try {
+        console.debug(
+          `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`,
+        );
+      } catch {}
+      this.showBravoBanner();
+    }
+
+    // Attack computation and B2B chain UI
+    const attackResult = this.computeAttack(
+      linesToClear.length,
+      spinInfo,
+      triggeredBravo,
+      prevBackToBack,
+    );
+    if (attackResult) {
+      this.updateAttackStats(attackResult.attack, this.currentTime || 0);
+      this.updateAttackUI();
+      const shouldShowB2B =
+        attackResult.isDifficult || attackResult.b2bBroken || attackResult.newChain >= 1;
+      if (shouldShowB2B && this.b2bChainText) this.b2bChainText.setVisible(true);
+      this.showB2BChain(
+        attackResult.b2bMaintained,
+        attackResult.b2bBroken,
+        attackResult.prevChain,
+        attackResult.newChain,
+      );
+      if (!shouldShowB2B && this.b2bChainText) this.b2bChainText.setVisible(false);
+    }
+
+    // Standard combo for zen/marathon/sprint/ultra
+    if (this.isStandardComboMode()) {
+      this.updateStandardCombo(linesToClear.length > 0, this.currentTime || 0);
+    }
+
     this.updateLevel("lines", linesToClear.length);
     this.canHold = true;
 
@@ -8937,22 +9284,22 @@ class GameScene extends Phaser.Scene {
 
     // Base scoring per standardscoring.md (no level multiplier)
     const lineBase = [0, 100, 300, 500, 800];
-    const tSpinBase = [400, 800, 1200, 1600, 2600]; // index by lines cleared (0-4)
+    const spinBase = [400, 800, 1200, 1600, 2600]; // any spin with lines (T or otherwise)
 
     // Compute base points for the clear
-    if (lines > 0 || isTSpin) {
-      if (isTSpin) {
-        const idx = Math.min(lines, 4);
-        points += tSpinBase[idx] || 0;
+    if (lines > 0 || isSpin) {
+      const idx = Math.min(lines, 4);
+      if (isSpin) {
+        points += spinBase[idx] || 0;
         if (lines === 0) clearType = "spin zero";
-        else clearType = `t-spin ${["zero", "single", "double", "triple", "quad"][idx]}`;
+        else clearType = `spin ${["zero", "single", "double", "triple", "quad"][idx]}`;
       } else {
         points += lineBase[lines] || 0;
         clearType = ["", "single", "double", "triple", "quad"][lines] || null;
       }
 
-      // Back-to-back 1.5x for difficult clears (quad or any t-spin with lines)
-      const isDifficult = lines >= 4 || (isTSpin && lines > 0);
+      // Back-to-back 1.5x for difficult clears (quad or any spin with lines)
+      const isDifficult = lines >= 4 || (isSpin && lines > 0);
       if (this.backToBack && isDifficult) {
         points = Math.floor(points * 1.5);
         clearType = clearType ? `${clearType} b2b` : "b2b";
@@ -8960,15 +9307,11 @@ class GameScene extends Phaser.Scene {
       this.backToBack = isDifficult;
 
       // All clear bonus
-      const boardIsFull = this.board.grid.every((row) =>
-        row.every((cell) => cell !== 0),
-      );
-      if (boardIsFull) {
+      if (this.isBoardCompletelyEmpty()) {
         points += 3500;
         clearType = clearType ? `${clearType} all clear` : "all clear";
       }
     } else {
-      this.backToBack = false;
       this.comboCount = -1;
     }
 
@@ -9026,10 +9369,7 @@ class GameScene extends Phaser.Scene {
     // Calculate bravo bonus (perfect clear)
     let bravo = 1;
     if (lines > 0) {
-      const boardIsFull = this.board.grid.every((row) =>
-        row.every((cell) => cell !== 0),
-      );
-      if (boardIsFull) {
+      if (this.isBoardCompletelyEmpty()) {
         bravo = 4;
         clearType = "bravo";
       }
@@ -9334,11 +9674,35 @@ class GameScene extends Phaser.Scene {
         this.gameMode.sectionCoolTimes = this.gameMode.sectionCoolTimes || [];
         this.gameMode.sectionCoolTimes[newSection] = coolTime;
       }
-      console.log("[COOL/REGRET] captured *70 time", {
-        section: newSection,
-        coolTime,
-        level: this.level,
-      });
+      // Buffer internal level for BGM (includes COOL bonus) at *70
+      const internalLevelForBgm =
+        this.gameMode && typeof this.gameMode.internalLevel === "number"
+          ? this.gameMode.internalLevel
+          : this.level;
+      this.bgmInternalLevelBuffer = Math.max(
+        this.bgmInternalLevelBuffer || 0,
+        internalLevelForBgm,
+      );
+      // Early COOL banner scheduling for current section (esp. 000-099)
+      if (
+        this.gameMode &&
+        typeof this.gameMode.evaluateSectionPerformance === "function"
+      ) {
+        const sectionIndexForEval = newSection + 1; // 1-based for evaluator
+        const earlyResult = this.gameMode.evaluateSectionPerformance(
+          sectionIndexForEval,
+          coolTime,
+          coolTime,
+        );
+        if (earlyResult === "cool") {
+          const sectionLength = this.getSectionLength();
+          const baseLevel = newSection * sectionLength;
+          const targetLevel = baseLevel + 80 + Math.floor(Math.random() * 11); // 80-90 inclusive
+          this.coolAnnouncementsTargets[newSection] = targetLevel;
+          this.coolAnnouncementsShown.delete(newSection);
+          // Early scheduling done; banner will fire in checkCoolRegretAnnouncements.
+        }
+      }
     }
 
     if (newSection > oldSection && this.level < maxLevel) {
@@ -9423,46 +9787,18 @@ class GameScene extends Phaser.Scene {
           this.sectionCoolTimes && typeof this.sectionCoolTimes[completedSection] === "number"
             ? this.sectionCoolTimes[completedSection]
             : null;
-        console.log("[COOL/REGRET] evaluate start", {
-          completedSection,
-          sectionTime,
-          coolTime,
-          currentLevel: this.level,
-          basis: this.getSectionBasisValue(),
-        });
-        console.log(
-          "[COOL/REGRET] evaluate",
-          {
-            section: completedSection,
-            time_0_100: sectionTime,
-            time_0_70: coolTime,
-            sectionLength,
-            level: this.level,
-          },
-        );
         const evalSectionIndex = completedSection + 1; // shift to 1-based for COOL/REGRET
         const result = this.gameMode.evaluateSectionPerformance(
           evalSectionIndex,
           sectionTime,
           coolTime,
         );
-        console.log("[COOL/REGRET] evaluate result", {
-          completedSection,
-          evalSectionIndex,
-          result,
-          sectionTime,
-          coolTime,
-        });
+        const modeId =
+          this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode;
         if (result === "cool") {
           this.gameMode.onSectionCool();
-          console.log(
-            "[COOL/REGRET] COOL awarded",
-            { section: completedSection, time: sectionTime },
-          );
-          const modeId =
-            this.gameMode && typeof this.gameMode.getModeId === "function"
-              ? this.gameMode.getModeId()
-              : this.selectedMode;
           // Only add generic rollBonus for non-TGM3 Master modes
           if (
             typeof this.rollBonus === "number" &&
@@ -9473,24 +9809,14 @@ class GameScene extends Phaser.Scene {
           }
           this.sectionPerformance[completedSection] = "COOL";
           // Schedule COOL announcement in the current section between *80-*90
-          const currentSectionIndex = section;
+          // COOL should announce in the section where it was earned.
+          const currentSectionIndex = completedSection;
           const baseLevel = currentSectionIndex * sectionLength;
           const targetLevel = baseLevel + 80 + Math.floor(Math.random() * 11); // 80-90 inclusive
           this.coolAnnouncementsTargets[currentSectionIndex] = targetLevel;
           this.coolAnnouncementsShown.delete(currentSectionIndex);
-          console.log("[COOL/REGRET] COOL banner scheduled", {
-            completedSection,
-            currentSectionIndex,
-            targetLevel,
-            baseLevel,
-            targets: { ...this.coolAnnouncementsTargets },
-          });
         } else if (result === "regret") {
           this.gameMode.onSectionRegret();
-          console.log(
-            "[COOL/REGRET] REGRET awarded",
-            { section: completedSection, time: sectionTime },
-          );
           this.sectionPerformance[completedSection] = "REGRET";
           // Show REGRET once at start of next section
           const nextSection = section;
@@ -9503,11 +9829,31 @@ class GameScene extends Phaser.Scene {
       this.sectionStartTime = this.currentTime;
       this.currentSection = section;
       this.currentSectionTetrisCount = 0;
+      // Reset *70 capture for the new section
+      if (Array.isArray(this.sectionCoolTimes)) {
+        this.sectionCoolTimes[section] = undefined;
+      }
+      if (this.section70Captured instanceof Set) {
+        this.section70Captured.delete(section);
+      }
       // Show REGRET immediately at section start if pending
       if (this.regretAnnouncementsPending[section] && !this.regretAnnouncementsShown.has(section)) {
         this.showCoolRegretBanner("REGRET");
         this.regretAnnouncementsShown.add(section);
         delete this.regretAnnouncementsPending[section];
+      }
+      // Apply TGM3 internal timing/gravity phase on section entry using internal level with COOL bonus
+      if (
+        this.gameMode &&
+        typeof this.gameMode.getModeId === "function" &&
+        this.gameMode.getModeId() === "tgm3_master" &&
+        typeof this.gameMode.updateTimingPhase === "function"
+      ) {
+        const sectionLength = this.getSectionLength();
+        const internalLevel =
+          section * sectionLength + (typeof this.gameMode.coolBonus === "number" ? this.gameMode.coolBonus : 0);
+        this.gameMode.internalLevel = internalLevel;
+        this.gameMode.updateTimingPhase(internalLevel);
       }
     }
 
@@ -9679,6 +10025,252 @@ class GameScene extends Phaser.Scene {
       isTSpin: false,
       spinType: isImmobile ? `${piece.type}-spin` : null,
     };
+  }
+
+  isStandardComboMode() {
+    const m = this.selectedMode;
+    return m === "ultra" || m === "zen" || m === "marathon" || m === "sprint_40" || m === "sprint_100";
+  }
+
+  updateStandardCombo(onLineClear, nowSeconds) {
+    if (!this.standardComboText) return;
+    if (this.standardComboFadeTween) {
+      this.standardComboFadeTween.stop();
+      this.standardComboFadeTween = null;
+    }
+    if (onLineClear) {
+      this.standardComboCount = this.standardComboCount < 0 ? 0 : this.standardComboCount + 1;
+      this.standardComboLastLineTime = nowSeconds || 0;
+      if (this.standardComboCount >= 1) {
+        this.standardComboNumberText?.setText(`${this.standardComboCount}`);
+        this.standardComboLabelText?.setX((this.standardComboNumberText?.width || 0) + 6);
+        this.standardComboText.setAlpha(1);
+        this.standardComboText.setVisible(true);
+        this.standardComboText.setScale(1);
+        this.tweens.add({
+          targets: this.standardComboText,
+          scale: { from: 1, to: 1.2 },
+          duration: 140,
+          yoyo: true,
+          ease: "Back.easeOut",
+        });
+      }
+    }
+  }
+
+  tickStandardCombo(nowSeconds) {
+    if (!this.standardComboText) return;
+    if (this.standardComboCount < 0) return;
+    const idle = nowSeconds - (this.standardComboLastLineTime || 0);
+    if (idle > 1.25) {
+      if (!this.standardComboFadeTween) {
+        this.standardComboFadeTween = this.tweens.add({
+          targets: this.standardComboText,
+          alpha: { from: this.standardComboText.alpha, to: 0 },
+          duration: 320,
+          onComplete: () => {
+            this.standardComboFadeTween = null;
+            this.standardComboText.setVisible(false);
+            this.standardComboCount = -1;
+          },
+        });
+      }
+    }
+  }
+
+  computeAttack(lines, spinInfo, isAllClear, prevBackToBack) {
+    const baseTable = [0, 0, 1, 2, 4];
+    const isSpin = !!(spinInfo && spinInfo.isSpin);
+    const spinType = spinInfo ? spinInfo.spinType : null;
+    const isMini = spinType && spinType.includes("mini");
+    const isDifficult = (lines >= 4 || (isSpin && lines > 0)) && lines > 0;
+
+    // Base attack
+    let base = 0;
+    if (isSpin) {
+      if (isMini) {
+        base = lines === 2 ? 1 : 0;
+      } else {
+        base = 2 * lines;
+      }
+    } else {
+      base = baseTable[lines] || 0;
+    }
+
+    // B2B bonus when chain is maintained
+    const b2bMaintained = prevBackToBack && isDifficult;
+    if (b2bMaintained) base += 1;
+
+    // All clear bonus
+    if (isAllClear) base += 10;
+
+    const comboVal = Math.max(0, this.comboCount);
+    let attack = 0;
+    if (base > 0) {
+      attack = Math.floor(base * (1 + 0.25 * comboVal));
+    } else if (comboVal >= 2) {
+      attack = Math.floor(Math.log(1 + 1.25 * comboVal));
+    }
+
+    // B2B chain bookkeeping
+    const prevChain = this.b2bChainCount ?? -1;
+    let newChain = prevChain;
+    let b2bBroken = false;
+    if (isDifficult) {
+      if (prevChain < 0) {
+        newChain = 0; // first difficult clear starts chain at 0
+      } else {
+        newChain = b2bMaintained ? prevChain + 1 : 1;
+      }
+    } else {
+      if (lines > 0) {
+        if (prevBackToBack) {
+          b2bBroken = true;
+        }
+        newChain = -1;
+      } else {
+        // No clear (piece placement) does not break chain
+        newChain = prevChain;
+      }
+    }
+    this.b2bChainCount = newChain;
+
+    return {
+      attack,
+      isDifficult,
+      b2bMaintained,
+      b2bBroken,
+      prevChain,
+      newChain,
+    };
+  }
+
+  updateAttackStats(attack, nowSeconds) {
+    if (attack <= 0) return;
+
+    if (this.spikeFadeTween) {
+      this.spikeFadeTween.stop();
+      this.spikeFadeTween = null;
+    }
+    if (this.spikeText) {
+      this.spikeText.setAlpha(1);
+      this.spikeText.setVisible(true);
+      this.spikeText.setScale(1);
+      this.tweens.add({
+        targets: this.spikeText,
+        scale: { from: 1, to: 1.18 },
+        duration: 120,
+        yoyo: true,
+        ease: "Cubic.easeOut",
+      });
+    }
+
+    const elapsedSinceLast = nowSeconds - (this.lastAttackTime || 0);
+    if (elapsedSinceLast > 1) {
+      this.attackSpike = 0;
+    }
+    this.lastAttackTime = nowSeconds;
+    this.totalAttack = (this.totalAttack || 0) + attack;
+    this.attackSpike = (this.attackSpike || 0) + attack;
+  }
+
+  tickAttackDecay(nowSeconds) {
+    if (!this.lastAttackTime) return;
+    const idle = nowSeconds - this.lastAttackTime;
+    if (this.attackSpike > 0 && idle > 1) {
+      this.attackSpike = 0;
+      if (this.spikeFadeTween) {
+        this.spikeFadeTween.stop();
+        this.spikeFadeTween = null;
+      }
+      if (this.spikeText) {
+        this.spikeText.setAlpha(0);
+        this.spikeText.setVisible(false);
+      }
+      this.updateAttackUI();
+    } else if (this.attackSpike > 0 && idle > 0.5) {
+      if (!this.spikeFadeTween && this.spikeText) {
+        this.spikeFadeTween = this.tweens.add({
+          targets: this.spikeText,
+          alpha: { from: this.spikeText.alpha, to: 0 },
+          duration: 500,
+          onComplete: () => {
+            this.spikeFadeTween = null;
+            if (this.spikeText) {
+              this.spikeText.setVisible(false);
+            }
+          },
+        });
+      }
+    }
+  }
+
+  updateAttackUI() {
+    if (!this.attackTotalText || !this.attackPerMinText || !this.spikeText) return;
+    const elapsed = Math.max(0.0001, this.currentTime || 0); // avoid div/0
+    const atkPerMin = (this.totalAttack / elapsed) * 60;
+
+    this.attackTotalText.setText(`${Math.floor(this.totalAttack) || 0}`);
+    this.attackPerMinText.setText(atkPerMin.toFixed(2));
+
+    if (this.attackSpike >= 8) {
+      const spike = Math.floor(this.attackSpike);
+      const t = Math.min(spike / 20, 1);
+      const lerp = (a, b, k) => Math.round(a + (b - a) * k);
+      const r = lerp(255, 255, t);
+      const g = lerp(170, 40, t);
+      const b = lerp(51, 40, t);
+      const hex = (n) => n.toString(16).padStart(2, "0");
+      const color = `#${hex(r)}${hex(g)}${hex(b)}`;
+      this.spikeText.setColor(color);
+      this.spikeText.setText(`SPIKE ${spike}`);
+      this.spikeText.setVisible(true);
+    } else {
+      this.spikeText.setVisible(false);
+    }
+  }
+
+  showB2BChain(b2bMaintained, b2bBroken, prevChain, newChain) {
+    if (!this.b2bChainText) return;
+    this.b2bChainText.setText(`B2B x${newChain}`);
+
+    if (b2bMaintained && newChain > prevChain) {
+      this.b2bChainText.setColor("#ffff55");
+      this.b2bChainText.setScale(1);
+      this.tweens.add({
+        targets: this.b2bChainText,
+        scale: { from: 1, to: 1.2 },
+        duration: 140,
+        yoyo: true,
+        ease: "Cubic.easeOut",
+      });
+    } else if (b2bBroken) {
+      // Only flash if chain was at least 2; otherwise hide quietly
+      if (prevChain >= 2) {
+        this.b2bChainText.setText("B2B x0");
+        this.b2bChainText.setColor("#ff4444");
+        this.b2bChainText.setScale(1);
+        this.b2bChainText.setVisible(true);
+        this.tweens.add({
+          targets: this.b2bChainText,
+          alpha: { from: 1, to: 0.3 },
+          duration: 120,
+          yoyo: true,
+          repeat: 2, // 3 flashes total
+          onComplete: () => {
+            this.b2bChainText.setAlpha(1);
+            this.b2bChainText.setColor("#ffff55");
+            this.b2bChainText.setVisible(false);
+          },
+        });
+      } else {
+        this.b2bChainText.setVisible(false);
+      }
+    } else if (newChain <= 0) {
+      this.b2bChainText.setVisible(false);
+    } else {
+      this.b2bChainText.setVisible(true);
+    }
   }
 
   updateGrade() {
@@ -11196,22 +11788,23 @@ class GameScene extends Phaser.Scene {
           continue;
         }
 
-        // Use 0-70 time for cumulative display; fall back to full if missing
-        const storedTime =
+        const storedFullTime =
+          this.sectionTimes && typeof this.sectionTimes[i] === "number"
+            ? this.sectionTimes[i]
+            : undefined;
+        const storedCoolTime =
           this.sectionCoolTimes && typeof this.sectionCoolTimes[i] === "number"
             ? this.sectionCoolTimes[i]
-            : this.sectionTimes
-              ? this.sectionTimes[i]
-              : undefined;
+            : undefined;
         const storedTetrises = this.sectionTetrises ? this.sectionTetrises[i] : undefined;
         const isCurrent =
           i === displayedCurrentSection &&
           !this.gameOver &&
           (!isMarathonMode ? this.level < maxLevel : true) &&
-          typeof storedTime !== "number";
+          typeof storedFullTime !== "number";
         const currentElapsed = this.currentTime - this.sectionStartTime;
         const timeValue =
-          typeof storedTime === "number" ? storedTime : isCurrent ? currentElapsed : null;
+          typeof storedFullTime === "number" ? storedFullTime : isCurrent ? currentElapsed : null;
         sectionTimesArray.push(timeValue);
 
         const tetrisValue =
@@ -11235,8 +11828,27 @@ class GameScene extends Phaser.Scene {
           this.sectionPerfTexts[i].setVisible(shouldShow);
         }
 
-        const storedTime = this.sectionCoolTimes ? this.sectionCoolTimes[i] : undefined; // use 0-70 time
-        const hasCompletedTime = typeof storedTime === "number";
+        const storedFullTime =
+          this.sectionTimes && typeof this.sectionTimes[i] === "number"
+            ? this.sectionTimes[i]
+            : undefined;
+        const storedCoolTime =
+          this.sectionCoolTimes && typeof this.sectionCoolTimes[i] === "number"
+            ? this.sectionCoolTimes[i]
+            : undefined;
+        const liveTime =
+          typeof storedFullTime === "number"
+            ? storedFullTime
+            : i === displayedCurrentSection
+              ? this.currentTime - this.sectionStartTime
+              : undefined;
+        const splitTime =
+          typeof storedCoolTime === "number"
+            ? storedCoolTime
+            : typeof liveTime === "number"
+              ? liveTime
+              : storedFullTime;
+        const hasCompletedTime = typeof splitTime === "number";
         this.sectionTotalTexts[i].setVisible(shouldShow && hasCompletedTime);
 
         if (!shouldShow) {
@@ -11262,7 +11874,7 @@ class GameScene extends Phaser.Scene {
         }
 
         if (hasCompletedTime) {
-          runningTotal += storedTime;
+          runningTotal += splitTime || 0;
           this.sectionTotalTexts[i].setText(this.formatTimeValue(runningTotal));
         }
       }
@@ -11512,8 +12124,8 @@ const config = {
     antialias: false,
     pixelArt: true,
     roundPixels: true,
-    powerPreference: "high-performance",
     desynchronized: false,
+    powerPreference: "high-performance",
     clearBeforeRender: true,
   },
   scale: {
