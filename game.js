@@ -1281,6 +1281,30 @@ class Board {
     return linesToClear.length;
   }
 
+  addCheeseRows(count = 1, cheesePercent = 0) {
+    const rowsToAdd = Math.max(0, Math.floor(count));
+    const cheeseChance = Math.max(0, Math.min(100, cheesePercent)) / 100;
+    for (let i = 0; i < rowsToAdd; i++) {
+      // Remove top row to make space
+      this.grid.shift();
+      this.fadeGrid.shift();
+      const row = [];
+      for (let c = 0; c < this.cols; c++) {
+        const isHole = Math.random() < cheeseChance;
+        row.push(isHole ? 0 : 0x444444);
+      }
+      this.grid.push(row);
+      this.fadeGrid.push(Array(this.cols).fill(0));
+    }
+  }
+
+  clearAll() {
+    for (let r = 0; r < this.rows; r++) {
+      this.grid[r] = Array(this.cols).fill(0);
+      this.fadeGrid[r] = Array(this.cols).fill(0);
+    }
+  }
+
   draw(scene, offsetX, offsetY, cellSize) {
     // Only draw the visible rows (rows 2-21 of the 22-row matrix)
     const startRow = 2;
@@ -2404,9 +2428,9 @@ class MenuScene extends Phaser.Scene {
       if (this.leaderboardPlaceholder)
         this.leaderboardPlaceholder.setVisible(false);
       this.updateLeaderboard(currentSubmode.id);
+    }
 
     createOrUpdateGlobalOverlay(this, { ...this.getOverlayModeInfo(), showMode: false });
-  }
   }
 
   startSelectedMode() {
@@ -2849,6 +2873,16 @@ class SettingsScene extends Phaser.Scene {
     this.sdfSlider = null;
     this.sdfSliderFill = null;
     this.sdfSliderKnob = null;
+
+    // Zen sandbox toggles
+    this.zenBagText = null;
+    this.zenAttackTableText = null;
+    this.zenCheeseModeText = null;
+    this.zenCheesePercentText = null;
+    this.zenCheeseRowsText = null;
+    this.zenCheeseIntervalText = null;
+    this.zenSpinModeText = null;
+    this.zenInfiniteResetsText = null;
   }
 
   preload() {
@@ -3276,7 +3310,7 @@ class SettingsScene extends Phaser.Scene {
         fontFamily: "Courier New",
       })
       .setOrigin(0.5);
-    const dasValue = this.getStoredTiming("timing_das_frames", 10);
+    const dasValue = this.getTimingFrames("timing_das_frames", 10);
     const dasSliderY = timingY + 30;
 
     this.dasSlider = this.add.graphics();
@@ -3341,7 +3375,7 @@ class SettingsScene extends Phaser.Scene {
     this.updateDASDisplay(dasValue, { x: timingX, width: timingSliderWidth, y: dasSliderY });
 
     // ARR slider
-    const arrValue = this.getStoredTiming("timing_arr_frames", 2);
+    const arrValue = this.getTimingFrames("timing_arr_frames", 2);
     const arrSliderY = dasSliderY + 70;
     this.arrLabel = this.add
       .text(timingX, arrSliderY - 30, "ARR (frames)", {
@@ -3412,7 +3446,7 @@ class SettingsScene extends Phaser.Scene {
     this.updateARRDisplay(arrValue, { x: timingX, width: timingSliderWidth, y: arrSliderY });
 
     // ARE slider
-    const areValue = this.getStoredTiming("timing_are_frames", 7);
+    const areValue = this.getTimingFrames("timing_are_frames", 7);
     const areSliderY = arrSliderY + 70;
     this.areLabel = this.add
       .text(timingX, areSliderY - 30, "ARE (frames)", {
@@ -3483,7 +3517,7 @@ class SettingsScene extends Phaser.Scene {
     this.updateAREDisplay(areValue, { x: timingX, width: timingSliderWidth, y: areSliderY });
 
     // Line ARE / Line Clear Delay slider
-    const lineAreValue = this.getStoredTiming("timing_line_are_frames", 7);
+    const lineAreValue = this.getTimingFrames("timing_line_are_frames", 7);
     const lineAreSliderY = areSliderY + 70;
     this.lineAreLabel = this.add
       .text(timingX, lineAreSliderY - 30, "Line ARE / LCD (frames)", {
@@ -3642,6 +3676,15 @@ class SettingsScene extends Phaser.Scene {
     });
     this.updateSDFDisplay(sdfValue, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
 
+    // Zen sandbox toggles (delegated to helper)
+    if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.buildSettingsToggles) {
+      ZenSandboxHelper.buildSettingsToggles(this, {
+        x: volumeX,
+        y: volumeY + 180,
+        spacing: 26,
+      });
+    }
+
     // Reset to defaults button - moved down 70px
     this.resetButton = this.add
       .text(centerX, centerY + 190, "Reset to Defaults", {
@@ -3744,7 +3787,7 @@ class SettingsScene extends Phaser.Scene {
       pause: Phaser.Input.Keyboard.KeyCodes.ESC,
       menu: Phaser.Input.Keyboard.KeyCodes.ESC, // Menu and Pause share key
       start: Phaser.Input.Keyboard.KeyCodes.ENTER,
-      restart: Phaser.Input.Keyboard.KeyCodes.R,
+      restart: Phaser.Input.Keyboard.KeyCodes.C,
     };
 
     const stored = localStorage.getItem("keybinds");
@@ -3758,6 +3801,163 @@ class SettingsScene extends Phaser.Scene {
     }
 
     return defaultKeybinds;
+  }
+
+  isZenSandboxActive() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    return modeIdLower.includes("zen") && !!this.zenSandboxConfig;
+  }
+
+  tickZenCheese(deltaSeconds = 0) {
+    if (!this.isZenSandboxActive()) return;
+    if (!this.board || !this.zenSandboxConfig) return;
+    const { cheeseMode, cheeseInterval, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+    if (cheeseMode !== "fixed_timing") return;
+    const interval = Math.max(0.1, Number(cheeseInterval) || 0);
+    this.zenCheeseTimer += deltaSeconds;
+    if (this.zenCheeseTimer >= interval) {
+      this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+      this.zenCheeseTimer = 0;
+    }
+  }
+
+  applyZenCheeseRows(trigger, clearedCount = 0) {
+    if (!this.isZenSandboxActive()) return;
+    if (!this.board || !this.zenSandboxConfig) return;
+    const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+    if (cheeseMode !== "fixed_rows") return;
+    if (trigger === "line_clear" && clearedCount > 0) {
+      this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+    }
+  }
+
+  handleZenTopout() {
+    if (!this.isZenSandboxActive()) return;
+    if (this.zenTopoutCooldown) return;
+    this.zenTopoutCooldown = true;
+    // Clear board and reset transient states
+    if (this.board && typeof this.board.clearAll === "function") {
+      this.board.clearAll();
+    }
+    this.clearedLines = [];
+    this.pendingPowerup = null;
+    this.lineClearDelayActive = false;
+    this.lineClearDelayDuration = 0;
+    this.pendingLineAREDelay = 0;
+    this.areActive = false;
+    this.minoRowFadeAlpha = {};
+    this.minoFadeActive = false;
+    this.fadingComplete = false;
+    this.gameOverFadeDoneTime = null;
+    this.lineClearPhase = false;
+    // Brief delay before respawn to avoid tight loops
+    this.time.delayedCall(150, () => {
+      // Allow new spawns and reset cooldown
+      this.zenTopoutCooldown = false;
+      // Ensure next queue exists
+      if (this.nextPieces.length < 6) {
+        this.generateNextPieces();
+      }
+      this.spawnPiece();
+    });
+  }
+
+  isZenInfiniteResets() {
+    return this.isZenSandboxActive() && this.zenSandboxConfig?.movementResetsInfinite;
+  }
+
+  getZenSpinMode() {
+    if (!this.isZenSandboxActive()) return "standard";
+    return this.zenSandboxConfig?.spinType || "standard";
+  }
+
+  getZenGravityRowsPerSecond(deltaSeconds = 0) {
+    if (!this.zenSandboxConfig) return null;
+    this.zenGravityTime = (this.zenGravityTime || 0) + (deltaSeconds || 0);
+    const cfg = this.zenSandboxConfig;
+    const mode = cfg.gravityMode || "none";
+    if (mode === "none") return 0;
+    if (mode === "static") {
+      const rowsPerFrame = Number(cfg.gravityRowsPerFrame || 0) || 0;
+      return rowsPerFrame * 60;
+    }
+    // time-based presets with 30s steps
+    const elapsed = this.zenGravityTime || 0;
+    const steps = Math.floor(elapsed / 30);
+    const presets = {
+      minimal: { base: 0.4, inc: 0 }, // constant gentle gravity
+      slow: { base: 0.3, inc: 0.1 },
+      medium: { base: 0.6, inc: 0.2 },
+      fast: { base: 1.2, inc: 0.4 },
+    };
+    const sel = presets[mode] || presets.minimal;
+    const rowsPerSecond = sel.base + steps * sel.inc;
+    return Math.min(rowsPerSecond, 20); // clamp to avoid runaway
+  }
+
+  getGuidelineAttack(lines, spinInfo, isAllClear, prevBackToBack) {
+    const isSpin = !!(spinInfo && spinInfo.isSpin);
+    const spinType = spinInfo ? spinInfo.spinType : null;
+    const isMini = spinType && spinType.includes("mini");
+    // Base attack table for non-spins
+    const baseTable = [0, 0, 1, 2, 4]; // 0-4 lines
+
+    let base = 0;
+    if (isSpin) {
+      if (isMini) {
+        base = lines === 2 ? 1 : 0; // mini double = 1, mini single = 0
+      } else {
+        base = 2 * lines; // tspin clears: 2x lines
+      }
+    } else {
+      base = baseTable[lines] || 0;
+    }
+
+    const isDifficult = (lines >= 4 || (isSpin && lines > 0)) && lines > 0;
+    const b2bBonus = prevBackToBack && isDifficult ? 1 : 0;
+    const allClearBonus = isAllClear ? 10 : 0;
+
+    // Combo additive table (0-indexed by combo count)
+    const comboCount = Math.max(0, this.comboCount || 0);
+    const comboTable = [0, 0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3];
+    const comboBonus = comboCount < comboTable.length ? comboTable[comboCount] : 4;
+
+    const attack = base + b2bBonus + allClearBonus + comboBonus;
+
+    // B2B chain bookkeeping (reuse existing rules)
+    const prevChain = this.b2bChainCount ?? -1;
+    let newChain = prevChain;
+    let b2bBroken = false;
+    if (isDifficult) {
+      if (prevChain < 0) {
+        newChain = 0; // first difficult clear starts chain at 0
+      } else {
+        newChain = b2bBonus ? prevChain + 1 : 1;
+      }
+    } else {
+      if (lines > 0) {
+        if (prevBackToBack) {
+          b2bBroken = true;
+        }
+        newChain = -1;
+      } else {
+        newChain = prevChain; // no clear does not break chain
+      }
+    }
+    this.b2bChainCount = newChain;
+
+    return {
+      attack,
+      isDifficult,
+      b2bMaintained: !!b2bBonus,
+      b2bBroken,
+      prevChain,
+      newChain,
+    };
   }
 
   onKeyDown(event) {
@@ -3920,6 +4120,36 @@ class SettingsScene extends Phaser.Scene {
     localStorage.setItem(key, value);
   }
 
+  framesToMs(frames) {
+    return (frames / 60) * 1000;
+  }
+
+  msToFrames(ms) {
+    return (ms / 1000) * 60;
+  }
+
+  getTimingMs(key, defaultFrames) {
+    const defaultMs = this.framesToMs(defaultFrames);
+    const raw = this.getStoredTiming(key, defaultMs);
+    if (!Number.isFinite(raw)) return defaultMs;
+    // Backward compatibility: if old frame value was stored (small number), convert to ms
+    if (raw >= 0 && raw <= 120 && raw <= defaultFrames * 2) {
+      // Heuristic: values in plausible frame range treated as frames
+      return this.framesToMs(raw);
+    }
+    return raw;
+  }
+
+  getTimingFrames(key, defaultFrames) {
+    const ms = this.getTimingMs(key, defaultFrames);
+    return this.msToFrames(ms);
+  }
+
+  setTimingFromFrames(key, frames) {
+    const ms = this.framesToMs(frames);
+    this.setStoredTiming(key, ms);
+  }
+
   clampStep(value, min, max, step) {
     const clamped = Math.min(Math.max(value, min), max);
     const stepped = Math.round(clamped / step) * step;
@@ -3946,7 +4176,7 @@ class SettingsScene extends Phaser.Scene {
     const pct = Math.max(0, Math.min(1, relativeX / width));
     const raw = min + pct * (max - min);
     const value = this.clampStep(raw, min, max, step);
-    this.setStoredTiming("timing_das_frames", value);
+    this.setTimingFromFrames("timing_das_frames", value);
     this.updateDASDisplay(value, { x, width, y: slider.y });
   }
 
@@ -3979,7 +4209,7 @@ class SettingsScene extends Phaser.Scene {
     const pct = Math.max(0, Math.min(1, relativeX / width));
     const raw = min + pct * (max - min);
     const value = this.clampStep(raw, min, max, step);
-    this.setStoredTiming("timing_arr_frames", value);
+    this.setTimingFromFrames("timing_arr_frames", value);
     this.updateARRDisplay(value, { x, width, y: slider.y });
   }
 
@@ -4012,7 +4242,7 @@ class SettingsScene extends Phaser.Scene {
     const pct = Math.max(0, Math.min(1, relativeX / width));
     const raw = min + pct * (max - min);
     const value = this.clampStep(raw, min, max, step);
-    this.setStoredTiming("timing_are_frames", value);
+    this.setTimingFromFrames("timing_are_frames", value);
     this.updateAREDisplay(value, { x, width, y: slider.y });
   }
 
@@ -4045,7 +4275,7 @@ class SettingsScene extends Phaser.Scene {
     const pct = Math.max(0, Math.min(1, relativeX / width));
     const raw = min + pct * (max - min);
     const value = this.clampStep(raw, min, max, step);
-    this.setStoredTiming("timing_line_are_frames", value);
+    this.setTimingFromFrames("timing_line_are_frames", value);
     this.updateLineAREDisplay(value, { x, width, y: slider.y });
   }
 
@@ -4069,6 +4299,7 @@ class SettingsScene extends Phaser.Scene {
   }
 
   shouldAllowAREInputs() {
+    if (this.disableIhsIrsForZeroArr) return false;
     const lineAre = this.lineAreOverride || 0;
     const lineClearDelay = this.lineClearDelayOverride || 0;
     return this.areDelay > 0 || this.pendingLineAREDelay > 0 || lineAre > 0 || lineClearDelay > 0;
@@ -4602,6 +4833,7 @@ class AssetLoaderScene extends Phaser.Scene {
         ["tm2_4", "bgm/tm2_4.mp3"],
         ["tm3_4", "bgm/tm3_4.mp3"],
         ["tm3_6", "bgm/tm3_6.mp3"],
+        ["zen_custom", "bgm/sounds/422_m1.mp3"],
       ];
       bgmLoads.forEach(([key, path]) => {
         if (!this.cache.audio.exists(key)) {
@@ -4802,6 +5034,65 @@ class GameScene extends Phaser.Scene {
     this.lineClearDelayActive = false;
     this.lineClearDelayDuration = 0;
     this.pendingLineAREDelay = 0;
+    this.disableIhsIrsForZeroArr = false;
+    this.zenSandboxConfig = null;
+    this.zenSandboxRuntime = { bagQueue: [], bagType: null };
+    this.zenCheeseTimer = 0;
+    this.zenTopoutCooldown = false;
+    this.zenGravityTime = 0;
+
+    if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.ensureScene) {
+      ZenSandboxHelper.ensureScene(this);
+    }
+    if (typeof this.tickZenCheese !== "function") {
+      this.tickZenCheese = function (deltaSeconds = 0) {
+        if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
+        if (!this.board || !this.zenSandboxConfig) return;
+        const { cheeseMode, cheeseInterval, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+        if (cheeseMode !== "fixed_timing") return;
+        const interval = Math.max(0.1, Number(cheeseInterval) || 0);
+        this.zenCheeseTimer = (this.zenCheeseTimer || 0) + deltaSeconds;
+        if (this.zenCheeseTimer >= interval) {
+          this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+          this.zenCheeseTimer = 0;
+        }
+      };
+    }
+    if (typeof this.isZenSandboxActive !== "function") {
+      this.isZenSandboxActive = function () {
+        const modeId =
+          (this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode) || "";
+        const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+        return modeIdLower.includes("zen") && !!this.zenSandboxConfig;
+      };
+    }
+    if (typeof this.getZenSpinMode !== "function") {
+      this.getZenSpinMode = function () {
+        if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return "standard";
+        return (this.zenSandboxConfig && this.zenSandboxConfig.spinType) || "standard";
+      };
+    }
+    if (typeof this.isZenInfiniteResets !== "function") {
+      this.isZenInfiniteResets = function () {
+        return this.isZenSandboxActive && this.isZenSandboxActive() && this.zenSandboxConfig?.movementResetsInfinite;
+      };
+    }
+    if (typeof this.getZenSandboxPiece !== "function") {
+      this.getZenSandboxPiece = function () {
+        // Zen sandbox uses bag type from config; generate piece name and wrap in Piece
+        if (!this.zenSandboxConfig) return this.getRandomPiece();
+        const helper = typeof ZenSandboxHelper !== "undefined" ? ZenSandboxHelper : null;
+        if (helper && helper.nextPieceFromBag) {
+          return helper.nextPieceFromBag(this);
+        }
+        // Fallback: simple random piece using existing utilities
+        const type = this.getRandomPiece ? this.getRandomPiece() : "I";
+        return new Piece(type, this.rotationSystem, 0);
+      };
+    }
+    this.loadZenSandboxConfig();
 
     // Line clear animation tracking
     this.clearedLines = []; // Lines being cleared for animation
@@ -5029,6 +5320,7 @@ class GameScene extends Phaser.Scene {
       errors: null,
     };
     this.finesseInputText = null;
+    this.zenSandboxPanelGroup = null;
     this.finesseInputLabel = null;
     this.finesseActiveForPiece = false;
     this.finesseLastAccuracy = 0;
@@ -5817,6 +6109,47 @@ class GameScene extends Phaser.Scene {
     // This preload is intentionally empty to avoid duplicate loading
   }
 
+  // Timing helpers (ms-backed storage, frame-facing UI)
+  getStoredTiming(key, defaultValue) {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return defaultValue;
+    const parsed = parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+  }
+
+  setStoredTiming(key, value) {
+    localStorage.setItem(key, value);
+  }
+
+  framesToMs(frames) {
+    return (frames / 60) * 1000;
+  }
+
+  msToFrames(ms) {
+    return (ms / 1000) * 60;
+  }
+
+  getTimingMs(key, defaultFrames) {
+    const defaultMs = this.framesToMs(defaultFrames);
+    const raw = this.getStoredTiming(key, defaultMs);
+    if (!Number.isFinite(raw)) return defaultMs;
+    // Backward compatibility: treat plausible frame values as frames
+    if (raw >= 0 && raw <= 120 && raw <= defaultFrames * 2) {
+      return this.framesToMs(raw);
+    }
+    return raw;
+  }
+
+  getTimingFrames(key, defaultFrames) {
+    const ms = this.getTimingMs(key, defaultFrames);
+    return this.msToFrames(ms);
+  }
+
+  setTimingFromFrames(key, frames) {
+    const ms = this.framesToMs(frames);
+    this.setStoredTiming(key, ms);
+  }
+
   // Apply mode-specific configuration to game settings
   applyModeConfiguration() {
     if (!this.gameMode) {
@@ -5836,20 +6169,17 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
-    const isEligibleTimingOverride = ["sprint_40", "sprint_100", "ultra", "zen", "marathon"].some(
+    const isEligibleTimingOverride = [
+      "sprint_40",
+      "sprint_100",
+      "sprint",
+      "ultra",
+      "zen",
+      "marathon",
+    ].some(
       (id) => modeIdLower.includes(id),
     );
-
-    const readTiming = (key) => {
-      const raw = localStorage.getItem(key);
-      const parsed = raw !== null ? parseFloat(raw) : NaN;
-      return Number.isFinite(parsed) ? parsed : null;
-    };
-
-    const getStoredTiming = (key, defaultValue) => {
-      const raw = localStorage.getItem(key);
-      return readTiming(key) !== null ? readTiming(key) : defaultValue;
-    };
+    this.isEligibleTimingOverride = isEligibleTimingOverride;
 
     // Rotation system + ARS reset behavior
     const storedRotation = localStorage.getItem("rotationSystem") || "SRS";
@@ -5866,50 +6196,59 @@ class GameScene extends Phaser.Scene {
       configArsMoveReset !== null ? configArsMoveReset : storedArsMoveReset;
 
     // Apply timing configurations - use mode methods if available for progressive timings
+    // Timing overrides now stored in milliseconds for precision
+    // Base timings from mode, then override with user settings for eligible modes (user wins)
     this.dasDelay =
       this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
         ? this.gameMode.getDAS()
         : config.das || 16 / 60;
     if (isEligibleTimingOverride) {
-      const storedDasFrames = this.getStoredTiming("timing_das_frames", null);
-      if (storedDasFrames !== null) {
-        const clamped = Math.min(Math.max(storedDasFrames, 1), 20);
-        this.dasDelay = clamped / 60;
-      }
+      const storedDasFrames = this.getTimingFrames("timing_das_frames", 10); // slider default 10f
+      const clamped = Math.min(Math.max(storedDasFrames, 1), 20);
+      this.dasDelay = clamped / 60;
     }
+    this.disableIhsIrsForZeroArr = false;
+
     this.arrDelay =
       this.gameMode.getARR && typeof this.gameMode.getARR === "function"
         ? this.gameMode.getARR()
         : config.arr || 1 / 60;
     if (isEligibleTimingOverride) {
-      const storedArrFrames = this.getStoredTiming("timing_arr_frames", null);
-      if (storedArrFrames !== null) {
-        const clamped = Math.min(Math.max(storedArrFrames, 0), 5);
-        this.arrDelay = clamped / 60;
-      }
+      const storedArrFrames = this.getTimingFrames("timing_arr_frames", 2); // slider default 2f
+      const clamped = Math.min(Math.max(storedArrFrames, 0), 5);
+      this.arrDelay = clamped / 60;
     }
+    if (isEligibleTimingOverride && this.arrDelay <= 0) {
+      this.disableIhsIrsForZeroArr = true;
+    }
+    this.areOverride = null;
     this.areDelay =
       this.gameMode.getARE && typeof this.gameMode.getARE === "function"
         ? this.gameMode.getARE()
         : config.are || 30 / 60;
     if (isEligibleTimingOverride) {
-      const storedAreFrames = this.getStoredTiming("timing_are_frames", null);
-      if (storedAreFrames !== null) {
-        const clamped = Math.min(Math.max(storedAreFrames, 0), 60);
-        this.areDelay = clamped / 60;
-      }
+      const storedAreFrames = this.getTimingFrames("timing_are_frames", 7); // slider default 7f
+      const clamped = Math.min(Math.max(storedAreFrames, 0), 60);
+      this.areDelay = clamped / 60;
+      this.areOverride = clamped / 60;
     }
     this.lineAreOverride = null;
     this.lineClearDelayOverride = null;
     if (isEligibleTimingOverride) {
-      const storedLineAreFrames = this.getStoredTiming("timing_line_are_frames", null);
-      if (storedLineAreFrames !== null) {
-        const clamped = Math.min(Math.max(storedLineAreFrames, 0), 60);
-        this.lineAreOverride = clamped / 60;
-        this.lineClearDelayOverride = clamped / 60;
-      }
+      const storedLineAreFrames = this.getTimingFrames("timing_line_are_frames", 7); // slider default 7f
+      const clamped = Math.min(Math.max(storedLineAreFrames, 0), 60);
+      this.lineAreOverride = clamped / 60;
+      this.lineClearDelayOverride = clamped / 60;
     }
-    // Soft drop speed multiplier
+
+    // If ARR is zero, force zero ARE/line ARE/line clear delay to spawn immediately and disable IHS/IRS
+    if (this.disableIhsIrsForZeroArr) {
+      this.areDelay = 0;
+      this.areOverride = 0;
+      this.lineAreOverride = 0;
+      this.lineClearDelayOverride = 0;
+    }
+    // Soft drop speed multiplier (keep as-is, scalar not time-based)
     this.softDropMultiplier = config.softDropMultiplier || 6;
     if (isEligibleTimingOverride) {
       const storedSdf = this.getStoredTiming("timing_sdf_mult", null);
@@ -5918,6 +6257,40 @@ class GameScene extends Phaser.Scene {
         this.softDropMultiplier = clamped;
       }
     }
+
+    // Debug: detailed timing state
+    const rawDasMs = this.getStoredTiming("timing_das_frames", null);
+    const rawArrMs = this.getStoredTiming("timing_arr_frames", null);
+    const rawAreMs = this.getStoredTiming("timing_are_frames", null);
+    const rawLineAreMs = this.getStoredTiming("timing_line_are_frames", null);
+    const timingDebug = {
+      modeId,
+      isEligibleTimingOverride,
+      stored: {
+        das: rawDasMs,
+        arr: rawArrMs,
+        are: rawAreMs,
+        lineAre: rawLineAreMs,
+        sdf: this.getStoredTiming("timing_sdf_mult", null),
+      },
+      appliedFrames: {
+        das: Math.round(this.dasDelay * 60 * 1000) / 1000,
+        arr: Math.round(this.arrDelay * 60 * 1000) / 1000,
+        are: Math.round(this.areDelay * 60 * 1000) / 1000,
+        lineAre:
+          this.lineAreOverride !== null
+            ? Math.round(this.lineAreOverride * 60 * 1000) / 1000
+            : null,
+      },
+      appliedSeconds: {
+        das: this.dasDelay,
+        arr: this.arrDelay,
+        are: this.areDelay,
+        lineAre: this.lineAreOverride,
+      },
+      softDropMultiplier: this.softDropMultiplier,
+    };
+    console.log("[TimingDebug]", timingDebug);
     this.lockDelayMax =
       this.gameMode.getLockDelay &&
       typeof this.gameMode.getLockDelay === "function"
@@ -5965,6 +6338,18 @@ class GameScene extends Phaser.Scene {
       this.updateFinesseInputUI?.();
     }
 
+    // Debug: log applied timing overrides for eligible modes
+    if (isEligibleTimingOverride) {
+      console.log("[TimingOverride]", {
+        modeId,
+        dasFrames: Math.round(this.dasDelay * 60),
+        arrFrames: Math.round(this.arrDelay * 60),
+        areFrames: Math.round(this.areDelay * 60),
+        lineAreFrames:
+          this.lineAreOverride !== null ? Math.round(this.lineAreOverride * 60) : null,
+        sdfMult: this.softDropMultiplier,
+      });
+    }
   }
 
   // Leaderboard helpers (GameScene)
@@ -6630,10 +7015,15 @@ class GameScene extends Phaser.Scene {
 
     const shouldShowSectionTracker =
       !(isUltraMode || isZenMode) && modeId !== "tgm3_sakura";
+    const shouldShowZenPanel = isZenMode && this.zenSandboxConfig;
     if (this.sectionTrackerGroup) {
       this.sectionTrackerGroup.destroy(true);
       this.sectionTrackerGroup = null;
       clearSectionTrackerRefs();
+    }
+    if (this.zenSandboxPanelGroup) {
+      this.zenSandboxPanelGroup.destroy(true);
+      this.zenSandboxPanelGroup = null;
     }
 
     if (!shouldShowSectionTracker) {
@@ -6873,6 +7263,24 @@ class GameScene extends Phaser.Scene {
         });
         this.sectionTrackerGroup.add(this.tapInternalGradeText);
         this.tapInternalGradeText.setVisible(false);
+      }
+    }
+
+    // Zen sandbox panel (left side, above everything)
+    if (
+      shouldShowZenPanel &&
+      typeof ZenSandboxHelper !== "undefined" &&
+      typeof ZenSandboxHelper.renderPanel === "function"
+    ) {
+      const panelX = Math.max(20, this.borderOffsetX - 750);
+      const panelY = Math.max(10, this.borderOffsetY - 30);
+      const panel = ZenSandboxHelper.renderPanel(this, this.zenSandboxConfig, {
+        x: panelX,
+        y: panelY,
+        cellSize: this.cellSize,
+      });
+      if (panel && typeof panel.setDepth === "function") {
+        panel.setDepth(10000);
       }
     }
 
@@ -7283,6 +7691,7 @@ class GameScene extends Phaser.Scene {
         tm2_4: addTrack("tm2_4", { loop: true }),
         tm3_4: addTrack("tm3_4", { loop: true }),
         tm3_6: addTrack("tm3_6", { loop: true }),
+        zen_custom: addTrack("zen_custom", { loop: true }),
       };
       this.stage1BGM = this.bgmTracks.tm1_1;
       this.stage2BGM = this.bgmTracks.tm1_2;
@@ -7551,7 +7960,7 @@ class GameScene extends Phaser.Scene {
       sprint_40: { segments: [{ end: 999, key: "tm1_1" }] },
       sprint_100: { segments: [{ end: 999, key: "tm1_1" }] },
       ultra: { segments: [{ end: 999, key: "tm1_1" }] },
-      zen: { segments: [{ end: 999, key: "tm1_1" }] },
+      zen: { segments: [{ end: 999, key: "zen_custom" }] },
       tgm1: { segments: sharedTGM1, credits: "tm1_endroll" },
       tgm_plus: { segments: sharedTGM1, credits: "tm1_endroll" },
       "20g": { segments: sharedTGM1, credits: "tm1_endroll" },
@@ -7819,6 +8228,9 @@ class GameScene extends Phaser.Scene {
     if (!this.keys || !this.cursors) {
       return;
     }
+
+    // Zen sandbox: timed cheese injection
+    this.tickZenCheese(this.deltaTime);
 
     // Input handling (null-safe)
     const isDown = (key) => !!(key && key.isDown);
@@ -8205,23 +8617,37 @@ class GameScene extends Phaser.Scene {
             // Don't set grounded state here - let gravity/soft drop logic handle it
           }
         }
-      } else {
-        if (this.leftInRepeat) {
-          // Handle ARR (Auto Repeat Rate)
-          if (this.leftTimer >= this.arrDelay) {
-            this.leftTimer = 0;
-            if (this.currentPiece) {
-              const moved = this.currentPiece.move(this.board, -1, 0);
-              if (moved) {
-                this.incrementFinesseMove();
-                this.finesseInputCount += 1; // Count key press, not DAS
-                this.updateFinesseInputUI();
-                this.resetLockDelay();
-              } else {
-                // Piece tried to move left during ARR - no ground sound for movement failures
-              }
-              // Don't set grounded state here - let gravity/soft drop logic handle it
+      } else if (this.leftInRepeat) {
+        // Handle ARR (Auto Repeat Rate)
+        if (this.arrDelay <= 0) {
+          // Instant travel to wall when ARR is 0
+          if (this.currentPiece) {
+            let movedAny = false;
+            let guard = this.board.cols + 2;
+            while (guard-- > 0 && this.currentPiece.move(this.board, -1, 0)) {
+              movedAny = true;
             }
+            if (movedAny) {
+              this.incrementFinesseMove();
+              this.finesseInputCount += 1;
+              this.updateFinesseInputUI();
+              this.resetLockDelay();
+            }
+          }
+          this.leftTimer = 0;
+        } else if (this.leftTimer >= this.arrDelay) {
+          this.leftTimer = 0;
+          if (this.currentPiece) {
+            const moved = this.currentPiece.move(this.board, -1, 0);
+            if (moved) {
+              this.incrementFinesseMove();
+              this.finesseInputCount += 1; // Count key press, not DAS
+              this.updateFinesseInputUI();
+              this.resetLockDelay();
+            } else {
+              // Piece tried to move left during ARR - no ground sound for movement failures
+            }
+            // Don't set grounded state here - let gravity/soft drop logic handle it
           }
         }
       }
@@ -8247,7 +8673,20 @@ class GameScene extends Phaser.Scene {
         }
       } else {
         // Handle ARR (Auto Repeat Rate)
-        if (this.rightTimer >= this.arrDelay) {
+        if (this.arrDelay <= 0) {
+          // Instant travel to wall when ARR is 0
+          if (this.currentPiece) {
+            let movedAny = false;
+            let guard = this.board.cols + 2;
+            while (guard-- > 0 && this.currentPiece.move(this.board, 1, 0)) {
+              movedAny = true;
+            }
+            if (movedAny) {
+              this.resetLockDelay();
+            }
+          }
+          this.rightTimer = 0;
+        } else if (this.rightTimer >= this.arrDelay) {
           this.rightTimer = 0;
           if (this.currentPiece) {
             const moved = this.currentPiece.move(this.board, 1, 0);
@@ -8574,17 +9013,38 @@ class GameScene extends Phaser.Scene {
     }
 
     // Gravity (TGM-style curve, time-based to be FPS independent)
+    const zenActive =
+      typeof this.isZenSandboxActive === "function" ? this.isZenSandboxActive() : false;
     if (!this.areActive) {
       // Only apply gravity when not in ARE
       if (this.skipGravityThisFrame) {
         this.skipGravityThisFrame = false;
         return;
       }
+      let zenRowsPerSecond = null;
+      if (this.zenSandboxConfig) {
+        const cfg = this.zenSandboxConfig;
+        const mode = cfg.gravityMode || "none";
+        if (mode === "none") {
+          zenRowsPerSecond = 0;
+        } else if (mode === "static") {
+          const rpf = Number(cfg.gravityRowsPerFrame || 0) || 0;
+          zenRowsPerSecond = rpf * 60;
+        } else {
+          // fallback to helper if available (presets)
+          if (typeof this.getZenGravityRowsPerSecond === "function") {
+            zenRowsPerSecond = this.getZenGravityRowsPerSecond(this.deltaTime);
+          }
+        }
+      }
       const internalGravity = Math.max(1, this.getTGMGravitySpeed(this.level));
       if (!this.currentPiece) return;
 
       // rowsPerSecond derived from internalGravity (1/256G units) assuming 60 fps baseline
-      const rowsPerSecond = (internalGravity / 256) * 60;
+      let rowsPerSecond = (internalGravity / 256) * 60;
+      if (typeof zenRowsPerSecond === "number") {
+        rowsPerSecond = zenRowsPerSecond;
+      }
       this.gravityAccum += rowsPerSecond * this.deltaTime; // deltaTime in seconds
 
       const rowsToFall = Math.floor(this.gravityAccum);
@@ -8640,7 +9100,10 @@ class GameScene extends Phaser.Scene {
           // Line clear delay completed, perform flash fade-out and enter line ARE
           this.lineClearDelayActive = false;
           this.lineClearPhase = true;
-          this.areDelay = this.pendingLineAREDelay || 41 / 60;
+          this.areDelay =
+            this.pendingLineAREDelay !== null && this.pendingLineAREDelay !== undefined
+              ? this.pendingLineAREDelay
+              : 41 / 60;
           this.areTimer = 0;
 
           // Now clear lines and play fall sound at the beginning of line ARE
@@ -8938,7 +9401,7 @@ class GameScene extends Phaser.Scene {
       this.shiraseGarbageCounter += 1;
     }
 
-    if (this.isFirstSpawn && this.gameMode) {
+    if (this.isFirstSpawn && this.gameMode && !this.isEligibleTimingOverride) {
       this.dasDelay =
         this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
           ? this.gameMode.getDAS()
@@ -9001,6 +9464,10 @@ class GameScene extends Phaser.Scene {
           }
         }
         if (!shifted) {
+          if (this.isZenSandboxActive()) {
+            this.handleZenTopout();
+            return;
+          }
           // Still can't spawn after shifting - game over
           // Stop BGM on game over
           if (this.currentBGM) {
@@ -9013,6 +9480,10 @@ class GameScene extends Phaser.Scene {
           return;
         }
       } else {
+        if (this.isZenSandboxActive()) {
+          this.handleZenTopout();
+          return;
+        }
         // Game over - piece can't spawn (reached top of visible area)
         // Stop BGM on game over
         if (this.currentBGM) {
@@ -9171,6 +9642,7 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isZenSandbox = modeIdLower.includes("zen") && this.zenSandboxConfig;
     const prefersTGMRand =
       modeIdLower.startsWith("tgm") ||
       modeIdLower.includes("shirase") ||
@@ -9197,7 +9669,9 @@ class GameScene extends Phaser.Scene {
     while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
       let piece;
-      if (this.gameMode && this.gameMode.generateNextPiece) {
+      if (isZenSandbox) {
+        piece = this.getZenSandboxPiece();
+      } else if (this.gameMode && this.gameMode.generateNextPiece) {
         piece = this.gameMode.generateNextPiece(this);
       } else if (isTgm3Mode) {
         piece = this.generateTgm3Piece();
@@ -9667,13 +10141,17 @@ class GameScene extends Phaser.Scene {
 
     if (linesToClear.length > 0) {
       const lineClearDelay =
-        this.gameMode && this.gameMode.getLineClearDelay
-          ? this.gameMode.getLineClearDelay()
-          : 40 / 60;
+        this.isEligibleTimingOverride && this.lineClearDelayOverride !== null
+          ? this.lineClearDelayOverride
+          : this.gameMode && this.gameMode.getLineClearDelay
+            ? this.gameMode.getLineClearDelay()
+            : 40 / 60;
       const lineAREDelay =
-        this.gameMode && this.gameMode.getLineARE
-          ? this.gameMode.getLineARE()
-          : 41 / 60;
+        this.isEligibleTimingOverride && this.lineAreOverride !== null
+          ? this.lineAreOverride
+          : this.gameMode && this.gameMode.getLineARE
+            ? this.gameMode.getLineARE()
+            : 41 / 60;
       this.lineClearDelayDuration = lineClearDelay;
       this.pendingLineAREDelay = lineAREDelay;
       this.areDelay = lineClearDelay;
@@ -9689,11 +10167,13 @@ class GameScene extends Phaser.Scene {
       // Play clear sound
       this.playSfx("clear", 0.7);
     } else {
-      // Start normal ARE (use mode timing if available)
+      // Start normal ARE (prefer explicit override, else mode timing)
       const normalARE =
-        this.gameMode && this.gameMode.getARE
-          ? this.gameMode.getARE()
-          : 30 / 60;
+        this.isEligibleTimingOverride && this.areOverride !== null
+          ? this.areOverride
+          : this.gameMode && this.gameMode.getARE
+            ? this.gameMode.getARE()
+            : 30 / 60;
       this.areDelay = normalARE;
       this.areTimer = 0;
       this.areActive = true;
@@ -9808,6 +10288,7 @@ class GameScene extends Phaser.Scene {
   clearStoredLines() {
     // ROBUST FIX: Clear lines without index shifting issues
     // Instead of splice/unshift, build a new grid without the cleared lines
+    const clearedCount = this.clearedLines.length;
 
     // Safety: if a powerup row is being cleared but pendingPowerup isn't set (e.g., grid-stored powerup cells), detect it here.
     if (!this.pendingPowerup && this.clearedLines.length > 0) {
@@ -9942,8 +10423,8 @@ class GameScene extends Phaser.Scene {
   }
 
   resetLockDelay() {
-    // SRS: limit lock delay resets to prevent infinite stalling
-    if (this.rotationSystem === "SRS" && this.isGrounded) {
+    // SRS: limit lock delay resets to prevent infinite stalling (unless Zen infinite resets)
+    if (this.rotationSystem === "SRS" && this.isGrounded && !this.isZenInfiniteResets()) {
       if (this.lockResetCount >= 15) {
         this.lockPiece();
         return;
@@ -9953,9 +10434,9 @@ class GameScene extends Phaser.Scene {
 
     // ARS: lock reset rules
     if (this.rotationSystem === "ARS" && this.isGrounded) {
-      // If move-reset is enabled, behave like SRS (limited by 15 total resets)
+      // If move-reset is enabled, behave like SRS (limited by 15 total resets unless Zen infinite)
       if (this.arsMoveResetEnabled) {
-        if (this.lockResetCount >= 15) {
+        if (!this.isZenInfiniteResets() && this.lockResetCount >= 15) {
           this.lockPiece();
           return;
         }
@@ -9977,8 +10458,8 @@ class GameScene extends Phaser.Scene {
         return;
       }
       // Require downward progress of at least one row while staying grounded
-      if (currentY <= this.lastGroundedY) {
-        // No progress: do not reset timer
+      if (!this.isZenInfiniteResets() && currentY <= this.lastGroundedY) {
+        // No progress: do not reset timer (unless infinite resets enabled)
         return;
       }
       this.lastGroundedY = currentY;
@@ -10469,8 +10950,8 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Update mode-specific timings in case they change with level
-    if (this.gameMode) {
+    // Update mode-specific timings in case they change with level (but don't overwrite user overrides)
+    if (this.gameMode && !this.isEligibleTimingOverride) {
       this.dasDelay =
         this.gameMode.getDAS && typeof this.gameMode.getDAS === "function"
           ? this.gameMode.getDAS()
@@ -10484,8 +10965,7 @@ class GameScene extends Phaser.Scene {
           ? this.gameMode.getARE()
           : 30 / 60;
       this.lockDelay =
-        this.gameMode.getLockDelay &&
-        typeof this.gameMode.getLockDelay === "function"
+        this.gameMode.getLockDelay && typeof this.gameMode.getLockDelay === "function"
           ? this.gameMode.getLockDelay()
           : 0.5;
     }
@@ -10791,6 +11271,14 @@ class GameScene extends Phaser.Scene {
     if (!piece || !board) return { isSpin: false, isTSpin: false, spinType: null };
     if (piece.type === "O") return { isSpin: false, isTSpin: false, spinType: null };
 
+    const spinMode = this.getZenSpinMode();
+    if (spinMode === "t_only" && piece.type !== "T") {
+      return { isSpin: false, isTSpin: false, spinType: null };
+    }
+    if (spinMode === "all") {
+      return { isSpin: true, isTSpin: piece.type === "T", spinType: `${piece.type}-spin` };
+    }
+
     // Build set of current piece cells to ignore self-collision
     const pieceCells = new Set();
     for (let r = 0; r < piece.shape.length; r++) {
@@ -10921,6 +11409,16 @@ class GameScene extends Phaser.Scene {
   }
 
   computeAttack(lines, spinInfo, isAllClear, prevBackToBack) {
+    // Zen sandbox: optional guideline attack table
+    if (
+      this.isZenSandboxActive() &&
+      this.zenSandboxConfig &&
+      this.zenSandboxConfig.attackTableType === "guideline" &&
+      typeof this.getGuidelineAttack === "function"
+    ) {
+      return this.getGuidelineAttack(lines, spinInfo, isAllClear, prevBackToBack);
+    }
+
     const baseTable = [0, 0, 1, 2, 4];
     const isSpin = !!(spinInfo && spinInfo.isSpin);
     const spinType = spinInfo ? spinInfo.spinType : null;
@@ -12841,21 +13339,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Section messages removed - uncomment if needed for other modes
-    /*
-        // Draw section message - centered on screen
-        if (this.sectionMessage) {
-            const alpha = Math.min(1, this.sectionMessageTimer / 60); // Fade out
-            const messageFontSize = Math.max(24, Math.min(48, Math.floor(this.cellSize * 1.6)));
-            const text = this.add.text(this.windowWidth / 2, this.windowHeight / 2, this.sectionMessage, {
-                fontSize: `${messageFontSize}px`,
-                fill: '#fff',
-                stroke: '#000',
-                strokeThickness: 2
-            }).setAlpha(alpha).setOrigin(0.5);
-            this.gameGroup.add(text);
-        }
-        */
+
 
     // Add playfield border to game group (already created above)
     this.gameGroup.add(this.playfieldBorder);
@@ -13017,6 +13501,7 @@ window.__minoResizeHandler = () => {
       }
     }
   }
+  // Ensure the game is resized correctly on window resize
+  window.addEventListener("resize", resizeGame);
 };
-
 window.addEventListener("resize", window.__minoResizeHandler);
