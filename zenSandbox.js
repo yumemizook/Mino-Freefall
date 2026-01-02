@@ -14,6 +14,7 @@
     spinType: "standard", // options: standard, t_only, all
     gravityMode: "none", // none, low, slow, medium, fast, static
     gravityRowsPerFrame: 0, // used when gravityMode === "static"
+    bagChanged: false, // UI notice flag
   };
 
   function loadConfig() {
@@ -92,10 +93,14 @@
 
     // History/random paths bypass bag queue
     if (bagType === "random") {
-      return PIECES[Math.floor(Math.random() * PIECES.length)];
+      const pick = PIECES[Math.floor(Math.random() * PIECES.length)];
+      console.log("[ZenBag] pure_random", { bagType, pick });
+      return pick;
     }
     if (bagType === "history" && typeof scene.generateTGM1Piece === "function") {
-      return scene.generateTGM1Piece();
+      const pick = scene.generateTGM1Piece();
+      console.log("[ZenBag] history", { bagType, pick });
+      return pick;
     }
 
     if (runtime.bagType !== bagType) {
@@ -111,6 +116,11 @@
     }
 
     const piece = runtime.bagQueue.shift();
+    console.log("[ZenBag] bag draw", {
+      bagType,
+      remaining: runtime.bagQueue.length,
+      piece,
+    });
     return piece || PIECES[Math.floor(Math.random() * PIECES.length)];
   }
 
@@ -298,7 +308,7 @@
       fill: "#ffcc00",
       fontFamily: "Courier New",
     });
-    bagNotice.setVisible(false);
+    bagNotice.setVisible(!!cfg.bagChanged);
     group.add(bagNotice);
 
     createRadioRow(
@@ -318,7 +328,7 @@
       (val) => {
         if (val === currentBagType) return;
         currentBagType = val;
-        scene.setZenSandboxConfig && scene.setZenSandboxConfig({ bagType: val });
+        scene.setZenSandboxConfig && scene.setZenSandboxConfig({ bagType: val, bagChanged: true });
         bagNotice.setVisible(true);
         bagNotice.setPosition(0, rowY + lineHeight * (1 + 0.9 * 5));
       },
@@ -582,6 +592,16 @@
 
       addLabel("Zen Sandbox", -30);
 
+      let currentBagType = cfg.bagType;
+      const bagNotice = scene.add
+        .text(x - 140, y + lineHeight * 1.0, "Restart Zen mode to apply bag changes.", {
+          fontSize: "12px",
+          fill: "#ffcc00",
+          fontFamily: "Courier New",
+        })
+        .setOrigin(0, 0);
+      bagNotice.setVisible(false);
+
       radioRow(
         "Bag",
         [
@@ -642,16 +662,6 @@
 
       radioRow(
         "Spin",
-        [
-          { label: "standard", value: "standard" },
-          { label: "t-only", value: "t_only" },
-          { label: "all", value: "all" },
-        ],
-        cfg.spinType,
-        (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ spinType: val }),
-      );
-
-      radioRow(
         "Infinite resets",
         [
           { label: "on", value: true },
@@ -696,6 +706,11 @@
       scene.zenCheeseTimer = 0;
       scene.zenTopoutCooldown = false;
       if (typeof scene.zenGravityTime === "number") scene.zenGravityTime = 0;
+      // Ensure the new bag system applies immediately on restart
+      if (Array.isArray(scene.nextPieces)) scene.nextPieces.length = 0;
+      scene.bagQueue = [];
+      scene.bagDrawCount = 0;
+      scene.firstPiece = true;
     },
     ensureScene(scene) {
       if (!scene) return;

@@ -5040,6 +5040,7 @@ class GameScene extends Phaser.Scene {
     this.zenCheeseTimer = 0;
     this.zenTopoutCooldown = false;
     this.zenGravityTime = 0;
+    this.zenSandboxInitDone = false;
 
     if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.ensureScene) {
       ZenSandboxHelper.ensureScene(this);
@@ -5076,20 +5077,48 @@ class GameScene extends Phaser.Scene {
     }
     if (typeof this.isZenInfiniteResets !== "function") {
       this.isZenInfiniteResets = function () {
-        return this.isZenSandboxActive && this.isZenSandboxActive() && this.zenSandboxConfig?.movementResetsInfinite;
+        // Ensure Zen config/runtime are loaded before filling queue so first bag uses selected randomizer
+        const modeIdForZen =
+          (this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode) || "";
+        const isZenMode = typeof modeIdForZen === "string" && modeIdForZen.toLowerCase().includes("zen");
+        if (isZenMode && (!this.zenSandboxConfig || !this.zenSandboxRuntime)) {
+          if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
+            const cfg = ZenSandboxHelper.loadConfig();
+            this.zenSandboxConfig = cfg;
+            if (ZenSandboxHelper.resetRuntime) ZenSandboxHelper.resetRuntime(this, cfg);
+          }
+        }
+        const isZenSandbox = this.isZenSandboxActive && this.isZenSandboxActive();
+        return isZenSandbox && this.zenSandboxConfig?.movementResetsInfinite;
       };
     }
     if (typeof this.getZenSandboxPiece !== "function") {
       this.getZenSandboxPiece = function () {
-        // Zen sandbox uses bag type from config; generate piece name and wrap in Piece
+        // Ensure config/runtime present so the very first bag uses the selected randomizer
+        if (!this.zenSandboxConfig && typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
+          this.zenSandboxConfig = ZenSandboxHelper.loadConfig();
+        }
+        if (this.zenSandboxConfig && typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.resetRuntime) {
+          if (!this.zenSandboxRuntime || this.zenSandboxRuntime.bagType !== this.zenSandboxConfig.bagType) {
+            ZenSandboxHelper.resetRuntime(this, this.zenSandboxConfig);
+          }
+        }
         if (!this.zenSandboxConfig) return this.getRandomPiece();
         const helper = typeof ZenSandboxHelper !== "undefined" ? ZenSandboxHelper : null;
         if (helper && helper.nextPieceFromBag) {
-          return helper.nextPieceFromBag(this);
+          const piece = helper.nextPieceFromBag(this);
+          console.log("[ZenBag] getZenSandboxPiece", {
+            bagType: this.zenSandboxConfig?.bagType,
+            runtimeBag: this.zenSandboxRuntime?.bagType,
+            nextType: typeof piece === "string" ? piece : piece?.type || piece?.piece,
+          });
+          return piece;
         }
         // Fallback: simple random piece using existing utilities
         const type = this.getRandomPiece ? this.getRandomPiece() : "I";
-        return new Piece(type, this.rotationSystem, 0);
+        return type;
       };
     }
     this.loadZenSandboxConfig();
@@ -9642,7 +9671,45 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
-    const isZenSandbox = modeIdLower.includes("zen") && this.zenSandboxConfig;
+    console.log("[ZenBag] generateNextPieces enter", {
+      modeId,
+      modeIdLower,
+      nextLen: this.nextPieces?.length,
+    });
+    const isZenMode = modeIdLower.includes("zen");
+    if (isZenMode) {
+      if (!this.zenSandboxConfig) {
+        if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
+          this.zenSandboxConfig = ZenSandboxHelper.loadConfig();
+        } else if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.defaults) {
+          this.zenSandboxConfig = { ...ZenSandboxHelper.defaults };
+        } else {
+          this.zenSandboxConfig = { bagType: "7bag" };
+        }
+      }
+      if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.resetRuntime) {
+        const needsReset =
+          !this.zenSandboxRuntime ||
+          this.zenSandboxRuntime.bagType !== this.zenSandboxConfig.bagType ||
+          !this.zenSandboxInitDone;
+        if (needsReset) {
+          ZenSandboxHelper.resetRuntime(this, this.zenSandboxConfig);
+          console.log("[ZenBag] reset runtime", {
+            bagType: this.zenSandboxConfig?.bagType,
+            mode: modeIdLower,
+          });
+          if (Array.isArray(this.nextPieces)) this.nextPieces.length = 0;
+          this.zenSandboxInitDone = true;
+        }
+      }
+      console.log("[ZenBag] zen active", {
+        bagType: this.zenSandboxConfig?.bagType,
+        runtimeBag: this.zenSandboxRuntime?.bagType,
+        nextLen: this.nextPieces?.length,
+      });
+    }
+    // Treat any Zen mode as sandbox for piece generation (config is loaded above)
+    const isZenSandbox = isZenMode;
     const prefersTGMRand =
       modeIdLower.startsWith("tgm") ||
       modeIdLower.includes("shirase") ||
