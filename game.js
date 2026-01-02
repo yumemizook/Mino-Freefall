@@ -1283,18 +1283,36 @@ class Board {
 
   addCheeseRows(count = 1, cheesePercent = 0) {
     const rowsToAdd = Math.max(0, Math.floor(count));
-    const cheeseChance = Math.max(0, Math.min(100, cheesePercent)) / 100;
+    // cheesePercent controls how often the hole shifts: 0 = fixed column, 100 = new hole every row.
+    const clampedPercent = Math.max(0, Math.min(100, cheesePercent));
+    const shiftChance = clampedPercent / 100;
+    let holeCol = Math.floor(Math.random() * this.cols);
     for (let i = 0; i < rowsToAdd; i++) {
       // Remove top row to make space
       this.grid.shift();
       this.fadeGrid.shift();
+
+      // Decide hole column for this row
+      if (Math.random() < shiftChance) {
+        let newHole = Math.floor(Math.random() * this.cols);
+        // avoid identical hole when shifting
+        if (newHole === holeCol) {
+          newHole = (newHole + 1) % this.cols;
+        }
+        holeCol = newHole;
+      }
+
       const row = [];
       for (let c = 0; c < this.cols; c++) {
-        const isHole = Math.random() < cheeseChance;
+        const isHole = c === holeCol;
         row.push(isHole ? 0 : 0x444444);
       }
       this.grid.push(row);
       this.fadeGrid.push(Array(this.cols).fill(0));
+    }
+    // Play garbage SFX when rows are injected
+    if (rowsToAdd > 0 && this.scene && typeof this.scene.playGarbageSfx === "function") {
+      this.scene.playGarbageSfx(rowsToAdd);
     }
   }
 
@@ -3676,15 +3694,6 @@ class SettingsScene extends Phaser.Scene {
     });
     this.updateSDFDisplay(sdfValue, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
 
-    // Zen sandbox toggles (delegated to helper)
-    if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.buildSettingsToggles) {
-      ZenSandboxHelper.buildSettingsToggles(this, {
-        x: volumeX,
-        y: volumeY + 180,
-        spacing: 26,
-      });
-    }
-
     // Reset to defaults button - moved down 70px
     this.resetButton = this.add
       .text(centerX, centerY + 190, "Reset to Defaults", {
@@ -3815,24 +3824,63 @@ class SettingsScene extends Phaser.Scene {
   tickZenCheese(deltaSeconds = 0) {
     if (!this.isZenSandboxActive()) return;
     if (!this.board || !this.zenSandboxConfig) return;
+    if (this.isPaused) return;
     const { cheeseMode, cheeseInterval, cheeseRows, cheesePercent } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_timing") return;
-    const interval = Math.max(0.1, Number(cheeseInterval) || 0);
-    this.zenCheeseTimer += deltaSeconds;
+    const interval = Math.max(0.1, Number(cheeseInterval) || 0.1);
+    const rows = 1; // spawn one line at a time for timed injections
+    const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
+    this.zenCheeseTimer = (this.zenCheeseTimer || 0) + deltaSeconds;
     if (this.zenCheeseTimer >= interval) {
-      this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+      this.board.addCheeseRows(rows, percent);
+      this.playGarbageSfx?.(rows);
+      try {
+        console.log("[Cheese] fixed_timing inject", { rows, percent, interval });
+      } catch {}
       this.zenCheeseTimer = 0;
     }
   }
 
   applyZenCheeseRows(trigger, clearedCount = 0) {
-    if (!this.isZenSandboxActive()) return;
+    if (!this.board || !this.zenSandboxConfig) return;
+    const { cheeseMode } = this.zenSandboxConfig;
+    if (cheeseMode !== "fixed_rows") return;
+    this.ensureZenCheeseBaseline(trigger === "line_clear" ? clearedCount : 0);
+  }
+
+  ensureZenCheeseBaseline(clearedCount = 0) {
     if (!this.board || !this.zenSandboxConfig) return;
     const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_rows") return;
-    if (trigger === "line_clear" && clearedCount > 0) {
-      this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+    const rowsTarget = Math.max(1, Math.floor(Number(cheeseRows) || 1));
+    const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
+    const currentCheese = this.countCheeseRows();
+    const missing = rowsTarget - currentCheese;
+    if (missing > 0) {
+      this.board.addCheeseRows(missing, percent);
+      try {
+        console.log("[Cheese] fixed_rows inject", { rows: missing, percent, clearedCount });
+      } catch {}
     }
+  }
+
+  countCheeseRows() {
+    if (!this.board || !Array.isArray(this.board.grid)) return 0;
+    return this.board.grid.reduce((acc, row) => {
+      if (!row || row.length === 0) return acc;
+      const allGarbageOrEmpty = row.every((cell) => cell === 0 || cell === 0x444444);
+      const hasGarbageBlock = row.some((cell) => cell === 0x444444);
+      return acc + (allGarbageOrEmpty && hasGarbageBlock ? 1 : 0);
+    }, 0);
+  }
+
+  playGarbageSfx(lines = 1) {
+    if (!this.sound || typeof this.getMasterVolumeSetting !== "function" || typeof this.getSFXVolumeSetting !== "function") return;
+    const baseVolume = 1;
+    const volume = baseVolume * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
+    try {
+      this.sound.play("garbage", { volume, detune: 0, rate: 1 });
+    } catch {}
   }
 
   handleZenTopout() {
@@ -3842,6 +3890,8 @@ class SettingsScene extends Phaser.Scene {
     // Clear board and reset transient states
     if (this.board && typeof this.board.clearAll === "function") {
       this.board.clearAll();
+      // Reapply fixed garbage baseline after topout
+      this.ensureZenCheeseBaseline(0);
     }
     this.clearedLines = [];
     this.pendingPowerup = null;
@@ -4870,6 +4920,7 @@ class AssetLoaderScene extends Phaser.Scene {
       ["cool", "sfx/cool.wav"],
       ["jewelclear", "sfx/jewelclear.wav"],
       ["firework", "sfx/firework.wav"],
+      ["garbage", "sfx/garbage.wav"],
     ];
     sfxLoads.forEach(([key, path]) => {
       if (!this.cache.audio.exists(key)) {
@@ -5059,6 +5110,57 @@ class GameScene extends Phaser.Scene {
         }
       };
     }
+    // Fallback: ensure applyZenCheeseRows exists for sandbox cheese logic
+    if (typeof this.applyZenCheeseRows !== "function") {
+      this.applyZenCheeseRows = function (trigger, clearedCount = 0) {
+        if (
+          typeof GameScene !== "undefined" &&
+          GameScene.prototype &&
+          typeof GameScene.prototype.applyZenCheeseRows === "function"
+        ) {
+          return GameScene.prototype.applyZenCheeseRows.call(this, trigger, clearedCount);
+        }
+        return undefined;
+      };
+    }
+    // Fallback: ensure cheese helpers exist on instance
+    if (typeof this.ensureZenCheeseBaseline !== "function") {
+      this.ensureZenCheeseBaseline = function (clearedCount = 0) {
+        if (
+          typeof GameScene !== "undefined" &&
+          GameScene.prototype &&
+          typeof GameScene.prototype.ensureZenCheeseBaseline === "function"
+        ) {
+          return GameScene.prototype.ensureZenCheeseBaseline.call(this, clearedCount);
+        }
+        return undefined;
+      };
+    }
+    if (typeof this.countCheeseRows !== "function") {
+      this.countCheeseRows = function () {
+        if (
+          typeof GameScene !== "undefined" &&
+          GameScene.prototype &&
+          typeof GameScene.prototype.countCheeseRows === "function"
+        ) {
+          return GameScene.prototype.countCheeseRows.call(this);
+        }
+        return 0;
+      };
+    }
+    // Fallback: ensure handleZenTopout exists to avoid runtime errors in sandbox
+    if (typeof this.handleZenTopout !== "function") {
+      this.handleZenTopout = function () {
+        if (
+          typeof GameScene !== "undefined" &&
+          GameScene.prototype &&
+          typeof GameScene.prototype.handleZenTopout === "function"
+        ) {
+          return GameScene.prototype.handleZenTopout.call(this);
+        }
+        return undefined;
+      };
+    }
     if (typeof this.isZenSandboxActive !== "function") {
       this.isZenSandboxActive = function () {
         const modeId =
@@ -5109,11 +5211,6 @@ class GameScene extends Phaser.Scene {
         const helper = typeof ZenSandboxHelper !== "undefined" ? ZenSandboxHelper : null;
         if (helper && helper.nextPieceFromBag) {
           const piece = helper.nextPieceFromBag(this);
-          console.log("[ZenBag] getZenSandboxPiece", {
-            bagType: this.zenSandboxConfig?.bagType,
-            runtimeBag: this.zenSandboxRuntime?.bagType,
-            nextType: typeof piece === "string" ? piece : piece?.type || piece?.piece,
-          });
           return piece;
         }
         // Fallback: simple random piece using existing utilities
@@ -5145,11 +5242,13 @@ class GameScene extends Phaser.Scene {
     this.lastTetrisNoCombo = false; // Tracks a fresh tetris without prior combo for SFX chaining
     this.lastActionWasRotation = false;
     this.totalAttack = 0;
+    this.totalGarbageCleared = 0;
     this.attackSpike = 0;
     this.lastAttackTime = 0;
     this.attackTotalText = null;
     this.attackPerMinText = null;
     this.spikeText = null;
+    this.vsScoreText = null;
     this.spikeFadeTween = null;
     this.b2bChainText = null;
     this.b2bChainCount = -1;
@@ -6811,6 +6910,17 @@ class GameScene extends Phaser.Scene {
     };
 
     const uiParent = this.overlayGroup || this.gameGroup;
+    this.vsLabel = this.add
+      .text(ppsX, ppsY - 170, "VS", atkLabelStyle)
+      .setOrigin(0, 0);
+    this.vsScoreText = this.add
+      .text(ppsX, ppsY - 155, "0.00", {
+        fontSize: `${largeFontSize - 8}px`,
+        fill: "#a0d8ff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0);
     this.attackLabel = this.add.text(ppsX, ppsY - 140, "ATK", atkLabelStyle).setOrigin(0, 0);
     this.attackTotalText = this.add.text(ppsX, ppsY - 125, "0", atkValueStyle).setOrigin(0, 0);
     this.attackPerMinLabel = this.add
@@ -6834,6 +6944,8 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setVisible(false);
     const attackUIElements = [
+      this.vsLabel,
+      this.vsScoreText,
       this.attackLabel,
       this.attackTotalText,
       this.attackPerMinLabel,
@@ -7409,6 +7521,8 @@ class GameScene extends Phaser.Scene {
     this.canHold = true;
     this.holdRequest = false;
     this.nextPieces = [];
+    this.pairsQueue = [];
+    this.lastClassicPiece = null;
     this.areActive = false;
     this.areTimer = 0;
     this.isClearingLines = false;
@@ -7469,23 +7583,8 @@ class GameScene extends Phaser.Scene {
     this.bagDebugSeen = new Set();
     this.validatePieceHistory();
 
-    // Seed the next queue from the initial bag without consuming a draw cycle,
-    // then force the next bag to be freshly shuffled when generation continues.
-    this.nextPieces = [...this.bagQueue];
-    this.bagQueue = [];
-    // Enforce first-piece restriction on the initial queue (before READY/GO preview)
-    if (this.firstPiece && this.nextPieces.length > 0) {
-      const modeId =
-        (this.gameMode && typeof this.gameMode.getModeId === "function"
-          ? this.gameMode.getModeId()
-          : this.selectedMode) || "";
-      const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
-      this.nextPieces[0] = this.applyFirstPieceRestriction(
-        this.nextPieces[0],
-        modeIdLower,
-        true,
-      );
-    }
+    // Start with an empty preview queue; generateNextPieces will fill using the active randomizer
+    this.nextPieces = [];
 
     // Reset stack/credits/fade systems
     this.invisibleStackActive = false;
@@ -8148,6 +8247,27 @@ class GameScene extends Phaser.Scene {
 
     const sfxReadyVol = 0.7 * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
     this.sound?.add("ready", { volume: sfxReadyVol })?.play();
+
+    // Ensure Zen config is loaded before applying cheese
+    if (!this.zenSandboxConfig && typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
+      this.zenSandboxConfig = ZenSandboxHelper.loadConfig();
+    }
+    // Apply cheese immediately on mode start to keep target garbage rows visible during Ready/Go
+    if (this.board && this.zenSandboxConfig) {
+      const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+      const isZen = this.isZenSandboxActive ? this.isZenSandboxActive() : false;
+      if (cheeseMode === "fixed_rows" && (isZen || cheeseMode !== "off")) {
+        this.ensureZenCheeseBaseline?.(0);
+      } else if (cheeseMode === "fixed_timing" && (isZen || cheeseMode !== "off")) {
+        // inject one line to preview timed cheese at start
+        const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
+        this.board.addCheeseRows(1, percent);
+        this.zenCheeseTimer = 0;
+        try {
+          console.log("[Cheese] fixed_timing start inject", { rows: 1, percent });
+        } catch {}
+      }
+    }
 
     this.time.delayedCall(1000, () => {
       readyText.destroy();
@@ -9671,11 +9791,6 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
-    console.log("[ZenBag] generateNextPieces enter", {
-      modeId,
-      modeIdLower,
-      nextLen: this.nextPieces?.length,
-    });
     const isZenMode = modeIdLower.includes("zen");
     if (isZenMode) {
       if (!this.zenSandboxConfig) {
@@ -9694,19 +9809,10 @@ class GameScene extends Phaser.Scene {
           !this.zenSandboxInitDone;
         if (needsReset) {
           ZenSandboxHelper.resetRuntime(this, this.zenSandboxConfig);
-          console.log("[ZenBag] reset runtime", {
-            bagType: this.zenSandboxConfig?.bagType,
-            mode: modeIdLower,
-          });
           if (Array.isArray(this.nextPieces)) this.nextPieces.length = 0;
           this.zenSandboxInitDone = true;
         }
       }
-      console.log("[ZenBag] zen active", {
-        bagType: this.zenSandboxConfig?.bagType,
-        runtimeBag: this.zenSandboxRuntime?.bagType,
-        nextLen: this.nextPieces?.length,
-      });
     }
     // Treat any Zen mode as sandbox for piece generation (config is loaded above)
     const isZenSandbox = isZenMode;
@@ -9745,7 +9851,16 @@ class GameScene extends Phaser.Scene {
       } else if (use7Bag) {
         piece = this.generate7BagPiece();
       } else {
-        piece = this.generateTGM1Piece();
+        // Non-7-bag path: use TGM1 history unless explicitly classic or pairs
+        const prefersClassic = this.selectedMode === "classic" || this.selectedMode === "classic_mode";
+        const prefersPairs = this.selectedMode === "pairs" || this.selectedMode === "pairs_mode";
+        if (prefersPairs) {
+          piece = this.generatePairsPiece();
+        } else if (prefersClassic) {
+          piece = this.generateClassicPiece();
+        } else {
+          piece = this.generateTGM1Piece();
+        }
       }
 
       const entry =
@@ -9755,7 +9870,12 @@ class GameScene extends Phaser.Scene {
             ? { type: piece, textureKey: monoTextureKey }
             : piece;
 
-      const applyHistory = !use7Bag && !isTgm3Mode && !(this.gameMode && this.gameMode.generateNextPiece);
+      const applyHistory =
+        !use7Bag &&
+        !isTgm3Mode &&
+        !(this.gameMode && this.gameMode.generateNextPiece) &&
+        !prefersClassic &&
+        !prefersPairs;
       this.nextPieces.push(
         this.applyFirstPieceRestriction(
           entry,
@@ -9787,6 +9907,30 @@ class GameScene extends Phaser.Scene {
     if (this.pieceHistory.length > 4) {
       this.pieceHistory = this.pieceHistory.slice(-4); // Keep only last 4
     }
+  }
+
+  generateClassicPiece() {
+    // Classic: random with no immediate repeats
+    const pieces = Object.keys(TETROMINOES);
+    const last = this.lastClassicPiece || null;
+    const pool = pieces.filter((p) => p !== last);
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    this.lastClassicPiece = pick;
+    return pick;
+  }
+
+  generatePairsPiece() {
+    // Pairs: choose two minos at a time and emit A,B,B,A before choosing a new pair
+    if (!Array.isArray(this.pairsQueue)) this.pairsQueue = [];
+    if (this.pairsQueue.length === 0) {
+      const bag = this.createShuffledBag();
+      for (let i = 0; i < bag.length; i += 2) {
+        const a = bag[i];
+        const b = bag[(i + 1) % bag.length];
+        this.pairsQueue.push(a, b, b, a);
+      }
+    }
+    return this.pairsQueue.shift();
   }
 
   generateTGM1Piece() {
@@ -10080,6 +10224,16 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // Count cleared garbage rows (grey cheese rows are 0x444444)
+    let garbageLinesCleared = 0;
+    if (linesToClear.length > 0 && this.board?.grid) {
+      garbageLinesCleared = linesToClear.reduce((acc, rowIndex) => {
+        const row = this.board.grid[rowIndex] || [];
+        const isGreyGarbage = row.length > 0 && row.every((cell) => cell === 0x444444);
+        return acc + (isGreyGarbage ? 1 : 0);
+      }, 0);
+    }
+
     // Store cleared lines for animation
     this.clearedLines = linesToClear;
 
@@ -10128,6 +10282,13 @@ class GameScene extends Phaser.Scene {
     // Update score with enhanced system
     const prevBackToBack = this.backToBack;
     this.updateScore(linesToClear.length, this.currentPiece.type, spinInfo);
+    if (garbageLinesCleared > 0) {
+      this.totalGarbageCleared = (this.totalGarbageCleared || 0) + garbageLinesCleared;
+    }
+    // Zen cheese injection on line clears when configured
+    if (this.isZenSandboxActive && this.isZenSandboxActive()) {
+      this.applyZenCheeseRows("line_clear", linesToClear.length);
+    }
     const triggeredBravo = linesToClear.length > 0 && this.isAllClearAfterLines(linesToClear);
     if (triggeredBravo) {
       const modeId =
@@ -10454,7 +10615,15 @@ class GameScene extends Phaser.Scene {
       this.pendingPowerup = null;
     }
 
-    // Reset clearedLines after powerup processing
+    // Extra-line pass for certain modes (e.g., 2P garbage handling) - kept for compatibility
+    if (typeof this.performExtraLinePass === "function") {
+      this.performExtraLinePass();
+    }
+
+    // After grid mutations, re-apply fixed_rows baseline if configured
+    this.ensureZenCheeseBaseline(clearedCount);
+
+    // Reset cleared lines after processing
     this.clearedLines = [];
 
     // Phase 2: CRITICAL FIX - Re-check for any newly completed lines
@@ -10705,10 +10874,15 @@ class GameScene extends Phaser.Scene {
       this.comboCount = -1;
     }
 
-    // Combos: x * 50 where x is current combo value (start at 1 on first clear)
+    // Combos: start at -1; first clear sets to 0, second consecutive clear reaches 1
     if (lines > 0) {
-      if (this.comboCount < 0) this.comboCount = 0;
-      this.comboCount += 1;
+      if (this.comboCount < 0) {
+        this.comboCount = 0;
+      } else {
+        this.comboCount += 1;
+      }
+      // Track cleared garbage-equivalent value for VS score (approximate as lines cleared)
+      this.totalGarbageCleared = (this.totalGarbageCleared || 0) + lines;
       points += this.comboCount * 50;
     } else {
       this.comboCount = -1;
@@ -11511,10 +11685,12 @@ class GameScene extends Phaser.Scene {
     // All clear bonus
     if (isAllClear) base += 10;
 
-    const comboVal = Math.max(0, this.comboCount);
+    // Treat the first clear in a chain as combo 0 so Tetrises start at base 4 (not 5)
+    const comboVal = Math.max(0, (this.comboCount || 0) - 1);
     let attack = 0;
     if (base > 0) {
-      attack = Math.floor(base * (1 + 0.25 * comboVal));
+      // comboVal is -1 before first clear, 0 on first clear, 1 on second clear, etc.
+      attack = Math.floor(base * (1 + 0.25 * Math.max(0, comboVal)));
     } else if (comboVal >= 2) {
       attack = Math.floor(Math.log(1 + 1.25 * comboVal));
     }
@@ -11634,6 +11810,16 @@ class GameScene extends Phaser.Scene {
       this.spikeText.setVisible(true);
     } else {
       this.spikeText.setVisible(false);
+    }
+
+    // VS score: (attack sent + garbage cleared) / pieces * PPS * 100
+    if (this.vsScoreText) {
+      const pieces = Math.max(1, this.totalPiecesPlaced || 0);
+      const pps = Number.isFinite(this.conventionalPPS) ? this.conventionalPPS : 0;
+      const rawVs =
+        ((this.totalAttack + (this.totalGarbageCleared || 0)) / pieces) * pps * 100;
+      const safeVs = Number.isFinite(rawVs) ? rawVs : 0;
+      this.vsScoreText.setText(safeVs.toFixed(2));
     }
   }
 

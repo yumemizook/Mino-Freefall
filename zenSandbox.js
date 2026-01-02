@@ -4,8 +4,8 @@
   const STORAGE_KEY = "zen_sandbox_config";
 
   const defaults = {
-    bagType: "7bag", // options: 7bag, 14bag, 7plus1, history, random
-    attackTableType: "guideline", // options: guideline, default
+    bagType: "7bag", // options: 7bag, 14bag, 7plus1, history, random, pairs, classic
+    attackTableType: "guideline", // options: guideline, multiplier
     cheeseMode: "off", // options: off, fixed_rows, fixed_timing
     cheesePercent: 0, // 0-100
     cheeseRows: 1, // rows to add per trigger
@@ -26,7 +26,12 @@
     } catch {
       parsed = null;
     }
-    return { ...defaults, ...(parsed || {}) };
+    const cfg = { ...defaults, ...(parsed || {}) };
+    // Backward compatibility: rename old "default" attack table to "multiplier"
+    if (cfg.attackTableType === "default") {
+      cfg.attackTableType = "multiplier";
+    }
+    return cfg;
   }
 
   function saveConfig(updates) {
@@ -59,6 +64,24 @@
         const first = createShuffledBag();
         const second = createShuffledBag();
         runtime.bagQueue.push(...first, ...second);
+        break;
+      }
+      case "pairs": {
+        const bag = createShuffledBag();
+        for (let i = 0; i < bag.length; i += 2) {
+          const a = bag[i];
+          const b = bag[(i + 1) % bag.length];
+          runtime.bagQueue.push(a, b, b, a); // alternate within each randomized pair
+        }
+        break;
+      }
+      case "classic": {
+        // Classic random with no immediate repeats
+        const last = runtime.lastClassicPiece || null;
+        const pool = PIECES.filter((p) => p !== last);
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        runtime.bagQueue.push(pick);
+        runtime.lastClassicPiece = pick;
         break;
       }
       case "7plus1": {
@@ -94,12 +117,10 @@
     // History/random paths bypass bag queue
     if (bagType === "random") {
       const pick = PIECES[Math.floor(Math.random() * PIECES.length)];
-      console.log("[ZenBag] pure_random", { bagType, pick });
       return pick;
     }
     if (bagType === "history" && typeof scene.generateTGM1Piece === "function") {
       const pick = scene.generateTGM1Piece();
-      console.log("[ZenBag] history", { bagType, pick });
       return pick;
     }
 
@@ -116,12 +137,7 @@
     }
 
     const piece = runtime.bagQueue.shift();
-    console.log("[ZenBag] bag draw", {
-      bagType,
-      remaining: runtime.bagQueue.length,
-      piece,
-    });
-    return piece || PIECES[Math.floor(Math.random() * PIECES.length)];
+    return piece;
   }
 
   function createRadioRow(scene, group, x, y, label, options, currentValue, onSelect, refreshFn) {
@@ -319,9 +335,11 @@
       "Bag",
       [
         { label: "7-Bag", value: "7bag" },
-        { label: "14-Bag", value: "14bag" },
         { label: "7+1", value: "7plus1" },
+        { label: "14-Bag", value: "14bag" },
         { label: "History", value: "history" },
+        { label: "Classic (no dupes)", value: "classic" },
+        { label: "Pairs", value: "pairs" },
         { label: "Pure Random", value: "random" },
       ],
       cfg.bagType,
@@ -344,7 +362,7 @@
       "Attack",
       [
         { label: "guideline", value: "guideline" },
-        { label: "default", value: "default" },
+        { label: "multiplier", value: "multiplier" },
       ],
       cfg.attackTableType,
       (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ attackTableType: val }),
@@ -622,87 +640,12 @@
       );
       y += lineHeight * (1 + 0.9 * 5 + 1.2);
 
-      radioRow(
-        "Attack",
-        [
-          { label: "guideline", value: "guideline" },
-          { label: "default", value: "default" },
-        ],
-        cfg.attackTableType,
-        (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ attackTableType: val }),
-      );
-
-      radioRow(
-        "Cheese",
-        [
-          { label: "off", value: "off" },
-          { label: "fixed rows", value: "fixed_rows" },
-          { label: "fixed timing", value: "fixed_timing" },
-        ],
-        cfg.cheeseMode,
-        (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ cheeseMode: val }),
-      );
-
-      numericRow("Cheese %", `${Math.round(cfg.cheesePercent)}%`, () => {
-        const next = (Math.round(cfg.cheesePercent / 10) * 10 + 10) % 110;
-        scene.setZenSandboxConfig && scene.setZenSandboxConfig({ cheesePercent: next });
-      });
-
-      numericRow("Cheese rows", cfg.cheeseRows, () => {
-        const next = cfg.cheeseRows >= 10 ? 1 : cfg.cheeseRows + 1;
-        scene.setZenSandboxConfig && scene.setZenSandboxConfig({ cheeseRows: next });
-      });
-
-      numericRow("Cheese interval", `${Number(cfg.cheeseInterval || 0).toFixed(1)}s`, () => {
-        const step = 0.5;
-        let next = cfg.cheeseInterval + step;
-        if (next > 10) next = 0.5;
-        scene.setZenSandboxConfig && scene.setZenSandboxConfig({ cheeseInterval: next });
-      });
-
-      radioRow(
-        "Spin",
-        "Infinite resets",
-        [
-          { label: "on", value: true },
-          { label: "off", value: false },
-        ],
-        !!cfg.movementResetsInfinite,
-        (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ movementResetsInfinite: val }),
-      );
-
-      radioRow(
-        "Gravity",
-        [
-          { label: "none", value: "none" },
-          { label: "minimal", value: "minimal" },
-          { label: "slow", value: "slow" },
-          { label: "medium", value: "medium" },
-          { label: "fast", value: "fast" },
-          { label: "static", value: "static" },
-        ],
-        cfg.gravityMode || "none",
-        (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ gravityMode: val }),
-      );
-
-      if (cfg.gravityMode === "static") {
-        numericRow(
-          "Static rows/frame",
-          `${Number(cfg.gravityRowsPerFrame || 0).toFixed(2)}`,
-          () => {
-            const steps = [0, 0.05, 0.1, 0.2, 0.5, 1, 2];
-            const idx = steps.indexOf(Number(cfg.gravityRowsPerFrame || 0));
-            const next = steps[(idx + 1 + steps.length) % steps.length];
-            scene.setZenSandboxConfig &&
-              scene.setZenSandboxConfig({ gravityRowsPerFrame: next, gravityMode: "static" });
-          },
-        );
-      }
+      // All Zen sandbox toggles are now exclusive to the Zen panel, not the Settings screen.
     },
     resetRuntime(scene, cfg) {
       if (!scene) return;
       const bagType = (cfg || {}).bagType;
-      scene.zenSandboxRuntime = { bagQueue: [], bagType };
+      scene.zenSandboxRuntime = { bagQueue: [], bagType, lastClassicPiece: null };
       scene.zenCheeseTimer = 0;
       scene.zenTopoutCooldown = false;
       if (typeof scene.zenGravityTime === "number") scene.zenGravityTime = 0;
@@ -727,12 +670,47 @@
           const cfg = helper.saveConfig(updates);
           this.zenSandboxConfig = cfg;
           helper.resetRuntime(this, cfg);
-          if (updates && (updates.gravityMode !== undefined || updates.gravityRowsPerFrame !== undefined)) {
-            console.log(
-              "[ZenGravity] setZenSandboxConfig",
-              "mode=" + cfg.gravityMode,
-              "rowsPerFrame=" + cfg.gravityRowsPerFrame,
-            );
+          if (updates) {
+            const cheeseChanged =
+              updates.cheeseMode !== undefined ||
+              updates.cheeseRows !== undefined ||
+              updates.cheesePercent !== undefined ||
+              updates.cheeseInterval !== undefined;
+            if (cheeseChanged) {
+              const rows = Math.max(1, Math.floor(Number(cfg.cheeseRows) || 1));
+              const percent = Math.max(0, Math.min(100, Number(cfg.cheesePercent) || 0));
+              const interval = Math.max(0.1, Number(cfg.cheeseInterval) || 0.1);
+              try {
+                console.log("[CheeseConfig] applied", {
+                  mode: cfg.cheeseMode,
+                  rows,
+                  percent,
+                  interval,
+                });
+                // Immediate preview: apply one batch when turning on cheese to make it visible
+                if (this.isZenSandboxActive && this.isZenSandboxActive() && this.board) {
+                  if (cfg.cheeseMode === "fixed_rows") {
+                    this.board.addCheeseRows(rows, percent);
+                    console.log("[CheeseConfig] preview fixed_rows", { rows, percent });
+                  } else if (cfg.cheeseMode === "fixed_timing") {
+                    this.board.addCheeseRows(rows, percent);
+                    this.zenCheeseTimer = 0;
+                    console.log("[CheeseConfig] preview fixed_timing", {
+                      rows,
+                      percent,
+                      interval,
+                    });
+                  }
+                }
+              } catch {}
+            }
+            if (updates.gravityMode !== undefined || updates.gravityRowsPerFrame !== undefined) {
+              console.log(
+                "[ZenGravity] setZenSandboxConfig",
+                "mode=" + cfg.gravityMode,
+                "rowsPerFrame=" + cfg.gravityRowsPerFrame,
+              );
+            }
           }
         };
       }
