@@ -156,30 +156,30 @@ class TGMPlusMode extends BaseMode {
     generateGarbagePattern() {
         // This is the exact pattern from TGM2 documentation
         return [
-            " .GGGGGGGGG", // Row 0
-            " .GGGGGGGGG", // Row 1  
-            " .GGGGGGGGG", // Row 2
-            " .GGGGGGGGG", // Row 3
-            " GGGGGGGGG.", // Row 4
-            " GGGGGGGGG.", // Row 5
-            " GGGGGGGGG.", // Row 6
-            " GGGGGGGGG.", // Row 7
-            " ..GGGGGGGG", // Row 8
-            " .GGGGGGGGG", // Row 9
-            " .GGGGGGGGG", // Row 10
-            " GGGGGGGG..", // Row 11
-            " GGGGGGGGG.", // Row 12
-            " GGGGGGGGG.", // Row 13
-            " GG.GGGGGGG", // Row 14
-            " G..GGGGGGG", // Row 15
-            " G.GGGGGGGG", // Row 16
-            " GGGGGGG.GG", // Row 17
-            " GGGGGGG..G", // Row 18
-            " GGGGGGGG.G", // Row 19
-            " GGGG..GGGG", // Row 20
-            " GGGG..GGGG", // Row 21
-            " GGGG.GGGGG", // Row 22
-            " GGG...GGGG"  // Row 23
+            ".GGGGGGGGG", // Row 0
+            ".GGGGGGGGG", // Row 1  
+            ".GGGGGGGGG", // Row 2
+            ".GGGGGGGGG", // Row 3
+            "GGGGGGGGG.", // Row 4
+            "GGGGGGGGG.", // Row 5
+            "GGGGGGGGG.", // Row 6
+            "GGGGGGGGG.", // Row 7
+            "..GGGGGGGG", // Row 8
+            ".GGGGGGGGG", // Row 9
+            ".GGGGGGGGG", // Row 10
+            "GGGGGGGG..", // Row 11
+            "GGGGGGGGG.", // Row 12
+            "GGGGGGGGG.", // Row 13
+            "GG.GGGGGGG", // Row 14
+            "G..GGGGGGG", // Row 15
+            "G.GGGGGGGG", // Row 16
+            "GGGGGGG.GG", // Row 17
+            "GGGGGGG..G", // Row 18
+            "GGGGGGGG.G", // Row 19
+            "GGGG..GGGG", // Row 20
+            "GGGG..GGGG", // Row 21
+            "GGGG.GGGGG", // Row 22
+            "GGG...GGGG"  // Row 23
         ];
     }
     
@@ -327,16 +327,18 @@ class TGMPlusMode extends BaseMode {
         }
         
         // Shift all existing rows up and add garbage at bottom
-        gameScene.board.grid.pop(); // Remove top row
-        gameScene.board.grid.unshift(garbageRow); // Add garbage at bottom
+        gameScene.board.grid.shift(); // Remove top row
+        gameScene.board.grid.push(garbageRow); // Add garbage at bottom
         
         // Track garbage rows
         this.garbageRows.push(garbageRow);
         this.rowsWithGarbage++;
         
         // Play garbage sound
-        if (gameScene.sound) {
-            const garbageSound = gameScene.sound.add('fall', { volume: 0.5 });
+        if (typeof gameScene.playGarbageSfx === 'function') {
+            gameScene.playGarbageSfx(1);
+        } else if (gameScene.sound) {
+            const garbageSound = gameScene.sound.add('garbage', { volume: 0.5 });
             garbageSound.play();
         }
         

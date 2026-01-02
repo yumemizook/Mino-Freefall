@@ -654,6 +654,16 @@
       scene.bagQueue = [];
       scene.bagDrawCount = 0;
       scene.firstPiece = true;
+      // Re-apply fixed_rows baseline immediately if configured and board exists
+      if (scene.board && cfg && cfg.cheeseMode === "fixed_rows") {
+        if (typeof scene.ensureZenCheeseBaseline === "function") {
+          scene.ensureZenCheeseBaseline(0);
+        } else if (scene.board && typeof scene.board.addCheeseRows === "function") {
+          const rows = Math.max(1, Math.floor(Number(cfg.cheeseRows) || 1));
+          const percent = Math.max(0, Math.min(100, Number(cfg.cheesePercent) || 0));
+          scene.board.addCheeseRows(rows, percent);
+        }
+      }
     },
     ensureScene(scene) {
       if (!scene) return;
@@ -690,8 +700,32 @@
                 // Immediate preview: apply one batch when turning on cheese to make it visible
                 if (this.isZenSandboxActive && this.isZenSandboxActive() && this.board) {
                   if (cfg.cheeseMode === "fixed_rows") {
-                    this.board.addCheeseRows(rows, percent);
-                    console.log("[CheeseConfig] preview fixed_rows", { rows, percent });
+                    // Force baseline immediately
+                    const before = this.countCheeseRows?.() || 0;
+                    console.log("[CheeseConfig] baseline call (preview) before ensure", { before, rows, percent });
+                    if (typeof this.board.addCheeseRows === "function") {
+                      const missing = Math.max(0, rows - before);
+                      if (missing > 0) this.board.addCheeseRows(missing, percent);
+                    }
+                    if (typeof this.ensureZenCheeseBaseline === "function") {
+                      this.ensureZenCheeseBaseline(0);
+                    }
+                    const after = this.countCheeseRows?.() || 0;
+                    console.log("[CheeseConfig] preview fixed_rows", {
+                      rows,
+                      percent,
+                      before,
+                      after,
+                    });
+                    // Persist the baseline immediately
+                    if (typeof this.ensureZenCheeseBaseline === "function") {
+                      this.ensureZenCheeseBaseline(0);
+                      console.log("[CheeseConfig] baseline call (preview) after ensure", {
+                        rows,
+                        percent,
+                        current: this.countCheeseRows?.() || 0,
+                      });
+                    }
                   } else if (cfg.cheeseMode === "fixed_timing") {
                     this.board.addCheeseRows(rows, percent);
                     this.zenCheeseTimer = 0;

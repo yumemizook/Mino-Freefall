@@ -1282,37 +1282,90 @@ class Board {
   }
 
   addCheeseRows(count = 1, cheesePercent = 0) {
+    // Initialize grid/fadeGrid if missing to allow early preview insertion
+    const cols = Number.isFinite(this.cols) && this.cols > 0 ? this.cols : 10;
+    if (!Number.isFinite(this.cols) || this.cols <= 0) {
+      this.cols = cols;
+    }
+    const rowsCount =
+      Number.isFinite(this.rows) && this.rows > 0
+        ? this.rows
+        : Array.isArray(this.grid)
+          ? this.grid.length
+          : 22;
+    if (!Array.isArray(this.grid) || this.grid.length === 0) {
+      this.grid = Array.from({ length: rowsCount }, () => Array(cols).fill(0));
+    }
+    if (!Array.isArray(this.fadeGrid) || this.fadeGrid.length === 0) {
+      this.fadeGrid = Array.from({ length: rowsCount }, () => Array(cols).fill(0));
+    }
     const rowsToAdd = Math.max(0, Math.floor(count));
     // cheesePercent controls how often the hole shifts: 0 = fixed column, 100 = new hole every row.
-    const clampedPercent = Math.max(0, Math.min(100, cheesePercent));
+    const clampedPercent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
     const shiftChance = clampedPercent / 100;
-    let holeCol = Math.floor(Math.random() * this.cols);
+    if (!Number.isFinite(this.cheeseHoleShiftAccumulator)) this.cheeseHoleShiftAccumulator = 0;
+    // Persist hole across injections; initialize once (shared with scene if available)
+    if (!Number.isInteger(this.cheeseHoleCol)) {
+      const seeded =
+        Number.isInteger(this.scene?.zenCheeseHoleCol) ? this.scene.zenCheeseHoleCol : Math.floor(Math.random() * cols);
+      this.cheeseHoleCol = seeded % cols;
+      if (this.scene) this.scene.zenCheeseHoleCol = this.cheeseHoleCol;
+    }
+    let holeCol = this.cheeseHoleCol;
+    try {
+      console.log("[Cheese] addCheeseRows", {
+        count,
+        clampedPercent,
+        rowsBefore: Array.isArray(this.grid) ? this.grid.length : null,
+        cols,
+      });
+    } catch {}
     for (let i = 0; i < rowsToAdd; i++) {
       // Remove top row to make space
       this.grid.shift();
       this.fadeGrid.shift();
 
       // Decide hole column for this row
-      if (Math.random() < shiftChance) {
-        let newHole = Math.floor(Math.random() * this.cols);
-        // avoid identical hole when shifting
-        if (newHole === holeCol) {
-          newHole = (newHole + 1) % this.cols;
+      if (clampedPercent > 0) {
+        this.cheeseHoleShiftAccumulator += shiftChance;
+        if (this.cheeseHoleShiftAccumulator >= 1) {
+          this.cheeseHoleShiftAccumulator -= 1;
+          let newHole = Math.floor(Math.random() * cols);
+          // avoid identical hole when shifting
+          if (newHole === holeCol) {
+            newHole = (newHole + 1) % cols;
+          }
+          holeCol = newHole;
+          this.cheeseHoleCol = holeCol;
+          if (this.scene) this.scene.zenCheeseHoleCol = holeCol;
         }
-        holeCol = newHole;
       }
 
       const row = [];
-      for (let c = 0; c < this.cols; c++) {
+      for (let c = 0; c < cols; c++) {
         const isHole = c === holeCol;
         row.push(isHole ? 0 : 0x444444);
       }
       this.grid.push(row);
-      this.fadeGrid.push(Array(this.cols).fill(0));
+      this.fadeGrid.push(Array(cols).fill(0));
     }
-    // Play garbage SFX when rows are injected
-    if (rowsToAdd > 0 && this.scene && typeof this.scene.playGarbageSfx === "function") {
-      this.scene.playGarbageSfx(rowsToAdd);
+    try {
+      console.log("[Cheese] addCheeseRows done", {
+        count: rowsToAdd,
+        holeCol,
+        bottomGarbage: this.countBottomCheeseRows?.() || null,
+      });
+    } catch {}
+    // Play garbage SFX when rows are injected, but only after gameplay has started spawning pieces
+    if (rowsToAdd > 0 && this.scene && this.scene.hasSpawnedPiece) {
+      if (typeof this.scene.playGarbageSfx === "function") {
+        this.scene.playGarbageSfx(rowsToAdd);
+      } else if (this.scene.sound) {
+        try {
+          console.log("[SFX][Board] addCheeseRows fallback play", { rows: rowsToAdd, cheesePercent: clampedPercent });
+          this.scene.sound.play("garbage", { volume: 1 });
+        } catch {}
+      }
     }
   }
 
@@ -3733,7 +3786,7 @@ class SettingsScene extends Phaser.Scene {
       .setInteractive();
 
     this.backButton.on("pointerdown", () => {
-      this.scene.start("MenuScene");
+      this.startScene("MenuScene");
     });
 
     // Setup keyboard input for keybind changes
@@ -3822,10 +3875,11 @@ class SettingsScene extends Phaser.Scene {
   }
 
   tickZenCheese(deltaSeconds = 0) {
-    if (!this.isZenSandboxActive()) return;
-    if (!this.board || !this.zenSandboxConfig) return;
+    if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
+    if (!this.zenSandboxConfig) return;
+    if (!this.board) return;
     if (this.isPaused) return;
-    const { cheeseMode, cheeseInterval, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+    const { cheeseMode, cheeseInterval, cheesePercent } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_timing") return;
     const interval = Math.max(0.1, Number(cheeseInterval) || 0.1);
     const rows = 1; // spawn one line at a time for timed injections
@@ -3834,9 +3888,6 @@ class SettingsScene extends Phaser.Scene {
     if (this.zenCheeseTimer >= interval) {
       this.board.addCheeseRows(rows, percent);
       this.playGarbageSfx?.(rows);
-      try {
-        console.log("[Cheese] fixed_timing inject", { rows, percent, interval });
-      } catch {}
       this.zenCheeseTimer = 0;
     }
   }
@@ -3845,6 +3896,13 @@ class SettingsScene extends Phaser.Scene {
     if (!this.board || !this.zenSandboxConfig) return;
     const { cheeseMode } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_rows") return;
+    try {
+      console.log("[Cheese] applyZenCheeseRows", {
+        trigger,
+        clearedCount,
+        current: this.countCheeseRows?.() || 0,
+      });
+    } catch {}
     this.ensureZenCheeseBaseline(trigger === "line_clear" ? clearedCount : 0);
   }
 
@@ -3852,16 +3910,47 @@ class SettingsScene extends Phaser.Scene {
     if (!this.board || !this.zenSandboxConfig) return;
     const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_rows") return;
+    try {
+      console.log("[Cheese] ensure baseline enter", {
+        clearedCount,
+        rows: cheeseRows,
+        percent: cheesePercent,
+        current: this.countCheeseRows?.() || 0,
+      });
+    } catch {}
+    // Ensure board grids exist so cheese rows can be injected (e.g., immediately on mode start)
+    if (!Array.isArray(this.board.grid) || this.board.grid.length === 0) {
+      const rowsCount =
+        Number.isFinite(this.board.rows) && this.board.rows > 0 ? this.board.rows : 22;
+      const cols = Number.isFinite(this.board.cols) && this.board.cols > 0 ? this.board.cols : 10;
+      this.board.grid = Array.from({ length: rowsCount }, () => Array(cols).fill(0));
+      this.board.fadeGrid = Array.from({ length: rowsCount }, () => Array(cols).fill(0));
+      this.board.rows = rowsCount;
+      this.board.cols = cols;
+    }
     const rowsTarget = Math.max(1, Math.floor(Number(cheeseRows) || 1));
     const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
-    const currentCheese = this.countCheeseRows();
-    const missing = rowsTarget - currentCheese;
-    if (missing > 0) {
+    const bottomGarbage = this.countBottomCheeseRows();
+    const missing = Math.max(0, rowsTarget - bottomGarbage);
+    try {
+      console.log("[Cheese] baseline start", {
+        rowsTarget,
+        percent,
+        current: bottomGarbage,
+        missing,
+      });
+    } catch {}
+    // Use Board API to append rows; do not overwrite existing bottom rows
+    if (missing > 0 && typeof this.board.addCheeseRows === "function") {
       this.board.addCheeseRows(missing, percent);
-      try {
-        console.log("[Cheese] fixed_rows inject", { rows: missing, percent, clearedCount });
-      } catch {}
     }
+    try {
+      console.log("[Cheese] baseline applied", {
+        rowsTarget,
+        percent,
+        current: this.countCheeseRows?.() || 0,
+      });
+    } catch {}
   }
 
   countCheeseRows() {
@@ -3874,13 +3963,73 @@ class SettingsScene extends Phaser.Scene {
     }, 0);
   }
 
+  // Counts consecutive garbage rows from the bottom, stopping at the first non-garbage row.
+  countBottomCheeseRows() {
+    if (!this.board || !Array.isArray(this.board.grid)) return 0;
+    let bottomGarbage = 0;
+    for (let r = this.board.grid.length - 1; r >= 0; r--) {
+      const row = this.board.grid[r];
+      if (!row || row.length === 0) break;
+      const allGarbageOrEmpty = row.every((cell) => cell === 0 || cell === 0x444444);
+      const hasGarbageBlock = row.some((cell) => cell === 0x444444);
+      if (allGarbageOrEmpty && hasGarbageBlock) {
+        bottomGarbage += 1;
+      } else {
+        break;
+      }
+    }
+    return bottomGarbage;
+  }
+
+  // Hard writer for fixed_rows: directly set bottom rows to garbage with a sliding hole.
+  setFixedRowsCheeseBaseline(rowsTarget = 1, percent = 0) {
+    if (!this.board) return;
+    const rows = Math.max(1, Math.floor(Number(rowsTarget) || 1));
+    const cols = Number.isFinite(this.board.cols) && this.board.cols > 0 ? this.board.cols : 10;
+    if (!Array.isArray(this.board.grid) || this.board.grid.length === 0) {
+      this.board.grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    }
+    for (let i = 0; i < rows; i++) {
+      const rowIdx = this.board.grid.length - 1 - i;
+      if (rowIdx < 0) break;
+      if (clampedPercent > 0) {
+        this.cheeseHoleShiftAccumulator += shiftChance;
+        if (this.cheeseHoleShiftAccumulator >= 1) {
+          this.cheeseHoleShiftAccumulator -= 1;
+          let newHole = Math.floor(Math.random() * cols);
+          if (newHole === this.zenCheeseHoleCol) newHole = (newHole + 1) % cols;
+          this.zenCheeseHoleCol = newHole;
+          if (this.board) this.board.cheeseHoleCol = this.zenCheeseHoleCol;
+        }
+      }
+      this.board.grid[rowIdx] = Array.from({ length: cols }, (_v, c) =>
+        c === this.zenCheeseHoleCol ? 0 : 0x444444,
+      );
+      if (Array.isArray(this.board.fadeGrid) && this.board.fadeGrid[rowIdx]) {
+        this.board.fadeGrid[rowIdx] = Array(cols).fill(0);
+      }
+    }
+  }
+
   playGarbageSfx(lines = 1) {
-    if (!this.sound || typeof this.getMasterVolumeSetting !== "function" || typeof this.getSFXVolumeSetting !== "function") return;
-    const baseVolume = 1;
-    const volume = baseVolume * this.getMasterVolumeSetting() * this.getSFXVolumeSetting();
+    if (!this.sound) return;
+    const masterVol =
+      typeof this.getMasterVolumeSetting === "function" ? this.getMasterVolumeSetting() : 1;
+    const sfxVol =
+      typeof this.getSFXVolumeSetting === "function" ? this.getSFXVolumeSetting() : 1;
+    const volume = 1 * masterVol * sfxVol;
     try {
-      this.sound.play("garbage", { volume, detune: 0, rate: 1 });
-    } catch {}
+      // Use dedicated instance so it layers over other SFX (e.g., next-piece sounds)
+      const sfx = this.sound.add("garbage", { volume, detune: 0, rate: 1 });
+      sfx?.once?.("complete", () => {
+        try {
+          sfx.destroy();
+        } catch {}
+      });
+      sfx?.play();
+    } catch (err) {
+      // ignore SFX errors
+    }
   }
 
   handleZenTopout() {
@@ -4988,6 +5137,7 @@ class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: "GameScene" });
     this.board = new Board();
+    this.board.scene = this;
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
@@ -5089,6 +5239,8 @@ class GameScene extends Phaser.Scene {
     this.zenSandboxConfig = null;
     this.zenSandboxRuntime = { bagQueue: [], bagType: null };
     this.zenCheeseTimer = 0;
+    this.hasSpawnedPiece = false;
+    this.garbageLinesClearedLast = 0;
     this.zenTopoutCooldown = false;
     this.zenGravityTime = 0;
     this.zenSandboxInitDone = false;
@@ -5099,13 +5251,18 @@ class GameScene extends Phaser.Scene {
     if (typeof this.tickZenCheese !== "function") {
       this.tickZenCheese = function (deltaSeconds = 0) {
         if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
-        if (!this.board || !this.zenSandboxConfig) return;
-        const { cheeseMode, cheeseInterval, cheeseRows, cheesePercent } = this.zenSandboxConfig;
+        if (!this.zenSandboxConfig || !this.board) return;
+        if (this.isPaused) return;
+        const { cheeseMode, cheeseInterval, cheesePercent } = this.zenSandboxConfig;
         if (cheeseMode !== "fixed_timing") return;
-        const interval = Math.max(0.1, Number(cheeseInterval) || 0);
+        if (!this.hasSpawnedPiece) return;
+        const interval = Math.max(0.1, Number(cheeseInterval) || 0.1);
+        const rows = 1;
+        const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
         this.zenCheeseTimer = (this.zenCheeseTimer || 0) + deltaSeconds;
         if (this.zenCheeseTimer >= interval) {
-          this.board.addCheeseRows(Math.max(1, Math.floor(cheeseRows || 1)), cheesePercent || 0);
+          this.board.addCheeseRows(rows, percent);
+          if (typeof this.playGarbageSfx === "function") this.playGarbageSfx(rows);
           this.zenCheeseTimer = 0;
         }
       };
@@ -7516,6 +7673,7 @@ class GameScene extends Phaser.Scene {
 
     // Scene instances can be reused across restarts; reset runtime flags/timers.
     this.board = new Board();
+    this.board.scene = this;
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
@@ -8252,19 +8410,41 @@ class GameScene extends Phaser.Scene {
     if (!this.zenSandboxConfig && typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
       this.zenSandboxConfig = ZenSandboxHelper.loadConfig();
     }
-    // Apply cheese immediately on mode start to keep target garbage rows visible during Ready/Go
-    if (this.board && this.zenSandboxConfig) {
+    // Seed a persistent cheese hole column for the session (fixed across injections when percent=0)
+    if (this.board && !Number.isInteger(this.zenCheeseHoleCol)) {
+      const cols = Number.isFinite(this.board.cols) && this.board.cols > 0 ? this.board.cols : 10;
+      this.zenCheeseHoleCol = Math.floor(Math.random() * cols) % cols;
+    }
+    // Apply cheese previews in Zen sandbox modes (fixed_rows only; fixed_timing waits for first spawn)
+    if (this.isZenSandboxActive && this.isZenSandboxActive() && this.board && this.zenSandboxConfig) {
       const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
-      const isZen = this.isZenSandboxActive ? this.isZenSandboxActive() : false;
-      if (cheeseMode === "fixed_rows" && (isZen || cheeseMode !== "off")) {
+      if (cheeseMode === "fixed_rows") {
+        try {
+          console.log("[Cheese] start apply fixed_rows", {
+            rows: cheeseRows,
+            percent: cheesePercent,
+            current: this.countCheeseRows?.() || 0,
+          });
+        } catch {}
+        // Immediately inject target rows to avoid missing baseline at spawn
+        if (typeof this.board.addCheeseRows === "function") {
+          const rows = Math.max(1, Math.floor(Number(cheeseRows) || 1));
+          const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
+          this.board.addCheeseRows(rows, percent);
+        }
         this.ensureZenCheeseBaseline?.(0);
-      } else if (cheeseMode === "fixed_timing" && (isZen || cheeseMode !== "off")) {
-        // inject one line to preview timed cheese at start
-        const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
-        this.board.addCheeseRows(1, percent);
+        try {
+          console.log("[Cheese] start applied baseline", {
+            current: this.countCheeseRows?.() || 0,
+          });
+        } catch {}
+      } else if (cheeseMode === "fixed_timing") {
+        // Do not inject before first spawn; start timer at first spawn
         this.zenCheeseTimer = 0;
         try {
-          console.log("[Cheese] fixed_timing start inject", { rows: 1, percent });
+          console.log("[Cheese] fixed_timing ready (wait for spawn)", {
+            percent: cheesePercent,
+          });
         } catch {}
       }
     }
@@ -9438,6 +9618,11 @@ class GameScene extends Phaser.Scene {
 
   raiseShiraseGarbage() {
     if (!this.board || !this.board.grid || !this.board.grid.length) return;
+    try {
+      console.log("[Shirase] raiseShiraseGarbage", {
+        hasPlayGarbage: typeof this.playGarbageSfx === "function",
+      });
+    } catch {}
     const bottomRowIndex = this.board.rows - 1;
     const bottomRow = this.board.grid[bottomRowIndex] || [];
     // Duplicate bottom row exactly (per doc) as the garbage line
@@ -9449,14 +9634,31 @@ class GameScene extends Phaser.Scene {
       this.board.fadeGrid.shift();
       this.board.fadeGrid.push(Array(this.board.cols).fill(0));
     }
-    // Optional sound feedback
+    // Garbage SFX – invoke helper if present; otherwise play directly with log
     try {
-      const garbageSound = this.sound?.add("fall", { volume: 0.5 });
-      garbageSound?.play();
-    } catch {}
+      if (typeof GameScene !== "undefined" && GameScene.prototype.playGarbageSfx) {
+        GameScene.prototype.playGarbageSfx.call(this, 1);
+      } else if (this.sound) {
+        console.log("[SFX][Shirase] direct play fallback", { hasSound: !!this.sound });
+        const sfx = this.sound.add("garbage", { volume: 1, detune: 0, rate: 1 });
+        sfx?.once?.("complete", () => {
+          try {
+            sfx.destroy();
+          } catch {}
+        });
+        sfx?.play();
+      }
+    } catch (err) {
+      console.warn("[Shirase] playGarbageSfx fallback error", err);
+    }
   }
 
   spawnPiece() {
+    // Mark that gameplay pieces have begun spawning (enables timed cheese/SFX gating)
+    if (!this.hasSpawnedPiece) {
+      this.hasSpawnedPiece = true;
+      this.zenCheeseTimer = 0; // start timing from first spawn
+    }
     // Shirase garbage check before spawning next piece (during ARE)
     const modeId =
       (this.gameMode && typeof this.gameMode.getModeId === "function"
@@ -10229,10 +10431,12 @@ class GameScene extends Phaser.Scene {
     if (linesToClear.length > 0 && this.board?.grid) {
       garbageLinesCleared = linesToClear.reduce((acc, rowIndex) => {
         const row = this.board.grid[rowIndex] || [];
-        const isGreyGarbage = row.length > 0 && row.every((cell) => cell === 0x444444);
-        return acc + (isGreyGarbage ? 1 : 0);
+        const hasGarbageBlock = row.some((cell) => cell === 0x444444);
+        return acc + (hasGarbageBlock ? 1 : 0);
       }, 0);
     }
+    this.lastClearedHadGarbage = garbageLinesCleared > 0;
+    this.garbageLinesClearedLast = garbageLinesCleared;
 
     // Store cleared lines for animation
     this.clearedLines = linesToClear;
@@ -10285,9 +10489,58 @@ class GameScene extends Phaser.Scene {
     if (garbageLinesCleared > 0) {
       this.totalGarbageCleared = (this.totalGarbageCleared || 0) + garbageLinesCleared;
     }
-    // Zen cheese injection on line clears when configured
+    // Zen cheese injection on line clears when configured (only in Zen sandbox modes)
     if (this.isZenSandboxActive && this.isZenSandboxActive()) {
-      this.applyZenCheeseRows("line_clear", linesToClear.length);
+      if (this.zenSandboxConfig && this.zenSandboxConfig.cheeseMode === "fixed_rows") {
+        try {
+          console.log("[Cheese] line_clear hook", {
+            lines: linesToClear.length,
+            current: this.countCheeseRows?.() || 0,
+          });
+        } catch {}
+        if (garbageLinesCleared > 0) {
+          // Call helper (if present) and also force baseline directly for safety
+          const rowsTarget = Math.max(1, Math.floor(Number(this.zenSandboxConfig.cheeseRows) || 1));
+          const percent = Math.max(0, Math.min(100, Number(this.zenSandboxConfig.cheesePercent) || 0));
+          const bottom = this.countBottomCheeseRows?.() || 0;
+          const missing = Math.max(0, rowsTarget - bottom);
+          const fillAmount = Math.min(missing, garbageLinesCleared);
+          if (fillAmount > 0) {
+            if (this.board && typeof this.board.addCheeseRows === "function") {
+              this.board.addCheeseRows(fillAmount, percent);
+            } else if (typeof this.ensureZenCheeseBaseline === "function") {
+              // Fallback: baseline may add up to target, but limited by fillAmount through missing clamp
+              this.ensureZenCheeseBaseline(linesToClear.length);
+            }
+            try {
+              console.log("[Cheese] line_clear fill", {
+                lines: linesToClear.length,
+                target: rowsTarget,
+                bottomBefore: bottom,
+                garbageLinesCleared,
+                fillAmount,
+              });
+            } catch {}
+          } else {
+            try {
+              console.log("[Cheese] line_clear skip (no missing or no garbage fill)", {
+                lines: linesToClear.length,
+                target: rowsTarget,
+                bottomBefore: bottom,
+                missing,
+                garbageLinesCleared,
+              });
+            } catch {}
+          }
+        } else {
+          try {
+            console.log("[Cheese] line_clear skip (no garbage cleared)", {
+              lines: linesToClear.length,
+              garbageLinesCleared,
+            });
+          } catch {}
+        }
+      }
     }
     const triggeredBravo = linesToClear.length > 0 && this.isAllClearAfterLines(linesToClear);
     if (triggeredBravo) {
@@ -10620,8 +10873,36 @@ class GameScene extends Phaser.Scene {
       this.performExtraLinePass();
     }
 
-    // After grid mutations, re-apply fixed_rows baseline if configured
-    this.ensureZenCheeseBaseline(clearedCount);
+    // After grid mutations, re-apply fixed_rows baseline if configured AND garbage was cleared
+    if (
+      this.zenSandboxConfig &&
+      this.zenSandboxConfig.cheeseMode === "fixed_rows" &&
+      this.lastClearedHadGarbage
+    ) {
+      const rowsTarget = Math.max(1, Math.floor(Number(this.zenSandboxConfig.cheeseRows) || 1));
+      const percent = Math.max(0, Math.min(100, Number(this.zenSandboxConfig.cheesePercent) || 0));
+      const bottom = this.countBottomCheeseRows?.() || 0;
+      const missing = Math.max(0, rowsTarget - bottom);
+      const refill = Math.min(missing, this.garbageLinesClearedLast || 0);
+      if (refill > 0) {
+        // Add only the amount of garbage actually cleared (capped by missing)
+        if (this.board && typeof this.board.addCheeseRows === "function") {
+          this.board.addCheeseRows(refill, percent);
+        } else if (typeof this.ensureZenCheeseBaseline === "function") {
+          this.ensureZenCheeseBaseline(clearedCount);
+        }
+        try {
+          console.log("[Cheese] clearStoredLines inject", {
+            rowsTarget,
+            percent,
+            bottomBefore: bottom,
+            missing,
+            refill,
+            garbageCleared: this.lastClearedHadGarbage,
+          });
+        } catch {}
+      }
+    }
 
     // Reset cleared lines after processing
     this.clearedLines = [];
@@ -10655,6 +10936,33 @@ class GameScene extends Phaser.Scene {
 
       this.board.grid = newGrid;
       this.board.fadeGrid = newFadeGrid;
+    }
+
+    // Final hard inject after all cleanup to ensure target garbage rows exist
+    if (
+      this.zenSandboxConfig &&
+      this.zenSandboxConfig.cheeseMode === "fixed_rows" &&
+      this.lastClearedHadGarbage
+    ) {
+      const rowsTarget = Math.max(1, Math.floor(Number(this.zenSandboxConfig.cheeseRows) || 1));
+      const percent = Math.max(0, Math.min(100, Number(this.zenSandboxConfig.cheesePercent) || 0));
+      const bottom = this.countBottomCheeseRows?.() || 0;
+      const missing = Math.max(0, rowsTarget - bottom);
+      if (missing > 0) {
+        if (typeof this.ensureZenCheeseBaseline === "function") {
+          this.ensureZenCheeseBaseline(0);
+        } else if (this.board && typeof this.board.addCheeseRows === "function") {
+          this.board.addCheeseRows(missing, percent);
+        }
+        try {
+          console.log("[Cheese] final inject write", {
+            rowsTarget,
+            percent,
+            bottomBefore: bottom,
+            missing,
+          });
+        } catch {}
+      }
     }
   }
 
@@ -10881,8 +11189,6 @@ class GameScene extends Phaser.Scene {
       } else {
         this.comboCount += 1;
       }
-      // Track cleared garbage-equivalent value for VS score (approximate as lines cleared)
-      this.totalGarbageCleared = (this.totalGarbageCleared || 0) + lines;
       points += this.comboCount * 50;
     } else {
       this.comboCount = -1;
@@ -11816,10 +12122,9 @@ class GameScene extends Phaser.Scene {
     if (this.vsScoreText) {
       const pieces = Math.max(1, this.totalPiecesPlaced || 0);
       const pps = Number.isFinite(this.conventionalPPS) ? this.conventionalPPS : 0;
-      const rawVs =
-        ((this.totalAttack + (this.totalGarbageCleared || 0)) / pieces) * pps * 100;
-      const safeVs = Number.isFinite(rawVs) ? rawVs : 0;
-      this.vsScoreText.setText(safeVs.toFixed(2));
+      const totalVsAttack = Number(this.totalAttack || 0) + Number(this.totalGarbageCleared || 0);
+      const vsScore = ((totalVsAttack / pieces) * pps * 100).toFixed(2);
+      this.vsScoreText.setText(vsScore);
     }
   }
 
@@ -12066,6 +12371,7 @@ class GameScene extends Phaser.Scene {
 
     // Reset all game variables
     this.board = new Board();
+    this.board.scene = this;
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
