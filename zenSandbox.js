@@ -15,6 +15,7 @@
     gravityMode: "none", // none, low, slow, medium, fast, static
     gravityRowsPerFrame: 0, // used when gravityMode === "static"
     bagChanged: false, // UI notice flag
+    uiDisplay: "none", // options: none, versus, speed, efficiency
   };
 
   function loadConfig() {
@@ -508,6 +509,25 @@
       rowY += lineHeight * 1.6;
     }
 
+    // UI display mode
+    createRadioRow(
+      scene,
+      group,
+      0,
+      rowY,
+      "UI display",
+      [
+        { label: "none", value: "none" },
+        { label: "versus", value: "versus" },
+        { label: "speed", value: "speed" },
+        { label: "efficiency", value: "efficiency" },
+      ],
+      cfg.uiDisplay || "none",
+      (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ uiDisplay: val }),
+      refreshPanel,
+    );
+    rowY += lineHeight * (1 + 0.9 * 4);
+
     return group;
   }
 
@@ -677,9 +697,24 @@
       }
       if (typeof scene.setZenSandboxConfig !== "function") {
         scene.setZenSandboxConfig = function (updates) {
+          try {
+            console.log("[ZenSandbox][Config] setZenSandboxConfig called", {
+              updates,
+              hasUpdateFn: typeof this.updateZenSandboxDisplay === "function",
+              zenActive: !!(this.isZenSandboxActive && this.isZenSandboxActive()),
+            });
+          } catch {}
           const cfg = helper.saveConfig(updates);
           this.zenSandboxConfig = cfg;
           helper.resetRuntime(this, cfg);
+          if (typeof this.updateZenSandboxDisplay === "function") {
+            try {
+              console.log("[ZenSandbox][Config] calling updateZenSandboxDisplay", {
+                uiDisplay: cfg?.uiDisplay,
+              });
+            } catch {}
+            this.updateZenSandboxDisplay();
+          }
           if (updates) {
             const cheeseChanged =
               updates.cheeseMode !== undefined ||
