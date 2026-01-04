@@ -15,6 +15,7 @@
     gravityMode: "none", // none, low, slow, medium, fast, static
     gravityRowsPerFrame: 0, // used when gravityMode === "static"
     bagChanged: false, // UI notice flag
+    displayMode: "versus", // none, versus, speed, efficiency
   };
 
   function loadConfig() {
@@ -108,28 +109,27 @@
 
   function nextPieceFromBag(scene) {
     if (!scene || !scene.zenSandboxConfig) {
-      return PIECES[Math.floor(Math.random() * PIECES.length)];
+      return PIECES[Math.floor(Math.random() * (scene ? scene.PIECES?.length || PIECES.length : PIECES.length))];
     }
-    const bagType = scene.zenSandboxConfig.bagType || "7bag";
-    const runtime = scene.zenSandboxRuntime || { bagQueue: [], bagType };
+    const configuredBagType = scene.zenSandboxConfig.bagType || "7bag";
+    const runtime = scene.zenSandboxRuntime || { bagQueue: [], bagType: configuredBagType };
     scene.zenSandboxRuntime = runtime;
+    if (!runtime.bagType) {
+      runtime.bagType = configuredBagType;
+    }
+    const activeBagType = runtime.bagType || configuredBagType;
 
     // History/random paths bypass bag queue
-    if (bagType === "random") {
+    if (activeBagType === "random") {
       const pick = PIECES[Math.floor(Math.random() * PIECES.length)];
       return pick;
     }
-    if (bagType === "history" && typeof scene.generateTGM1Piece === "function") {
+    if (activeBagType === "history" && typeof scene.generateTGM1Piece === "function") {
       const pick = scene.generateTGM1Piece();
       return pick;
     }
 
-    if (runtime.bagType !== bagType) {
-      runtime.bagType = bagType;
-      runtime.bagQueue = [];
-    }
-
-    refillBagQueue(runtime, bagType);
+    refillBagQueue(runtime, activeBagType);
 
     if (runtime.bagQueue.length === 0) {
       // safety fallback
@@ -306,7 +306,7 @@
     const lineHeight = Math.max(18, Math.floor((opts?.cellSize ?? 16) * 0.7));
     const group = scene.add.container(x, y);
 
-    let rowY = lineHeight * 0.2;
+    let rowY = lineHeight * 0.2 - 20; // lift list by 20px
 
     const refreshPanel = () => {
       if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.renderPanel) {
@@ -319,7 +319,8 @@
     };
 
     let currentBagType = cfg.bagType;
-    const bagNotice = scene.add.text(0, 0, "Restart Zen mode to apply bag changes.", {
+    const bagNoticeY = rowY - lineHeight * 0.8;
+    const bagNotice = scene.add.text(0, bagNoticeY, "Restart Zen mode to apply bag changes.", {
       fontSize: "12px",
       fill: "#ffcc00",
       fontFamily: "Courier New",
@@ -348,7 +349,7 @@
         currentBagType = val;
         scene.setZenSandboxConfig && scene.setZenSandboxConfig({ bagType: val, bagChanged: true });
         bagNotice.setVisible(true);
-        bagNotice.setPosition(0, rowY + lineHeight * (1 + 0.9 * 5));
+        bagNotice.setPosition(0, bagNoticeY);
       },
       refreshPanel,
     );
@@ -508,6 +509,24 @@
       rowY += lineHeight * 1.6;
     }
 
+    createRadioRow(
+      scene,
+      group,
+      0,
+      rowY,
+      "Display",
+      [
+        { label: "none", value: "none" },
+        { label: "versus", value: "versus" },
+        { label: "speed", value: "speed" },
+        { label: "efficiency", value: "efficiency" },
+      ],
+      cfg.displayMode || "versus",
+      (val) => scene.setZenSandboxConfig && scene.setZenSandboxConfig({ displayMode: val }),
+      refreshPanel,
+    );
+    rowY += lineHeight * (1 + 0.9 * 2);
+
     return group;
   }
 
@@ -645,7 +664,12 @@
     resetRuntime(scene, cfg) {
       if (!scene) return;
       const bagType = (cfg || {}).bagType;
-      scene.zenSandboxRuntime = { bagQueue: [], bagType, lastClassicPiece: null };
+      scene.zenSandboxRuntime = {
+        bagQueue: [],
+        bagType,
+        lastClassicPiece: null,
+        pendingBagType: undefined,
+      };
       scene.zenCheeseTimer = 0;
       scene.zenTopoutCooldown = false;
       if (typeof scene.zenGravityTime === "number") scene.zenGravityTime = 0;
@@ -677,48 +701,26 @@
       }
       if (typeof scene.setZenSandboxConfig !== "function") {
         scene.setZenSandboxConfig = function (updates) {
-<<<<<<< HEAD
-          try {
-            console.log("[ZenSandbox][Config] setZenSandboxConfig called", { updates });
-          } catch {}
-          const cfg = helper.saveConfig(updates);
+          const prevCfg = this.zenSandboxConfig || helper.loadConfig();
+          const bagTypeChanged =
+            updates && updates.bagType !== undefined && updates.bagType !== prevCfg.bagType;
+
+          // Persist config but do not reset runtime/bag queue on change; defer bag swap to reset
+          const cfg = helper.saveConfig({
+            ...updates,
+            ...(bagTypeChanged ? { bagChanged: true } : {}),
+          });
           this.zenSandboxConfig = cfg;
-          helper.resetRuntime(this, cfg);
-          const hasUpdater = typeof this.updateZenSandboxDisplay === "function";
-          try {
-            console.log("[ZenSandbox][Config] updateZenSandboxDisplay exists?", { hasUpdater, uiDisplay: cfg?.uiDisplay });
-          } catch {}
-          if (hasUpdater) {
-            try {
-              this.updateZenSandboxDisplay();
-            } catch (err) {
-              console.error("[ZenSandbox][Config] updateZenSandboxDisplay threw", err);
-            }
-          } else {
-            console.warn("[ZenSandbox][Config] updateZenSandboxDisplay missing on scene");
+
+          // If bagType changed, mark pending but preserve current queue
+          if (bagTypeChanged && this.zenSandboxRuntime) {
+            this.zenSandboxRuntime.pendingBagType = cfg.bagType;
           }
-          // Also push the change to the active GameScene if present (MenuScene panel might own the handler)
-          try {
-            const mgr = this.game?.scene;
-            const gameScene = mgr?.getScene && mgr.getScene("GameScene");
-            const canForward =
-              gameScene &&
-              typeof gameScene.updateZenSandboxDisplay === "function" &&
-              gameScene !== this &&
-              gameScene.updateZenSandboxDisplay !== this.updateZenSandboxDisplay;
-            if (canForward && !gameScene._zenDisplayForwarding) {
-              gameScene._zenDisplayForwarding = true;
-              gameScene.updateZenSandboxDisplay();
-              gameScene._zenDisplayForwarding = false;
-            }
-          } catch (err) {
-            console.warn("[ZenSandbox][Config] failed forwarding update to GameScene", err);
+
+          if (typeof this.updateZenSandboxDisplay === "function") {
+            this.updateZenSandboxDisplay();
           }
-=======
-          const cfg = helper.saveConfig(updates);
-          this.zenSandboxConfig = cfg;
-          helper.resetRuntime(this, cfg);
->>>>>>> parent of 4acc3f7 (.)
+
           if (updates) {
             const cheeseChanged =
               updates.cheeseMode !== undefined ||
@@ -785,6 +787,7 @@
               );
             }
           }
+          return cfg;
         };
       }
       if (typeof scene.getZenSandboxConfig !== "function") {

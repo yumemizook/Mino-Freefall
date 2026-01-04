@@ -1312,14 +1312,6 @@ class Board {
       if (this.scene) this.scene.zenCheeseHoleCol = this.cheeseHoleCol;
     }
     let holeCol = this.cheeseHoleCol;
-    try {
-      console.log("[Cheese] addCheeseRows", {
-        count,
-        clampedPercent,
-        rowsBefore: Array.isArray(this.grid) ? this.grid.length : null,
-        cols,
-      });
-    } catch {}
     for (let i = 0; i < rowsToAdd; i++) {
       // Remove top row to make space
       this.grid.shift();
@@ -1349,13 +1341,6 @@ class Board {
       this.grid.push(row);
       this.fadeGrid.push(Array(cols).fill(0));
     }
-    try {
-      console.log("[Cheese] addCheeseRows done", {
-        count: rowsToAdd,
-        holeCol,
-        bottomGarbage: this.countBottomCheeseRows?.() || null,
-      });
-    } catch {}
     // Play garbage SFX when rows are injected, but only after gameplay has started spawning pieces
     if (rowsToAdd > 0 && this.scene && this.scene.hasSpawnedPiece) {
       if (typeof this.scene.playGarbageSfx === "function") {
@@ -1384,6 +1369,7 @@ class Board {
     const bigBlocks = !!(scene && scene.bigBlocksActive);
     const drawCellSize = bigBlocks ? cellSize * 2 : cellSize;
 
+    const zenActive = scene?.isZenSandboxActive && scene.isZenSandboxActive();
     for (let r = startRow; r < endRow; r++) {
       for (let c = 0; c < this.cols; c++) {
         if (this.grid[r][c]) {
@@ -1398,19 +1384,31 @@ class Board {
             const strobe = 0.25 + 0.75 * (0.5 * (Math.sin(phase) + 1));
             rowAlpha *= strobe;
           }
-          if (rowAlpha <= 0) {
+          if (zenActive) {
+            if (!scene.minoFadeActive) {
+              // Outside the fade animation, use normal stack dimming (85%)
+              rowAlpha = scene.stackAlpha || 0.8;
+            } else {
+              // During fade: clamp to max 85%, allow reaching 0
+              const maxAlpha = scene.stackAlpha || 0.8;
+              if (rowAlpha > maxAlpha) rowAlpha = maxAlpha;
+              if (rowAlpha < 0) rowAlpha = 0;
+            }
+          } else if (rowAlpha <= 0) {
             continue;
           }
-          if (
-            scene.fadingRollActive &&
-            !scene.invisibleStackActive &&
-            this.fadeGrid[r][c] > 0 &&
-            scene.currentTime >= this.fadeGrid[r][c]
-          ) {
-            continue;
-          }
-          if (scene.invisibleStackActive) {
-            continue;
+          if (!zenActive) {
+            if (
+              scene.fadingRollActive &&
+              !scene.invisibleStackActive &&
+              this.fadeGrid[r][c] > 0 &&
+              scene.currentTime >= this.fadeGrid[r][c]
+            ) {
+              continue;
+            }
+            if (scene.invisibleStackActive) {
+              continue;
+            }
           }
 
           const cellVal = this.grid[r][c];
@@ -1431,7 +1429,9 @@ class Board {
               ? "mino_ars"
               : "mino_srs";
           // Always dim placed stack relative to active piece (even during line clears)
-          const baseAlpha = rowAlpha * (scene.stackAlpha || 1);
+          const baseAlpha = zenActive
+            ? rowAlpha // already set to stackAlpha outside fade, or fading value during fade
+            : rowAlpha * (scene.stackAlpha || 1);
           const tintColor =
             scene.monochromeActive && textureKey.startsWith("mono")
               ? 0xffffff
@@ -2509,6 +2509,34 @@ class MenuScene extends Phaser.Scene {
     const currentSubmode = currentModeType.modes[this.currentSubmodeIndex];
     const modeId = currentSubmode.id;
     this.selectedMode = modeId;
+    try {
+      const rootMgr = this.game && this.game.scene ? this.game.scene : this.scene;
+      rootMgr && rootMgr.getScenes && rootMgr.getScenes(true).map((s) => s.scene.key);
+      if (this.game && this.game.canvas && this.game.canvas.parentNode) {
+        this.game.canvas.parentNode.querySelectorAll("canvas");
+      }
+    } catch (e) {
+      console.warn("[MenuScene] failed to inspect scene state before start", e);
+    }
+
+    // Ensure fresh loader/loading/game scenes to avoid stale references causing blank screens
+    const rootMgr = this.game && this.game.scene ? this.game.scene : this.scene;
+    const recreateScene = (key, ctor) => {
+      try {
+        if (rootMgr.isActive(key)) {
+          rootMgr.stop(key);
+        }
+        if (rootMgr.getScene(key)) {
+          rootMgr.remove(key, true);
+        }
+        rootMgr.add(key, new ctor(), false);
+      } catch (err) {
+        console.error(`[MenuScene] failed to recreate scene ${key}`, err);
+      }
+    };
+    recreateScene("AssetLoaderScene", AssetLoaderScene);
+    recreateScene("LoadingScreenScene", LoadingScreenScene);
+    recreateScene("GameScene", GameScene);
 
     // Initialize mode manager and load the selected mode
     if (typeof getModeManager === "undefined") {
@@ -3786,7 +3814,7 @@ class SettingsScene extends Phaser.Scene {
       .setInteractive();
 
     this.backButton.on("pointerdown", () => {
-      this.startScene("MenuScene");
+      this.scene.start("MenuScene");
     });
 
     // Setup keyboard input for keybind changes
@@ -3871,7 +3899,15 @@ class SettingsScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
-    return modeIdLower.includes("zen") && !!this.zenSandboxConfig;
+    const isZen = modeIdLower.includes("zen");
+    if (isZen && !this.zenSandboxConfig && typeof ZenSandboxHelper !== "undefined") {
+      // Lazy-load config so Zen behavior remains active even if sandbox config was not preloaded
+      this.zenSandboxConfig = ZenSandboxHelper.loadConfig?.() || this.zenSandboxConfig;
+      if (ZenSandboxHelper.resetRuntime) {
+        ZenSandboxHelper.resetRuntime(this, this.zenSandboxConfig);
+      }
+    }
+    return isZen;
   }
 
   tickZenCheese(deltaSeconds = 0) {
@@ -3896,13 +3932,6 @@ class SettingsScene extends Phaser.Scene {
     if (!this.board || !this.zenSandboxConfig) return;
     const { cheeseMode } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_rows") return;
-    try {
-      console.log("[Cheese] applyZenCheeseRows", {
-        trigger,
-        clearedCount,
-        current: this.countCheeseRows?.() || 0,
-      });
-    } catch {}
     this.ensureZenCheeseBaseline(trigger === "line_clear" ? clearedCount : 0);
   }
 
@@ -3910,14 +3939,6 @@ class SettingsScene extends Phaser.Scene {
     if (!this.board || !this.zenSandboxConfig) return;
     const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
     if (cheeseMode !== "fixed_rows") return;
-    try {
-      console.log("[Cheese] ensure baseline enter", {
-        clearedCount,
-        rows: cheeseRows,
-        percent: cheesePercent,
-        current: this.countCheeseRows?.() || 0,
-      });
-    } catch {}
     // Ensure board grids exist so cheese rows can be injected (e.g., immediately on mode start)
     if (!Array.isArray(this.board.grid) || this.board.grid.length === 0) {
       const rowsCount =
@@ -3932,25 +3953,10 @@ class SettingsScene extends Phaser.Scene {
     const percent = Math.max(0, Math.min(100, Number(cheesePercent) || 0));
     const bottomGarbage = this.countBottomCheeseRows();
     const missing = Math.max(0, rowsTarget - bottomGarbage);
-    try {
-      console.log("[Cheese] baseline start", {
-        rowsTarget,
-        percent,
-        current: bottomGarbage,
-        missing,
-      });
-    } catch {}
     // Use Board API to append rows; do not overwrite existing bottom rows
     if (missing > 0 && typeof this.board.addCheeseRows === "function") {
       this.board.addCheeseRows(missing, percent);
     }
-    try {
-      console.log("[Cheese] baseline applied", {
-        rowsTarget,
-        percent,
-        current: this.countCheeseRows?.() || 0,
-      });
-    } catch {}
   }
 
   countCheeseRows() {
@@ -4033,42 +4039,162 @@ class SettingsScene extends Phaser.Scene {
   }
 
   handleZenTopout() {
-    if (!this.isZenSandboxActive()) return;
-    if (this.zenTopoutCooldown) return;
-    this.zenTopoutCooldown = true;
-    // Clear board and reset transient states
-    if (this.board && typeof this.board.clearAll === "function") {
-      this.board.clearAll();
-      // Reapply fixed garbage baseline after topout
-      this.ensureZenCheeseBaseline(0);
+    if (!this.isZenSandboxActive()) {
+      return;
     }
-    this.clearedLines = [];
-    this.pendingPowerup = null;
+    if (this.zenTopoutCooldown) {
+      // If cooldown is stuck without a pending finish, clear it and proceed
+      if (!this.zenTopoutPendingFinish) {
+        this.zenTopoutCooldown = false;
+      } else {
+        // If cooldown is active but a finish is pending, force-complete to break the stall
+        this.finishZenTopout("reenter_force_finish");
+        return;
+      }
+    }
+    this.zenTopoutFreezeLogged = false;
+    this.zenTopoutCooldown = true;
+    this.zenTopoutFreezeActive = true;
+    this.zenTopoutPendingFinish = true;
+    // Preempt any default GAME OVER handling while Zen recovery is in progress
+    this.suppressGameOverOnce = true;
+    this.zenTopoutFreezeStart = this.time?.now || Date.now();
+    // Stop interacting with the current piece to avoid lock loops during the delay
+    this.currentPiece = null;
+    this.isGrounded = false;
+    this.lockDelay = 0;
+    this.lockResetCount = 0;
     this.lineClearDelayActive = false;
     this.lineClearDelayDuration = 0;
     this.pendingLineAREDelay = 0;
     this.areActive = false;
-    this.minoRowFadeAlpha = {};
-    this.minoFadeActive = false;
-    this.fadingComplete = false;
-    this.gameOverFadeDoneTime = null;
     this.lineClearPhase = false;
-    // Brief delay before respawn to avoid tight loops
-    this.time.delayedCall(150, () => {
+    this.gravityAccum = 0;
+
+    // Delay full board reset + respawn to satisfy the 2s topout pause.
+    // Fallbacks:
+    // - Phaser timer (preferred)
+    // - window.setTimeout (safety) to avoid softlock if timer system is paused/missing
+    if (this.time && typeof this.time.delayedCall === "function") {
+      this.time.delayedCall(2000, () => {
+        if (typeof this.finishZenTopout === "function") {
+          this.finishZenTopout("timer");
+        }
+      });
+    } else {
+      if (typeof this.finishZenTopout === "function") {
+        this.finishZenTopout("no_timer");
+      }
+    }
+    if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+      window.setTimeout(() => {
+        if (this.zenTopoutPendingFinish && typeof this.finishZenTopout === "function") {
+          this.finishZenTopout("window_fallback");
+        }
+      }, 2200);
+    }
+  }
+
+  // Emergency: immediate topout recovery without relying on timers/flags
+  forceZenTopoutImmediate(reason = "fallback") {
+    try {
+      console.warn("[ZenTopout] force immediate", { reason });
+      // Clear board
+      if (this.board) {
+        if (typeof this.board.clearAll === "function") {
+          this.board.clearAll();
+        } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+          for (let r = 0; r < this.board.rows; r++) {
+            this.board.grid[r] = Array(this.board.cols).fill(0);
+            this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+          }
+        }
+        this.ensureZenCheeseBaseline?.(0);
+      }
+      this.clearedLines = [];
+      this.pendingPowerup = null;
+      this.minoRowFadeAlpha = {};
+      this.minoFadeActive = false;
+      this.fadingComplete = false;
+      this.gameOverFadeDoneTime = null;
+      this.zenTopoutCooldown = false;
+      this.zenTopoutFreezeActive = false;
+      this.zenTopoutPendingFinish = false;
+      this.suppressGameOverOnce = false;
+      this.currentPiece = null;
+      this.isGrounded = false;
+      if (this.nextPieces.length < 6) this.generateNextPieces();
+      this.spawnPiece();
+    } catch (err) {
+      try {
+        console.error("[ZenTopout] force immediate error", err);
+      } catch {}
+      this.zenTopoutCooldown = false;
+      this.zenTopoutFreezeActive = false;
+      this.zenTopoutPendingFinish = false;
+    }
+  }
+
+  finishZenTopout(reason = "timer") {
+    if (!this.zenTopoutPendingFinish) {
+      return;
+    }
+    try {
+      this.zenTopoutPendingFinish = false;
+      // Ensure GAME OVER state is cleared for Zen recovery
+      this.gameOver = false;
+      this.showGameOverText = false;
+      this.gameOverTextTimer = 0;
+      this.gameOverSfxPlayed = true;
+      this.gameOverFadeDoneTime = null;
+
+      // Clear board and reset transient states
+      if (this.board) {
+        if (typeof this.board.clearAll === "function") {
+          this.board.clearAll();
+        } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+          for (let r = 0; r < this.board.rows; r++) {
+            this.board.grid[r] = Array(this.board.cols).fill(0);
+            this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+          }
+        }
+        // Reapply fixed garbage baseline after topout
+        this.ensureZenCheeseBaseline(0);
+      }
+      this.playSfx?.("fall");
+      this.clearedLines = [];
+      this.pendingPowerup = null;
+      this.minoRowFadeAlpha = {};
+      this.minoFadeActive = false;
+      this.fadingComplete = false;
+      this.gameOverFadeDoneTime = null;
+
       // Allow new spawns and reset cooldown
       this.zenTopoutCooldown = false;
+      this.zenTopoutFreezeActive = false;
+      this.suppressGameOverOnce = false;
+      this.currentPiece = null;
+      this.isGrounded = false;
       // Ensure next queue exists
       if (this.nextPieces.length < 6) {
         this.generateNextPieces();
       }
+      // Immediately respawn a fresh piece to recover from topout
       this.spawnPiece();
-    });
+    } catch (err) {
+      // Hard fail-safe: reset cooldown so next update can attempt normal spawn path
+      this.zenTopoutCooldown = false;
+      this.zenTopoutFreezeActive = false;
+      this.zenTopoutPendingFinish = false;
+      this.currentPiece = null;
+    }
   }
 
   isZenInfiniteResets() {
     return this.isZenSandboxActive() && this.zenSandboxConfig?.movementResetsInfinite;
   }
 
+  // ... rest of the code remains the same ...
   getZenSpinMode() {
     if (!this.isZenSandboxActive()) return "standard";
     return this.zenSandboxConfig?.spinType || "standard";
@@ -5033,6 +5159,9 @@ class AssetLoaderScene extends Phaser.Scene {
         ["tm3_4", "bgm/tm3_4.mp3"],
         ["tm3_6", "bgm/tm3_6.mp3"],
         ["zen_custom", "bgm/sounds/422_m1.mp3"],
+        ["marathon_1", "bgm/sounds/422_m1.mp3"],
+        ["marathon_2", "bgm/sounds/423_m2.mp3"],
+        ["marathon_3", "bgm/sounds/424_m3.mp3"],
       ];
       bgmLoads.forEach(([key, path]) => {
         if (!this.cache.audio.exists(key)) {
@@ -5070,6 +5199,7 @@ class AssetLoaderScene extends Phaser.Scene {
       ["jewelclear", "sfx/jewelclear.wav"],
       ["firework", "sfx/firework.wav"],
       ["garbage", "sfx/garbage.wav"],
+      ["gameover", "sfx/gameover.wav"],
     ];
     sfxLoads.forEach(([key, path]) => {
       if (!this.cache.audio.exists(key)) {
@@ -5220,6 +5350,7 @@ class GameScene extends Phaser.Scene {
     this.rightTimer = 0;
     this.leftInRepeat = false;
     this.rightInRepeat = false;
+    this.softDropPressed = false;
 
     // Rotation and action key states
     this.kKeyPressed = false;
@@ -5242,8 +5373,14 @@ class GameScene extends Phaser.Scene {
     this.hasSpawnedPiece = false;
     this.garbageLinesClearedLast = 0;
     this.zenTopoutCooldown = false;
+    this.zenTopoutFreezeActive = false;
+    this.zenTopoutPendingFinish = false;
+    this.zenTopoutFreezeStart = 0;
+    this.zenSandboxLogOnce = false;
+    this.zenTopoutFreezeLogged = false;
     this.zenGravityTime = 0;
     this.zenSandboxInitDone = false;
+    this.suppressGameOverOnce = false;
 
     if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.ensureScene) {
       ZenSandboxHelper.ensureScene(this);
@@ -5375,7 +5512,88 @@ class GameScene extends Phaser.Scene {
         return type;
       };
     }
+    if (typeof this.updateZenSandboxDisplay !== "function") {
+      this.updateZenSandboxDisplay = function () {
+        if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
+        const mode = (this.zenSandboxConfig?.displayMode || "versus").toLowerCase();
+        const showNone = mode === "none";
+        const isReadyGo = !!this.readyGoPhase;
+        const isUltraMode = this.selectedMode === "ultra";
+        const isZenMode = this.selectedMode === "zen";
+        const showAttack = !showNone && (mode === "versus" || mode === "efficiency");
+        const showAtkPerPiece = showAttack && mode === "efficiency";
+        // Hide piece/PPS metrics during Ready/Go and when display mode is none
+        const showPps = !showNone && (mode === "versus" || mode === "speed" || mode === "efficiency");
+        const showScore = !showNone && mode === "speed";
+        const showScorePerPiece =
+          (isUltraMode && !showNone) || (isZenMode && mode === "speed");
+        const showFinesse =
+          !showNone && (mode === "speed" || mode === "efficiency") && !!this.finesseEnabled;
+        const showTime = !showNone && mode === "versus";
+
+        const setGroupVisible = (elems, visible) => {
+          elems
+            .filter(Boolean)
+            .forEach((el) => el.setVisible(!!visible));
+        };
+
+        const attackElems = [
+          this.vsLabel,
+          this.vsScoreText,
+          this.attackLabel,
+          this.attackTotalText,
+          this.attackPerMinLabel,
+          this.attackPerMinText,
+        ];
+        const atkPerPieceElems = [this.attackPerPieceLabel, this.attackPerPieceText];
+        const ppsElems = [
+          this.pieceCountLabel,
+          this.pieceCountText,
+          this.ppsLabel,
+          this.ppsText,
+          this.rawPpsLabel,
+          this.rawPpsText,
+        ];
+        const scoreElems = [this.scoreLabel, this.scoreText];
+        const scorePerPieceElems = [this.scorePerPieceLabel, this.scorePerPieceText];
+        const finesseElems = [
+          this.finesseInputLabel,
+          this.finesseInputText,
+          this.inputPerPieceLabel,
+          this.inputPerPieceText,
+          this.finesseTexts?.header,
+          this.finesseTexts?.streakAcc,
+          this.finesseTexts?.errors,
+        ];
+        const timeElems = [this.timeText];
+        const linesElems = [
+          this.levelLabel,
+          this.levelDisplayLabel,
+          this.levelDisplayText,
+          this.levelBar,
+          this.currentLevelText,
+          this.capLevelText,
+        ];
+
+        setGroupVisible(attackElems, showAttack);
+        setGroupVisible(atkPerPieceElems, showAtkPerPiece);
+        setGroupVisible(ppsElems, showPps);
+        setGroupVisible(scoreElems, showScore);
+        setGroupVisible(scorePerPieceElems, showScorePerPiece);
+        setGroupVisible(finesseElems, showFinesse);
+        setGroupVisible(timeElems, showTime);
+        setGroupVisible(linesElems, !showNone);
+
+        if (this.spikeText) {
+          const canShowSpike = showAttack && !this.readyGoPhase;
+          this.spikeText.setVisible(canShowSpike);
+        }
+      };
+    }
     this.loadZenSandboxConfig();
+    if (typeof this.updateZenSandboxDisplay === "function") {
+      this.updateZenSandboxDisplay();
+    }
 
     // Line clear animation tracking
     this.clearedLines = []; // Lines being cleared for animation
@@ -5404,8 +5622,14 @@ class GameScene extends Phaser.Scene {
     this.lastAttackTime = 0;
     this.attackTotalText = null;
     this.attackPerMinText = null;
+    this.attackPerPieceText = null;
+    this.attackPerPieceLabel = null;
     this.spikeText = null;
     this.vsScoreText = null;
+    this.scorePerPieceLabel = null;
+    this.scorePerPieceText = null;
+    this.inputPerPieceLabel = null;
+    this.inputPerPieceText = null;
     this.spikeFadeTween = null;
     this.b2bChainText = null;
     this.b2bChainCount = -1;
@@ -5702,6 +5926,7 @@ class GameScene extends Phaser.Scene {
     this.gameOverTextDelay = 3; // seconds until GAME OVER text appears
     this.gameOverTextTimer = 0;
     this.showGameOverText = false;
+    this.gameOverSfxPlayed = false;
 
     // GM grade tracking
     this.gmConditions = {
@@ -5730,6 +5955,8 @@ class GameScene extends Phaser.Scene {
     // Pause time tracking
     this.pauseStartTime = null;
     this.totalPausedTime = 0;
+    this.metricsPauseActive = false;
+    this.metricsPauseStart = null;
 
     // Mode and best score tracking
     this.selectedMode = null;
@@ -5820,6 +6047,12 @@ class GameScene extends Phaser.Scene {
     this.currentPiece.finesseInputs.moves += 1;
   }
 
+  recordFinesseInput() {
+    if (this.areActive) return;
+    this.finesseInputCount += 1;
+    this.updateFinesseInputUI();
+  }
+
   incrementFinesseRotation() {
     if (
       !this.finesseEnabled ||
@@ -5867,7 +6100,10 @@ class GameScene extends Phaser.Scene {
 
   updateFinesseUI() {
     const { header, streakAcc, errors } = this.finesseTexts;
-    const visible = this.finesseEnabled && header && streakAcc && errors;
+    const mode = (this.zenSandboxConfig?.displayMode || "versus").toLowerCase();
+    const allowByMode =
+      !this.zenSandboxConfig || mode === "speed" || mode === "efficiency";
+    const visible = this.finesseEnabled && allowByMode && header && streakAcc && errors;
     if (!header || !streakAcc || !errors) return;
     header.setVisible(visible);
     streakAcc.setVisible(visible);
@@ -5884,12 +6120,34 @@ class GameScene extends Phaser.Scene {
   }
 
   updateFinesseInputUI() {
-    const show = !!(this.finesseEnabled && this.finesseInputLabel && this.finesseInputText);
-    if (!this.finesseInputLabel || !this.finesseInputText) return;
+    const mode = (this.zenSandboxConfig?.displayMode || "versus").toLowerCase();
+    const allowByMode = !this.zenSandboxConfig || mode === "speed" || mode === "efficiency";
+    const show =
+      !!(
+        this.finesseEnabled &&
+        allowByMode &&
+        this.finesseInputLabel &&
+        this.finesseInputText &&
+        this.inputPerPieceLabel &&
+        this.inputPerPieceText
+      );
+    if (
+      !this.finesseInputLabel ||
+      !this.finesseInputText ||
+      !this.inputPerPieceLabel ||
+      !this.inputPerPieceText
+    )
+      return;
     this.finesseInputLabel.setVisible(show);
     this.finesseInputText.setVisible(show);
+    this.inputPerPieceLabel.setVisible(show);
+    this.inputPerPieceText.setVisible(show);
     if (!show) return;
-    this.finesseInputText.setText(`${this.finesseInputCount || 0}`);
+    const inputs = this.finesseInputCount || 0;
+    const pieces = Math.max(1, this.totalPiecesPlaced || 0);
+    const inputsPerPiece = inputs / pieces;
+    this.finesseInputText.setText(`${inputs}`);
+    this.inputPerPieceText.setText(inputsPerPiece.toFixed(2));
   }
 
   getMaxSectionsForTracker() {
@@ -6575,7 +6833,6 @@ class GameScene extends Phaser.Scene {
       },
       softDropMultiplier: this.softDropMultiplier,
     };
-    console.log("[TimingDebug]", timingDebug);
     this.lockDelayMax =
       this.gameMode.getLockDelay &&
       typeof this.gameMode.getLockDelay === "function"
@@ -6610,7 +6867,9 @@ class GameScene extends Phaser.Scene {
     const isSprintMode =
       this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100";
     const isUltraMode = this.selectedMode === "ultra";
-    this.finesseEnabled = this.rotationSystem === "SRS" && (isSprintMode || isUltraMode);
+    const isZenMode = this.selectedMode === "zen";
+    this.finesseEnabled =
+      this.rotationSystem === "SRS" && (isSprintMode || isUltraMode || isZenMode);
     if (!this.finesseEnabled) {
       this.finesseErrors = 0;
       this.finessePieces = 0;
@@ -7037,6 +7296,23 @@ class GameScene extends Phaser.Scene {
         align: "right",
       })
       .setOrigin(1, 0);
+    this.scorePerPieceLabel = this.add
+      .text(uiX + 135, levelBottomY + 61, "SCORE/PIECE", {
+        fontSize: `${uiFontSize - 6}px`,
+        fill: "#cccccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(1, 0);
+    this.scorePerPieceText = this.add
+      .text(uiX + 140, levelBottomY + 76, "0.00", {
+        fontSize: `${largeFontSize}px`,
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "right",
+      })
+      .setOrigin(1, 0);
 
     // Clear banner (line clear/spin indicator) - slides in from left of matrix
     this.createClearBannerUI(levelBottomY, scoreRowHeight, uiFontSize);
@@ -7052,53 +7328,74 @@ class GameScene extends Phaser.Scene {
       fill: "#ffdd55",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      align: "right",
     };
     const atkValueStyle = {
       fontSize: `${largeFontSize}px`,
       fill: "#ffffff",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      align: "right",
     };
     const atkSubStyle = {
       fontSize: `${uiFontSize - 6}px`,
       fill: "#cccccc",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      align: "right",
     };
 
     const uiParent = this.overlayGroup || this.gameGroup;
-    this.vsLabel = this.add
-      .text(ppsX, ppsY - 170, "VS", atkLabelStyle)
-      .setOrigin(0, 0);
+    const atkX = uiX + 135;
+    const atkBaseY = levelBottomY - 3.5 * levelRowHeight - 220; // moved up by 70px
+    const atkRow = 18;
+    this.vsLabel = this.add.text(atkX, atkBaseY, "VS", atkLabelStyle).setOrigin(1, 0);
     this.vsScoreText = this.add
-      .text(ppsX, ppsY - 155, "0.00", {
+      .text(atkX + 5, atkBaseY + atkRow, "0.00", {
         fontSize: `${largeFontSize - 8}px`,
         fill: "#a0d8ff",
         fontFamily: "Courier New",
         fontStyle: "bold",
+        align: "right",
       })
-      .setOrigin(0, 0);
-    this.attackLabel = this.add.text(ppsX, ppsY - 140, "ATK", atkLabelStyle).setOrigin(0, 0);
-    this.attackTotalText = this.add.text(ppsX, ppsY - 125, "0", atkValueStyle).setOrigin(0, 0);
+      .setOrigin(1, 0);
+    this.attackLabel = this.add.text(atkX, atkBaseY + atkRow * 2, "ATK", atkLabelStyle).setOrigin(1, 0);
+    this.attackTotalText = this.add
+      .text(atkX + 5, atkBaseY + atkRow * 3, "0", atkValueStyle)
+      .setOrigin(1, 0);
     this.attackPerMinLabel = this.add
-      .text(ppsX, ppsY - 95, "ATK/MIN", atkSubStyle)
-      .setOrigin(0, 0);
+      .text(atkX, atkBaseY + atkRow * 4 + 4, "ATK/MIN", atkSubStyle)
+      .setOrigin(1, 0);
     this.attackPerMinText = this.add
-      .text(ppsX, ppsY - 80, "0.00", {
+      .text(atkX + 5, atkBaseY + atkRow * 5 + 4, "0.00", {
         fontSize: `${largeFontSize - 6}px`,
         fill: "#cccccc",
         fontFamily: "Courier New",
         fontStyle: "bold",
+        align: "right",
       })
-      .setOrigin(0, 0);
+      .setOrigin(1, 0);
+    this.attackPerPieceLabel = this.add
+      .text(atkX, atkBaseY + atkRow * 6 + 8, "ATK/PIECE", atkSubStyle)
+      .setOrigin(1, 0);
+    this.attackPerPieceText = this.add
+      .text(atkX + 5, atkBaseY + atkRow * 7 + 8, "0.00", {
+        fontSize: `${largeFontSize - 6}px`,
+        fill: "#cccccc",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+        align: "right",
+      })
+      .setOrigin(1, 0);
     this.spikeText = this.add
-      .text(ppsX, spikeY, "SPIKE 0", {
+      .text(atkX, spikeY, "SPIKE 0", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#ffaa33",
         fontFamily: "Courier New",
         fontStyle: "bold",
+        align: "right",
       })
-      .setOrigin(0, 0)
+      .setOrigin(1, 0)
       .setVisible(false);
     const attackUIElements = [
       this.vsLabel,
@@ -7107,22 +7404,38 @@ class GameScene extends Phaser.Scene {
       this.attackTotalText,
       this.attackPerMinLabel,
       this.attackPerMinText,
+      this.attackPerPieceLabel,
+      this.attackPerPieceText,
       this.spikeText,
     ];
-    // Show attack metrics only in Zen; hide elsewhere
+    // Show attack metrics only in Zen (spike text is separately hidden during Ready/Go)
     const showAttackUI = isZenMode;
     attackUIElements.forEach((el) => {
-      el.setVisible(showAttackUI);
+      if (el === this.spikeText) {
+        el.setVisible(isZenMode && !this.readyGoPhase);
+      } else {
+        el.setVisible(showAttackUI);
+      }
       if (isZenMode) {
         el.setDepth(2000);
       }
     });
     uiParent.addMultiple(attackUIElements);
 
+    if (isZenMode && typeof this.updateZenSandboxDisplay === "function") {
+      this.updateZenSandboxDisplay();
+    }
+
     // Finesse tracking display (sprint/ultra with SRS)
-    const finesseVisible = !!this.finesseEnabled;
+    const finesseMode = (this.zenSandboxConfig?.displayMode || "versus").toLowerCase();
+    const finesseVisible =
+      !!this.finesseEnabled &&
+      (!this.isZenSandboxActive ||
+        !this.isZenSandboxActive() ||
+        finesseMode === "speed" ||
+        finesseMode === "efficiency");
     const finesseY = ppsY - 110;
-    const inputY = finesseY - 70;
+    const inputY = finesseY - 86; // moved up further
     this.finesseInputLabel = this.add
       .text(ppsX, inputY, "INPUTS", {
         fontSize: `${uiFontSize - 6}px`,
@@ -7135,6 +7448,24 @@ class GameScene extends Phaser.Scene {
     this.finesseInputText = this.add
       .text(ppsX, inputY + 15, "0", {
         fontSize: `${uiFontSize - 2}px`,
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.inputPerPieceLabel = this.add
+      .text(ppsX, inputY + 30, "INPUT/PIECE", {
+        fontSize: `${uiFontSize - 8}px`,
+        fill: "#999999",
+        fontFamily: "Courier New",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(finesseVisible);
+    this.inputPerPieceText = this.add
+      .text(ppsX, inputY + 45, "0.00", {
+        fontSize: `${uiFontSize - 4}px`,
         fill: "#ffffff",
         fontFamily: "Courier New",
         fontStyle: "bold",
@@ -7171,6 +7502,8 @@ class GameScene extends Phaser.Scene {
     uiParent.addMultiple([
       this.finesseInputLabel,
       this.finesseInputText,
+      this.inputPerPieceLabel,
+      this.inputPerPieceText,
       this.finesseTexts.header,
       this.finesseTexts.streakAcc,
       this.finesseTexts.errors,
@@ -7739,6 +8072,7 @@ class GameScene extends Phaser.Scene {
     this.bagQueue = this.createShuffledBag();
     this.bagDrawCount = 0;
     this.bagDebugSeen = new Set();
+    this.guidelineBagSeed = null;
     this.validatePieceHistory();
 
     // Start with an empty preview queue; generateNextPieces will fill using the active randomizer
@@ -7758,6 +8092,7 @@ class GameScene extends Phaser.Scene {
     this.gameOverFadeDoneTime = null;
     this.showGameOverText = false;
     this.gameOverTextTimer = 0;
+    this.gameOverSfxPlayed = false;
     this.creditsPending = false;
     this.creditsActive = false;
     this.creditsTimer = 0;
@@ -7978,6 +8313,9 @@ class GameScene extends Phaser.Scene {
         tm3_4: addTrack("tm3_4", { loop: true }),
         tm3_6: addTrack("tm3_6", { loop: true }),
         zen_custom: addTrack("zen_custom", { loop: true }),
+        marathon_1: addTrack("marathon_1", { loop: true }),
+        marathon_2: addTrack("marathon_2", { loop: true }),
+        marathon_3: addTrack("marathon_3", { loop: true }),
       };
       this.stage1BGM = this.bgmTracks.tm1_1;
       this.stage2BGM = this.bgmTracks.tm1_2;
@@ -8313,6 +8651,45 @@ class GameScene extends Phaser.Scene {
       (this.gameMode && typeof this.gameMode.getModeId === "function"
         ? this.gameMode.getModeId()
         : this.selectedMode) || "tgm1";
+
+    // Custom BGM flow for Marathon: use line count with stop windows
+    if (
+      modeId === "marathon" &&
+      this.gameMode &&
+      typeof this.gameMode.linesCleared === "number"
+    ) {
+      const lines = this.gameMode.linesCleared;
+
+      // Stop all music once the goal is hit
+      if (lines >= 150) {
+        this.stopCurrentBGM();
+        return;
+      }
+
+      // Determine which track should be active, with intentional silent gaps
+      let desiredKey = null;
+      if (lines < 55) {
+        desiredKey = "marathon_1"; // lines 0-54
+      } else if (lines < 60) {
+        // Silent gap between 55-59
+        this.stopCurrentBGM();
+        return;
+      } else if (lines < 115) {
+        desiredKey = "marathon_2"; // lines 60-114
+      } else if (lines < 120) {
+        // Silent gap between 115-119
+        this.stopCurrentBGM();
+        return;
+      } else {
+        desiredKey = "marathon_3"; // lines 120-149
+      }
+
+      if (desiredKey && this.currentBgmKey !== desiredKey) {
+        this.playBgmByKey(desiredKey);
+      }
+      return;
+    }
+
     const schedule = this.getBgmSchedule(modeId);
     if (!schedule || !schedule.segments || !schedule.segments.length) return;
 
@@ -8347,6 +8724,11 @@ class GameScene extends Phaser.Scene {
     this.readyGoPhase = true;
     const centerX = this.game.config.width / 2;
     const centerY = this.game.config.height / 2;
+
+    // Re-apply zen display rules during Ready/Go (hide PPS/pieces when displayMode is "none")
+    if (typeof this.updateZenSandboxDisplay === "function") {
+      this.updateZenSandboxDisplay();
+    }
 
     // Pre-initialize PPS/UI at scene display so sprint modes start at zero
     this.totalPiecesPlaced = 0;
@@ -8419,13 +8801,6 @@ class GameScene extends Phaser.Scene {
     if (this.isZenSandboxActive && this.isZenSandboxActive() && this.board && this.zenSandboxConfig) {
       const { cheeseMode, cheeseRows, cheesePercent } = this.zenSandboxConfig;
       if (cheeseMode === "fixed_rows") {
-        try {
-          console.log("[Cheese] start apply fixed_rows", {
-            rows: cheeseRows,
-            percent: cheesePercent,
-            current: this.countCheeseRows?.() || 0,
-          });
-        } catch {}
         // Immediately inject target rows to avoid missing baseline at spawn
         if (typeof this.board.addCheeseRows === "function") {
           const rows = Math.max(1, Math.floor(Number(cheeseRows) || 1));
@@ -8433,19 +8808,9 @@ class GameScene extends Phaser.Scene {
           this.board.addCheeseRows(rows, percent);
         }
         this.ensureZenCheeseBaseline?.(0);
-        try {
-          console.log("[Cheese] start applied baseline", {
-            current: this.countCheeseRows?.() || 0,
-          });
-        } catch {}
       } else if (cheeseMode === "fixed_timing") {
         // Do not inject before first spawn; start timer at first spawn
         this.zenCheeseTimer = 0;
-        try {
-          console.log("[Cheese] fixed_timing ready (wait for spawn)", {
-            percent: cheesePercent,
-          });
-        } catch {}
       }
     }
 
@@ -8512,6 +8877,9 @@ class GameScene extends Phaser.Scene {
       this.isPaused ||
       this.level999Reached ||
       this.gameOver ||
+      this.zenTopoutFreezeActive ||
+      this.metricsPauseActive ||
+      (this.minoFadeActive && this.gameOverFadeDoneTime === null) ||
       this.creditsActive
     ) {
       return;
@@ -8535,6 +8903,108 @@ class GameScene extends Phaser.Scene {
       this.draw();
       return;
     }
+
+    // Ensure spike text stays hidden during Ready/Go without affecting other attack UI
+    if (this.spikeText && this.readyGoPhase) {
+      this.spikeText.setVisible(false);
+    }
+
+    // During Zen topout freeze, halt all mechanics and timers but keep drawing current frame.
+    // Safety: if the Phaser timer failed to fire, finish after 2s based on wall-clock time.
+    if (this.zenTopoutFreezeActive) {
+      if (!this.zenTopoutFreezeLogged) {
+        try {
+          console.log("[ZenTopout] freeze tick", {
+            pending: this.zenTopoutPendingFinish,
+            start: this.zenTopoutFreezeStart,
+            now: this.time?.now || Date.now(),
+          });
+        } catch {}
+        this.zenTopoutFreezeLogged = true;
+      }
+      const finishZenSafe = (reason = "freeze_tick") => {
+        if (typeof this.finishZenTopout === "function") {
+          try {
+            this.finishZenTopout(reason);
+            return;
+          } catch (err) {
+            try {
+              console.error("[ZenTopout] finishZenTopout threw, falling back", err);
+            } catch {}
+          }
+        }
+        // Inline fallback: clear board and respawn without GAME OVER UI/SFX
+        this.zenTopoutPendingFinish = false;
+        this.zenTopoutFreezeActive = false;
+        this.zenTopoutCooldown = false;
+        this.zenTopoutFreezeStart = 0;
+        this.gameOver = false;
+        this.showGameOverText = false;
+        this.gameOverTextTimer = 0;
+        this.gameOverSfxPlayed = true;
+        this.gameOverFadeDoneTime = null;
+        if (this.board) {
+          if (typeof this.board.clearAll === "function") {
+            this.board.clearAll();
+          } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+            for (let r = 0; r < this.board.rows; r++) {
+              this.board.grid[r] = Array(this.board.cols).fill(0);
+              this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+            }
+          }
+          this.ensureZenCheeseBaseline?.(0);
+        }
+        this.playSfx?.("fall");
+        this.currentPiece = null;
+        this.isGrounded = false;
+        if (this.nextPieces.length < 6) this.generateNextPieces();
+        this.spawnPiece?.();
+      };
+      const now = this.time?.now || Date.now();
+      if (this.zenTopoutPendingFinish && this.zenTopoutFreezeStart && now - this.zenTopoutFreezeStart >= 2000) {
+        finishZenSafe("freeze_tick");
+      }
+      // Safety: if freeze is stuck but pending got cleared, force finish after 2.5s
+      if (!this.zenTopoutPendingFinish && this.zenTopoutFreezeStart && now - this.zenTopoutFreezeStart >= 2500) {
+        this.zenTopoutPendingFinish = true;
+        finishZenSafe("freeze_watchdog");
+      }
+      // Suppress GAME OVER UI/SFX while frozen
+      this.gameOver = false;
+      this.showGameOverText = false;
+      this.gameOverTextTimer = 0;
+      this.gameOverSfxPlayed = true;
+      this.gameOverFadeDoneTime = null;
+      // Continue mino fade progression during freeze
+      if (this.minoFadeActive) {
+        this.minoFadeTimer += this.deltaTime;
+        const totalRows = this.placedMinoRows.length;
+        if (totalRows === 0 || this.minoFadePerRowDuration <= 0) {
+          this.minoFadeActive = false;
+          this.fadingComplete = true;
+        } else if (this.minoFadeProgress < totalRows) {
+          const rowIndex = this.minoFadeProgress;
+          const rowToFade = this.placedMinoRows[rowIndex];
+          const perRow = this.minoFadePerRowDuration;
+          const alpha = Math.max(0, 1 - this.minoFadeTimer / perRow);
+          this.minoRowFadeAlpha[rowToFade] = alpha;
+          if (this.minoFadeTimer >= perRow) {
+            this.minoFadeTimer = 0;
+            this.minoFadeProgress++;
+            this.minoRowFadeAlpha[rowToFade] = 0;
+            if (this.minoFadeProgress >= totalRows) {
+              this.minoFadeActive = false;
+              this.fadingComplete = true;
+            }
+          }
+        }
+      }
+      this.draw();
+      return;
+    }
+
+    // Zen sandbox: timed cheese injection
+    this.tickZenCheese(this.deltaTime);
     // During READY/GO sequence, still allow directional keys to be sampled for DAS/ARE carry
     if (this.readyGoPhase && !this.gameStarted) {
       if (this.keys) {
@@ -8557,9 +9027,6 @@ class GameScene extends Phaser.Scene {
     if (!this.keys || !this.cursors) {
       return;
     }
-
-    // Zen sandbox: timed cheese injection
-    this.tickZenCheese(this.deltaTime);
 
     // Input handling (null-safe)
     const isDown = (key) => !!(key && key.isDown);
@@ -8757,6 +9224,7 @@ class GameScene extends Phaser.Scene {
       if (xKeyDown && !this.xKeyPressed) {
         this.xKeyPressed = true;
         if (this.currentPiece) {
+          this.recordFinesseInput(); // Count the keypress
           // Calculate hard drop rows before dropping
           const ghost = this.currentPiece.getGhostPosition(this.board);
           this.hardDropRows = ghost.y - this.currentPiece.y;
@@ -8780,8 +9248,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
           this.incrementFinesseMove();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
           this.spinRotatedWhileGrounded = false;
         }
@@ -8794,8 +9261,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
           this.incrementFinesseMove();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
           this.spinRotatedWhileGrounded = false;
         }
@@ -8818,8 +9284,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, -1, 0)) {
           this.incrementFinesseMove();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
@@ -8831,8 +9296,7 @@ class GameScene extends Phaser.Scene {
         // Initial movement
         if (this.currentPiece && this.currentPiece.move(this.board, 1, 0)) {
           this.incrementFinesseMove();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
@@ -8852,8 +9316,7 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, 1, this.rotationSystem)
         ) {
           this.incrementFinesseRotation();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
         } else if (this.currentPiece) {
           this.isGrounded = !this.currentPiece.canMoveDown(this.board);
@@ -8871,8 +9334,7 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.incrementFinesseRotation();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
@@ -8892,8 +9354,7 @@ class GameScene extends Phaser.Scene {
           this.currentPiece.rotate(this.board, -1, this.rotationSystem)
         ) {
           this.incrementFinesseRotation();
-          this.finesseInputCount += 1; // Count key press, not DAS
-          this.updateFinesseInputUI();
+          this.recordFinesseInput(); // Count key press, not DAS
           this.resetLockDelay();
           if (this.currentPiece && !this.currentPiece.canMoveDown(this.board)) {
             this.markGroundedSpin();
@@ -8909,6 +9370,7 @@ class GameScene extends Phaser.Scene {
       if (xKeyDown && !this.xKeyPressed) {
         this.xKeyPressed = true;
         if (this.currentPiece) {
+          this.recordFinesseInput(); // Count the keypress
           // Calculate hard drop rows before dropping
           const ghost = this.currentPiece.getGhostPosition(this.board);
           this.hardDropRows = ghost.y - this.currentPiece.y;
@@ -8957,9 +9419,6 @@ class GameScene extends Phaser.Scene {
               movedAny = true;
             }
             if (movedAny) {
-              this.incrementFinesseMove();
-              this.finesseInputCount += 1;
-              this.updateFinesseInputUI();
               this.resetLockDelay();
             }
           }
@@ -8969,9 +9428,6 @@ class GameScene extends Phaser.Scene {
           if (this.currentPiece) {
             const moved = this.currentPiece.move(this.board, -1, 0);
             if (moved) {
-              this.incrementFinesseMove();
-              this.finesseInputCount += 1; // Count key press, not DAS
-              this.updateFinesseInputUI();
               this.resetLockDelay();
             } else {
               // Piece tried to move left during ARR - no ground sound for movement failures
@@ -9108,11 +9564,12 @@ class GameScene extends Phaser.Scene {
       if (totalRows === 0 || this.minoFadePerRowDuration <= 0) {
         this.minoFadeActive = false;
         this.fadingComplete = true;
-        if (this.gameOverFadeDoneTime === null) {
+        if (!this.zenTopoutPendingFinish && !this.zenTopoutFreezeActive && this.gameOverFadeDoneTime === null) {
           this.gameOverFadeDoneTime = this.time.now;
         }
         if (this.creditsPending) {
           this.creditsPending = false;
+          this.creditsActive = true;
           this.startCredits();
           if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
             this.gameMode.onCreditsStart(this);
@@ -9132,7 +9589,7 @@ class GameScene extends Phaser.Scene {
           if (this.minoFadeProgress >= totalRows) {
             this.minoFadeActive = false;
             this.fadingComplete = true;
-            if (this.gameOverFadeDoneTime === null) {
+            if (!this.zenTopoutPendingFinish && !this.zenTopoutFreezeActive && this.gameOverFadeDoneTime === null) {
               this.gameOverFadeDoneTime = this.time.now;
             }
           }
@@ -9178,25 +9635,74 @@ class GameScene extends Phaser.Scene {
       this.draw();
       return;
     }
-    // Show GAME OVER text only after fade completes + 3s
-    if (this.fadingComplete && this.gameOverFadeDoneTime !== null) {
+    // Suppress GAME OVER during Zen recovery; otherwise show after fade
+    const suppressGameOverUI = this.zenTopoutFreezeActive || this.zenTopoutPendingFinish;
+    if (suppressGameOverUI) {
+      this.showGameOverText = false;
+      this.gameOverTextTimer = 0;
+      this.gameOverSfxPlayed = true;
+      this.gameOverFadeDoneTime = null;
+    } else if (this.fadingComplete && this.gameOverFadeDoneTime !== null) {
       const elapsedSinceFade = this.time.now - this.gameOverFadeDoneTime;
       if (elapsedSinceFade >= 3000) {
         this.showGameOverText = true;
+        this.metricsPauseActive = false; // resume metrics after topout animation finishes
+        if (!this.gameOverSfxPlayed) {
+          this.gameOverSfxPlayed = true;
+          this.playSfx?.("gameover", 0.8);
+        }
       }
     }
 
+    // Determine if metrics should pause (topout animation, pause, zen freeze, credits, etc.)
+    const topoutAnimActive =
+      this.minoFadeActive ||
+      this.zenTopoutFreezeActive ||
+      (this.gameOver && !this.fadingComplete);
+    if (topoutAnimActive) {
+      if (!this.metricsPauseActive) {
+        this.metricsPauseActive = true;
+        this.metricsPauseStart = Date.now();
+      }
+    } else if (this.metricsPauseActive) {
+      // Exiting metrics pause: shift timers so elapsed excludes the paused duration
+      const pausedMs = this.metricsPauseStart ? Date.now() - this.metricsPauseStart : 0;
+      const pausedSec = pausedMs / 1000;
+      if (pausedMs > 0) {
+        if (this.startTime) this.startTime += pausedMs;
+        if (this.gameStartTime) this.gameStartTime += pausedMs;
+        if (this.sectionStartTime !== null && this.sectionStartTime !== undefined) {
+          this.sectionStartTime += pausedSec;
+        }
+        if (this.lastAttackTime) this.lastAttackTime += pausedSec;
+      }
+      this.metricsPauseActive = false;
+      this.metricsPauseStart = null;
+    }
+    const metricsPaused =
+      this.isPaused ||
+      this.level999Reached ||
+      this.creditsActive ||
+      this.metricsPauseActive ||
+      (this.gameOver && !this.showGameOverText);
+
     // Update time tracking using Date.now() for reliability
-    this.updateTimer();
-    this.tickAttackDecay(this.currentTime || 0);
-    this.tickStandardCombo(this.currentTime || 0);
-    this.updateAttackUI();
+    if (!metricsPaused) {
+      this.updateTimer();
+    }
+    if (!metricsPaused) {
+      this.tickAttackDecay(this.currentTime || 0);
+      this.tickStandardCombo(this.currentTime || 0);
+    }
+    if (!metricsPaused) {
+      this.updateAttackUI();
+    }
 
     // Handle BGM first play vs loop mode
     this.manageBGMLoopMode();
 
     // Track active time and ARE time for PPS calculations (ignore paused time)
-    if (!this.isPaused && !this.level999Reached) {
+    if (!metricsPaused && !this.gameOver) {
       if (!this.areActive) {
         this.activeTime += this.deltaTime;
       } else {
@@ -9242,6 +9748,10 @@ class GameScene extends Phaser.Scene {
       // Allow DAS during loading for initial piece handling
       // Soft drop handling - only when s key is held
       if (downDown || sKeyDown) {
+        if (!this.softDropPressed) {
+          this.softDropPressed = true;
+          this.recordFinesseInput(); // Count the keypress, not the repeats
+        }
         const maxSteps =
           this.softDropMultiplier >= 100 ? 200 : Math.max(1, Math.floor(this.softDropMultiplier));
         let movedRows = 0;
@@ -9297,11 +9807,13 @@ class GameScene extends Phaser.Scene {
         // If piece was already grounded, don't increment lock delay
       } else {
         // Reset flag when soft drop key is not held
+        this.softDropPressed = false;
         this.wasGroundedDuringSoftDrop = false;
       }
 
       // Single press actions (keep JustDown for these)
       if (justDown(this.cursors.down)) {
+        this.recordFinesseInput(); // Count the keypress
         if (this.currentPiece.move(this.board, 0, 1)) {
           this.resetLockDelay();
         } else if (!this.isGrounded) {
@@ -9523,7 +10035,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Calculate piece per second rates (skip during credits)
-    if (!this.creditsActive) {
+    if (!metricsPaused && !this.creditsActive) {
       this.updatePPS();
     }
 
@@ -9559,8 +10071,9 @@ class GameScene extends Phaser.Scene {
   updatePPS() {
     // If PPS tracking fields exist, keep lightweight calculation; otherwise skip.
     if (typeof this.computePPS === "function") {
+      if (this.zenTopoutFreezeActive) return;
       // If no pieces placed yet, clamp to zero and clear graph/history
-      if (this.totalPiecesPlaced === 0) {
+      if (!this.totalPiecesPlaced) {
         this.conventionalPPS = 0;
         this.rawPPS = 0;
         if (this.ppsText) this.ppsText.setText("0.00");
@@ -9702,13 +10215,28 @@ class GameScene extends Phaser.Scene {
     }
     pieceType = pieceType.toUpperCase();
 
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isTgm3Mode =
+      modeIdLower === "tgm3" ||
+      modeIdLower === "tgm3_master" ||
+      modeIdLower === "tgm3_easy" ||
+      modeIdLower === "tgm3_sakura" ||
+      modeIdLower === "tgm3_shirase" ||
+      modeIdLower === "shirase";
+
+    // For Ti modes, update history on actual spawn so later history checks use real recent pieces.
+    if (isTgm3Mode) {
+      this.pieceHistory.shift();
+      this.pieceHistory.push(pieceType);
+      this.validatePieceHistory();
+    }
+
     // Immediately top up queue so previews stay at 6 after consuming one
     if (this.nextPieces.length < 6) {
       this.generateNextPieces();
     }
 
     // Determine mode and powerup gating (TGM2 Normal only)
-    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
     const isTgm2Normal =
       modeIdLower === "tgm2_normal" || modeIdLower === "normal" || modeIdLower === "tgm2normal";
     let powerupType = null;
@@ -9815,24 +10343,217 @@ class GameScene extends Phaser.Scene {
           }
         }
         if (!shifted) {
-          if (this.isZenSandboxActive()) {
-            this.handleZenTopout();
+          const zenActive = this.isZenSandboxActive();
+          if (zenActive) {
+            const recoverZenTopout = () => {
+              try {
+                console.log("[ZenTopout] inline recover (after shift)");
+              } catch {}
+              // Drive default topout visuals: fade stack and slow BGM, then clear and respawn without GAME OVER text.
+              const startTime = this.time?.now || Date.now();
+              this.zenTopoutPendingFinish = true;
+              this.zenTopoutFreezeActive = true;
+              this.zenTopoutCooldown = false;
+              this.zenTopoutFreezeStart = startTime;
+              this.suppressGameOverOnce = true;
+              this.gameOver = false;
+              this.showGameOverText = false;
+              this.gameOverTextTimer = 0;
+              this.gameOverSfxPlayed = true;
+              this.gameOverFadeDoneTime = null;
+              if (this.gameOverText?.setVisible) this.gameOverText.setVisible(false);
+              else if (this.gameOverText?.setAlpha) this.gameOverText.setAlpha(0);
+              // Prime mino fade based on current stack
+              try {
+                this.placedMinos = [];
+                this.placedMinoRows = [];
+                this.minoRowFadeAlpha = {};
+                this.fadingComplete = false;
+                for (let r = 0; r < this.board.rows; r++) {
+                  for (let c = 0; c < this.board.cols; c++) {
+                    const cell = this.board.grid[r][c];
+                    if (cell) {
+                      this.placedMinos.push({ x: c, y: r, color: cell, faded: false });
+                      if (!this.placedMinoRows.includes(r)) this.placedMinoRows.push(r);
+                    }
+                  }
+                }
+                this.placedMinoRows.sort((a, b) => b - a);
+                const rowCount = this.placedMinoRows.length;
+                this.minoFadePerRowDuration = rowCount > 0 ? 2 / rowCount : 2;
+                this.minoFadeActive = true;
+                this.minoFadeProgress = 0;
+                this.minoFadeTimer = 0;
+              } catch (err) {
+                try {
+                  console.error("[ZenTopout] inline fade init error (after shift)", err);
+                } catch {}
+              }
+              // Slow BGM during delay (ramp 1x -> 0.25x over 2s)
+              try {
+                const originalRate =
+                  this.currentBGM && typeof this.currentBGM.rate === "number"
+                    ? this.currentBGM.rate
+                    : 1;
+                this._zenTopoutBgmRate = originalRate;
+                if (this.currentBGM) {
+                  if (this.tweens?.add) {
+                    this.tweens.add({
+                      targets: this.currentBGM,
+                      rate: 0.25,
+                      duration: 2000,
+                      ease: "Linear",
+                    });
+                  } else if (this.currentBGM.setRate) {
+                    this.currentBGM.setRate(0.25);
+                  } else {
+                    this.currentBGM.rate = 0.25;
+                  }
+                }
+              } catch {}
+              const restoreBgmRate = () => {
+                try {
+                  const rate = this._zenTopoutBgmRate || 1;
+                  if (this.tweens?.add && this.currentBGM) {
+                    this.tweens.add({
+                      targets: this.currentBGM,
+                      rate,
+                      duration: 300,
+                      ease: "Linear",
+                    });
+                  } else if (this.currentBGM?.setRate) {
+                    this.currentBGM.setRate(rate);
+                  } else if (this.currentBGM) {
+                    this.currentBGM.rate = rate;
+                  }
+                  this._zenTopoutBgmRate = null;
+                } catch {}
+              };
+              const finalizeTopout = () => {
+                try {
+                  // Clear board like default topout but skip GAME OVER UI
+                  if (this.board) {
+                    if (typeof this.board.clearAll === "function") {
+                      this.board.clearAll();
+                    } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+                      for (let r = 0; r < this.board.rows; r++) {
+                        this.board.grid[r] = Array(this.board.cols).fill(0);
+                        this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+                      }
+                    }
+                    this.ensureZenCheeseBaseline?.(0);
+                  }
+                  this.playSfx?.("fall");
+                  this.currentPiece = null;
+                  this.isGrounded = false;
+                  if (this.nextPieces.length < 6) this.generateNextPieces();
+                  this.zenTopoutPendingFinish = false;
+                  this.zenTopoutFreezeActive = false;
+                  this.zenTopoutCooldown = false;
+                  this.zenTopoutFreezeStart = 0;
+                  restoreBgmRate();
+                  if (this.time?.delayedCall) {
+                    this.time.delayedCall(0, () => this.spawnPiece());
+                  } else if (typeof setTimeout === "function") {
+                    setTimeout(() => this.spawnPiece(), 0);
+                  } else {
+                    this.spawnPiece();
+                  }
+                } catch (err) {
+                  try {
+                    console.error("[ZenTopout] inline finalize error (after shift)", err);
+                  } catch {}
+                  this.zenTopoutPendingFinish = false;
+                  this.zenTopoutFreezeActive = false;
+                  this.zenTopoutCooldown = false;
+                  restoreBgmRate();
+                }
+              };
+              const doClear = () => {
+                try {
+                  console.log("[ZenTopout] doClear (after shift)");
+                } catch {}
+                finalizeTopout();
+              };
+              if (this.time?.delayedCall) {
+                this.time.delayedCall(2000, doClear);
+              } else if (typeof setTimeout === "function") {
+                setTimeout(doClear, 2000);
+              } else {
+                doClear();
+              }
+              return;
+            };
+            try {
+              console.log("[ZenTopout] spawn fail after shift", {
+                prerotated: wasPreRotated,
+                pos: { x: this.currentPiece?.x, y: this.currentPiece?.y },
+                zenActive,
+                mode: this.gameMode?.getModeId?.() || this.selectedMode,
+                hasConfig: !!this.zenSandboxConfig,
+                level: this.level,
+              });
+            } catch {}
+            recoverZenTopout();
             return;
           }
-          // Still can't spawn after shifting - game over
-          // Stop BGM on game over
+          // Still can't spawn after shifting - in Zen, do a silent recover; otherwise game over
+          if (this.isZenSandboxActive()) {
+            this.zenTopoutPendingFinish = true;
+            this.zenTopoutFreezeActive = true;
+            this.zenTopoutCooldown = false;
+            this.zenTopoutFreezeStart = this.time?.now || Date.now();
+            this.gameOver = false;
+            this.showGameOverText = false;
+            this.gameOverTextTimer = 0;
+            this.gameOverSfxPlayed = true;
+            this.gameOverFadeDoneTime = null;
+            if (typeof this.finishZenTopout === "function") {
+              this.finishZenTopout("zen_fallback_after_shift_fail");
+            } else {
+              // Inline fallback clear/spawn
+              if (this.board) {
+                if (typeof this.board.clearAll === "function") {
+                  this.board.clearAll();
+                } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+                  for (let r = 0; r < this.board.rows; r++) {
+                    this.board.grid[r] = Array(this.board.cols).fill(0);
+                    this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+                  }
+                }
+                this.ensureZenCheeseBaseline?.(0);
+              }
+              this.playSfx?.("fall");
+              this.currentPiece = null;
+              this.isGrounded = false;
+              if (this.nextPieces.length < 6) this.generateNextPieces();
+              this.spawnPiece();
+            }
+            return;
+          }
+          // Non-zen: game over
           if (this.currentBGM) {
             this.currentBGM.stop();
             this.currentBGM = null;
           }
-
-          // Show game over screen
           this.showGameOverScreen();
           return;
         }
       } else {
-        if (this.isZenSandboxActive()) {
-          this.handleZenTopout();
+        const zenActive = this.isZenSandboxActive();
+        if (zenActive) {
+          try {
+            console.log("[ZenTopout] spawn fail no-shift", {
+              prerotated: wasPreRotated,
+              pos: { x: this.currentPiece?.x, y: this.currentPiece?.y },
+              zenActive,
+              mode: this.gameMode?.getModeId?.() || this.selectedMode,
+              hasConfig: !!this.zenSandboxConfig,
+              level: this.level,
+            });
+          } catch {}
+          // Use the Zen-specific showGameOverScreen copy and return
+          this.showGameOverScreen();
           return;
         }
         // Game over - piece can't spawn (reached top of visible area)
@@ -9993,7 +10714,29 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isGuidelineBagMode =
+      modeIdLower.includes("ultra") ||
+      modeIdLower.includes("sprint") ||
+      modeIdLower.includes("marathon");
     const isZenMode = modeIdLower.includes("zen");
+    if (isGuidelineBagMode) {
+      // Force a fresh standard 7-bag when entering guideline modes to avoid stale/randomized bags
+      // from prior Zen sessions or other modes.
+      const needsNewBag =
+        this.guidelineBagSeed !== modeIdLower ||
+        !Array.isArray(this.bagQueue) ||
+        this.bagQueue.length < 7 ||
+        this.bagDrawCount > 0;
+      if (needsNewBag) {
+        this.bagQueue = this.createShuffledBag();
+        this.bagDrawCount = 0;
+        this.bagDebugSeen = new Set();
+        this.guidelineBagSeed = modeIdLower;
+      }
+      // Ignore any Zen sandbox bag/runtime for these modes
+      this.zenSandboxConfig = null;
+      this.zenSandboxRuntime = { bagQueue: [], bagType: null };
+    }
     if (isZenMode) {
       if (!this.zenSandboxConfig) {
         if (typeof ZenSandboxHelper !== "undefined" && ZenSandboxHelper.loadConfig) {
@@ -10019,12 +10762,13 @@ class GameScene extends Phaser.Scene {
     // Treat any Zen mode as sandbox for piece generation (config is loaded above)
     const isZenSandbox = isZenMode;
     const prefersTGMRand =
-      modeIdLower.startsWith("tgm") ||
-      modeIdLower.includes("shirase") ||
-      modeIdLower.includes("death") ||
-      modeIdLower.includes("plus") ||
-      modeIdLower.includes("master20g") ||
-      modeIdLower === "20g";
+      !isGuidelineBagMode &&
+      (modeIdLower.startsWith("tgm") ||
+        modeIdLower.includes("shirase") ||
+        modeIdLower.includes("death") ||
+        modeIdLower.includes("plus") ||
+        modeIdLower.includes("master20g") ||
+        modeIdLower === "20g");
     const isShiraseMode =
       modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
     const monoActive = isShiraseMode && this.level >= 1000;
@@ -10039,7 +10783,18 @@ class GameScene extends Phaser.Scene {
       modeIdLower === "shirase";
     // Default to 7-bag whenever we're not using a custom generator or TGM3 35-bag.
     const use7Bag =
-      !(this.gameMode && this.gameMode.generateNextPiece) && !prefersTGMRand && !isTgm3Mode;
+      isGuidelineBagMode ||
+      (!(this.gameMode && this.gameMode.generateNextPiece) && !prefersTGMRand && !isTgm3Mode);
+
+    // Helper to normalize piece type strings
+    const normalizeType = (p) =>
+      typeof p === "string"
+        ? p.toUpperCase()
+        : typeof p?.type === "string"
+          ? p.type.toUpperCase()
+          : typeof p?.piece === "string"
+            ? p.piece.toUpperCase()
+            : null;
 
     while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
@@ -10071,6 +10826,34 @@ class GameScene extends Phaser.Scene {
           : monoActive && typeof piece === "string"
             ? { type: piece, textureKey: monoTextureKey }
             : piece;
+
+      const queueIndex = this.nextPieces.length; // 0-based index where this piece will sit
+
+      // Ti-specific: apply history rejection only to the piece immediately after the visible 3-preview window (index 3).
+      if (isTgm3Mode) {
+        let tgm3Candidate = entry;
+        if (queueIndex === 3) {
+          let attempts = 0;
+          while (
+            attempts < 6 &&
+            normalizeType(tgm3Candidate) &&
+            this.pieceHistory.includes(normalizeType(tgm3Candidate))
+          ) {
+            tgm3Candidate = this.generateTgm3Piece();
+            attempts++;
+          }
+        }
+
+        // Enforce first-piece S/Z/O restriction for Ti modes, but do not apply full history filter.
+        this.nextPieces.push(
+          this.applyFirstPieceRestriction(
+            tgm3Candidate,
+            modeIdLower,
+            false, // keep history-only-on-index-3 behavior
+          ),
+        );
+        continue;
+      }
 
       const applyHistory =
         !use7Bag &&
@@ -10371,6 +11154,7 @@ class GameScene extends Phaser.Scene {
     // Track pieces placed for PPS calculation
     this.totalPiecesPlaced++;
     if (this.pieceCountText) this.pieceCountText.setText(this.totalPiecesPlaced.toString());
+    this.updateFinesseInputUI?.();
     // Track worst choke (longest active time)
     this.worstChoke = Math.max(this.worstChoke, this.pieceActiveTime || 0);
 
@@ -10485,19 +11269,28 @@ class GameScene extends Phaser.Scene {
 
     // Update score with enhanced system
     const prevBackToBack = this.backToBack;
-    this.updateScore(linesToClear.length, this.currentPiece.type, spinInfo);
+    const isAllClearFlag =
+      linesToClear.length > 0 && this.isAllClearAfterLines && this.isAllClearAfterLines(linesToClear);
+    this.updateScore(linesToClear.length, this.currentPiece.type, spinInfo, {
+      isAllClear: isAllClearFlag,
+    });
     if (garbageLinesCleared > 0) {
       this.totalGarbageCleared = (this.totalGarbageCleared || 0) + garbageLinesCleared;
+    }
+    const triggeredBravo = linesToClear.length > 0 && this.isAllClearAfterLines(linesToClear);
+    if (triggeredBravo) {
+      const modeId =
+        (this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode) || "unknown";
+      try {
+        `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`;
+      } catch {}
+      this.showBravoBanner();
     }
     // Zen cheese injection on line clears when configured (only in Zen sandbox modes)
     if (this.isZenSandboxActive && this.isZenSandboxActive()) {
       if (this.zenSandboxConfig && this.zenSandboxConfig.cheeseMode === "fixed_rows") {
-        try {
-          console.log("[Cheese] line_clear hook", {
-            lines: linesToClear.length,
-            current: this.countCheeseRows?.() || 0,
-          });
-        } catch {}
         if (garbageLinesCleared > 0) {
           // Call helper (if present) and also force baseline directly for safety
           const rowsTarget = Math.max(1, Math.floor(Number(this.zenSandboxConfig.cheeseRows) || 1));
@@ -10512,48 +11305,9 @@ class GameScene extends Phaser.Scene {
               // Fallback: baseline may add up to target, but limited by fillAmount through missing clamp
               this.ensureZenCheeseBaseline(linesToClear.length);
             }
-            try {
-              console.log("[Cheese] line_clear fill", {
-                lines: linesToClear.length,
-                target: rowsTarget,
-                bottomBefore: bottom,
-                garbageLinesCleared,
-                fillAmount,
-              });
-            } catch {}
-          } else {
-            try {
-              console.log("[Cheese] line_clear skip (no missing or no garbage fill)", {
-                lines: linesToClear.length,
-                target: rowsTarget,
-                bottomBefore: bottom,
-                missing,
-                garbageLinesCleared,
-              });
-            } catch {}
           }
-        } else {
-          try {
-            console.log("[Cheese] line_clear skip (no garbage cleared)", {
-              lines: linesToClear.length,
-              garbageLinesCleared,
-            });
-          } catch {}
         }
       }
-    }
-    const triggeredBravo = linesToClear.length > 0 && this.isAllClearAfterLines(linesToClear);
-    if (triggeredBravo) {
-      const modeId =
-        (this.gameMode && typeof this.gameMode.getModeId === "function"
-          ? this.gameMode.getModeId()
-          : this.selectedMode) || "unknown";
-      try {
-        console.debug(
-          `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`,
-        );
-      } catch {}
-      this.showBravoBanner();
     }
 
     // Attack computation and B2B chain UI
@@ -10583,7 +11337,10 @@ class GameScene extends Phaser.Scene {
       this.updateStandardCombo(linesToClear.length > 0, this.currentTime || 0);
     }
 
-    this.updateLevel("lines", linesToClear.length);
+    // Only adjust level for actual line clears; piece-based increments happen on spawn
+    if (linesToClear.length > 0) {
+      this.updateLevel("lines", linesToClear.length);
+    }
     this.canHold = true;
 
     // Play Tetris / combo sounds with explicit sequencing
@@ -10886,21 +11643,11 @@ class GameScene extends Phaser.Scene {
       const refill = Math.min(missing, this.garbageLinesClearedLast || 0);
       if (refill > 0) {
         // Add only the amount of garbage actually cleared (capped by missing)
-        if (this.board && typeof this.board.addCheeseRows === "function") {
-          this.board.addCheeseRows(refill, percent);
-        } else if (typeof this.ensureZenCheeseBaseline === "function") {
+        if (typeof this.ensureZenCheeseBaseline === "function") {
           this.ensureZenCheeseBaseline(clearedCount);
+        } else if (this.board && typeof this.board.addCheeseRows === "function") {
+          this.board.addCheeseRows(refill, percent);
         }
-        try {
-          console.log("[Cheese] clearStoredLines inject", {
-            rowsTarget,
-            percent,
-            bottomBefore: bottom,
-            missing,
-            refill,
-            garbageCleared: this.lastClearedHadGarbage,
-          });
-        } catch {}
       }
     }
 
@@ -10949,19 +11696,11 @@ class GameScene extends Phaser.Scene {
       const bottom = this.countBottomCheeseRows?.() || 0;
       const missing = Math.max(0, rowsTarget - bottom);
       if (missing > 0) {
-        if (typeof this.ensureZenCheeseBaseline === "function") {
-          this.ensureZenCheeseBaseline(0);
-        } else if (this.board && typeof this.board.addCheeseRows === "function") {
+        if (this.board && typeof this.board.addCheeseRows === "function") {
           this.board.addCheeseRows(missing, percent);
+        } else if (typeof this.ensureZenCheeseBaseline === "function") {
+          this.ensureZenCheeseBaseline(0);
         }
-        try {
-          console.log("[Cheese] final inject write", {
-            rowsTarget,
-            percent,
-            bottomBefore: bottom,
-            missing,
-          });
-        } catch {}
       }
     }
   }
@@ -11099,7 +11838,12 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  updateScore(lines, pieceType = null, spinInfo = { isSpin: false, isTSpin: false }) {
+  updateScore(
+    lines,
+    pieceType = null,
+    spinInfo = { isSpin: false, isTSpin: false },
+    options = {},
+  ) {
     // Don't update score during credits roll
     if (this.creditsActive) {
       if (this.rollType) {
@@ -11130,11 +11874,10 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.isTwentyGMode()
         : false) || selectedModeKey === "20g";
 
-    const isStandardMode =
-      !isTwentyGMode && guidelineModes.has(selectedModeKey);
+    const isStandardMode = !isTwentyGMode && guidelineModes.has(selectedModeKey);
 
     if (isStandardMode) {
-      this.updateGuidelineScore(lines, pieceType, spinInfo);
+      this.updateGuidelineScore(lines, pieceType, spinInfo, options);
     } else {
       this.updateTGM1Score(lines, pieceType, spinInfo);
     }
@@ -11144,6 +11887,7 @@ class GameScene extends Phaser.Scene {
     lines,
     pieceType = null,
     spinInfo = { isSpin: false, isTSpin: false },
+    options = {},
   ) {
     let points = 0;
     let clearType = null;
@@ -11152,6 +11896,8 @@ class GameScene extends Phaser.Scene {
     // Base scoring per standardscoring.md (no level multiplier)
     const lineBase = [0, 100, 300, 500, 800];
     const spinBase = [400, 800, 1200, 1600, 2600]; // any spin with lines (T or otherwise)
+
+    const isAllClear = !!options.isAllClear;
 
     // Compute base points for the clear
     if (lines > 0 || isSpin) {
@@ -11174,7 +11920,7 @@ class GameScene extends Phaser.Scene {
       this.backToBack = isDifficult;
 
       // All clear bonus
-      if (this.isBoardCompletelyEmpty()) {
+      if (isAllClear) {
         points += 3500;
         clearType = clearType ? `${clearType} all clear` : "all clear";
       }
@@ -12095,12 +12841,34 @@ class GameScene extends Phaser.Scene {
   }
 
   updateAttackUI() {
-    if (!this.attackTotalText || !this.attackPerMinText || !this.spikeText) return;
+    if (
+      !this.attackTotalText ||
+      !this.attackPerMinText ||
+      !this.spikeText ||
+      !this.attackPerPieceText
+    )
+      return;
+
+    // Hide spike counter outside Zen or during Ready/Go
+    const isZenMode =
+      typeof this.isZenSandboxActive === "function" ? this.isZenSandboxActive() : false;
+    if (this.readyGoPhase) {
+      this.spikeText.setVisible(false);
+      return;
+    }
+    if (!isZenMode) {
+      this.spikeText.setVisible(false);
+      // Still update totals/ATK per min if UI is shown elsewhere (e.g., Zen only)
+      return;
+    }
     const elapsed = Math.max(0.0001, this.currentTime || 0); // avoid div/0
     const atkPerMin = (this.totalAttack / elapsed) * 60;
+    const piecesPlaced = Math.max(1, this.totalPiecesPlaced || 0);
+    const atkPerPiece = this.totalAttack / piecesPlaced;
 
     this.attackTotalText.setText(`${Math.floor(this.totalAttack) || 0}`);
     this.attackPerMinText.setText(atkPerMin.toFixed(2));
+    this.attackPerPieceText.setText(atkPerPiece.toFixed(2));
 
     if (this.attackSpike >= 8) {
       const spike = Math.floor(this.attackSpike);
@@ -12584,8 +13352,35 @@ class GameScene extends Phaser.Scene {
     }
 
     ["AssetLoaderScene", "LoadingScreenScene", "GameScene"].forEach((key) => {
-      if (rootMgr.isActive(key)) rootMgr.stop(key);
+      if (rootMgr.isActive(key)) {
+        rootMgr.stop(key);
+      }
     });
+
+    // Remove any stray canvas elements left by previous Phaser instances
+    const activeCanvas = this.game && this.game.canvas;
+    if (activeCanvas && activeCanvas.parentNode) {
+      const canvases = Array.from(activeCanvas.parentNode.querySelectorAll("canvas"));
+      canvases.forEach((c) => {
+        if (c !== activeCanvas && c.parentNode) {
+          c.parentNode.removeChild(c);
+        }
+      });
+    }
+
+    // Re-add fresh scene instances to guarantee clean state
+    const ensureScene = (key, ctor) => {
+      if (!rootMgr.getScene(key)) {
+        try {
+          rootMgr.add(key, new ctor(), false);
+        } catch (e) {
+          console.error(`[goToMenu] failed to add ${key}`, e);
+        }
+      }
+    };
+    ensureScene("AssetLoaderScene", AssetLoaderScene);
+    ensureScene("LoadingScreenScene", LoadingScreenScene);
+    ensureScene("GameScene", GameScene);
 
     // Fully restart MenuScene to ensure it is active/visible
     let menu = rootMgr.getScene("MenuScene");
@@ -12906,6 +13701,14 @@ class GameScene extends Phaser.Scene {
     if (!this.selectedMode) return;
     if (typeof this.saveLeaderboardEntry !== "function") return;
 
+    // For sprint modes, only save completed runs (40L/100L)
+    if (
+      (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100") &&
+      !this.sprintCompleted
+    ) {
+      return;
+    }
+
     // Sakura: store best stage/time/completion from mode
     if (this.selectedMode === "tgm3_sakura" && this.gameMode) {
       const stage = this.gameMode.bestStageReached || 0;
@@ -12954,10 +13757,257 @@ class GameScene extends Phaser.Scene {
   }
 
   showGameOverScreen() {
+    // Zen: use custom recover-only flow (no GAME OVER text) and keep matrix visible
+    if (this.isZenSandboxActive && this.isZenSandboxActive()) {
+      try {
+        console.log("[ZenTopout] showGameOverScreen zen path", {
+          gameOver: this.gameOver,
+          showText: this.showGameOverText,
+          pending: this.zenTopoutPendingFinish,
+          freeze: this.zenTopoutFreezeActive,
+          cooldown: this.zenTopoutCooldown,
+          suppressOnce: this.suppressGameOverOnce,
+          goTextVisible: this.gameOverText?.visible,
+          goTextAlpha: this.gameOverText?.alpha,
+          boardRows: this.board?.rows,
+        });
+      } catch {}
+      // Block gameplay input and ARE progression during topout delay
+      this._zenSavedAREDelay = this.areDelay;
+      this.areActive = true;
+      this.areTimer = 0;
+      this.areDelay = 9999; // large sentinel to prevent ARE completion
+      this.lineClearDelayActive = false;
+      this.lineClearPhase = false;
+      this.pendingLineAREDelay = 0;
+      // Drop any active piece to avoid repeated locks during the delay
+      this.currentPiece = null;
+      this.isGrounded = false;
+      this.lockDelay = 0;
+      this.lockResetCount = 0;
+      this.gravityAccum = 0;
+      this.gameOver = false;
+      this.showGameOverText = false;
+      this.gameOverTextTimer = 0;
+      this.gameOverSfxPlayed = true;
+      this.gameOverFadeDoneTime = null;
+      this.suppressGameOverOnce = true;
+      // Clear any invisibility/roll flags that could hide pieces
+      this.invisibleStackActive = false;
+      this.fadingRollActive = false;
+      this.minoFadeActive = false;
+      // Ensure any existing text is hidden
+      if (this.gameOverText?.setVisible) this.gameOverText.setVisible(false);
+      else if (this.gameOverText?.setAlpha) this.gameOverText.setAlpha(0);
+      // Remove any lingering game over text objects from the scene
+      try {
+        if (this.gameGroup?.getChildren) {
+          this.gameGroup.getChildren().forEach((child) => {
+            if (
+              child?.text &&
+              (child.text === this.gameOverMessage || child.text === "GAME OVER")
+            ) {
+              child.destroy?.();
+            }
+          });
+        }
+      } catch {}
+      try {
+        console.log("[ZenTopout] hide gameOverText zen", {
+          visible: this.gameOverText?.visible,
+          alpha: this.gameOverText?.alpha,
+        });
+      } catch {}
+
+      // Build fade data like default topout but skip the GAME OVER overlay
+      try {
+        this.placedMinos = [];
+        this.placedMinoRows = [];
+        this.minoRowFadeAlpha = {};
+        this.fadingComplete = false;
+        for (let r = 0; r < this.board.rows; r++) {
+          for (let c = 0; c < this.board.cols; c++) {
+            const cell = this.board.grid[r][c];
+            if (cell) {
+              this.placedMinos.push({ x: c, y: r, color: cell, faded: false });
+              if (!this.placedMinoRows.includes(r)) this.placedMinoRows.push(r);
+            }
+          }
+        }
+        this.placedMinoRows.sort((a, b) => b - a);
+        const rowCount = this.placedMinoRows.length;
+        this.minoFadePerRowDuration = rowCount > 0 ? 2 / rowCount : 2;
+        this.minoFadeActive = true;
+        this.minoFadeProgress = 0;
+        this.minoFadeTimer = 0;
+        console.log("[ZenTopout] fade init zen", {
+          placed: this.placedMinos.length,
+          rows: this.placedMinoRows.slice(0, 5),
+          rowCount,
+        });
+      } catch {}
+
+      // Slow BGM similar to default topout
+      try {
+        const originalRate =
+          this.currentBGM && typeof this.currentBGM.rate === "number" ? this.currentBGM.rate : 1;
+        this._zenTopoutBgmRate = originalRate;
+        if (this.currentBGM) {
+          if (this.tweens?.add) {
+            this.tweens.add({
+              targets: this.currentBGM,
+              rate: 0.25,
+              duration: 2000,
+              ease: "Linear",
+            });
+          } else if (this.currentBGM.setRate) {
+            this.currentBGM.setRate(0.25);
+          } else {
+            this.currentBGM.rate = 0.25;
+          }
+        }
+        console.log("[ZenTopout] bgm slow zen", {
+          originalRate: this._zenTopoutBgmRate,
+          hasBgm: !!this.currentBGM,
+        });
+      } catch {}
+
+      const restoreBgmRate = () => {
+        try {
+          const rate = this._zenTopoutBgmRate || 1;
+          if (this.tweens?.add && this.currentBGM) {
+            this.tweens.add({
+              targets: this.currentBGM,
+              rate,
+              duration: 300,
+              ease: "Linear",
+            });
+          } else if (this.currentBGM?.setRate) {
+            this.currentBGM.setRate(rate);
+          } else if (this.currentBGM) {
+            this.currentBGM.rate = rate;
+          }
+          this._zenTopoutBgmRate = null;
+          console.log("[ZenTopout] bgm restore zen", { rate });
+        } catch {}
+      };
+
+      // Clear stack and respawn without hiding the matrix or showing GAME OVER text
+      const finalizeZenTopout = () => {
+        try {
+          if (this.board) {
+            if (typeof this.board.clearAll === "function") {
+              this.board.clearAll();
+            } else if (Array.isArray(this.board.grid) && Array.isArray(this.board.fadeGrid)) {
+              for (let r = 0; r < this.board.rows; r++) {
+                this.board.grid[r] = Array(this.board.cols).fill(0);
+                this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+              }
+            }
+            this.ensureZenCheeseBaseline?.(0);
+            // Ensure fade grid is fully reset to avoid invisible stack artifacts
+            if (Array.isArray(this.board.fadeGrid)) {
+              for (let r = 0; r < this.board.fadeGrid.length; r++) {
+                this.board.fadeGrid[r] = Array(this.board.cols).fill(0);
+              }
+            }
+            if (typeof this.board.resetFadeState === "function") {
+              this.board.resetFadeState();
+            }
+          }
+          this.playSfx?.("fall");
+          this.currentPiece = null;
+          this.isGrounded = false;
+          if (this.nextPieces.length < 6) this.generateNextPieces();
+          // Ensure a fresh next queue entry exists before spawn to avoid empty texture/render issues
+          if (this.nextPieces.length === 0) this.generateNextPieces();
+          // Clear hold without affecting next queue
+          this.holdPiece = null;
+          this.canHold = true;
+          this.holdRequest = false;
+          // Reset render-suppression flags so the next piece draws
+          this.suppressPieceRenderThisFrame = false;
+          this.suppressPieceRenderNextFrame = false;
+          this.skipGravityThisFrame = false;
+          // Stop fade once clear completes
+          this.minoFadeActive = false;
+          this.fadingComplete = false;
+          this.placedMinos = [];
+          this.placedMinoRows = [];
+          this.invisibleStackActive = false;
+          this.fadingRollActive = false;
+          console.log("[ZenTopout] finalize zen", {
+            nextLen: this.nextPieces?.length,
+            goTextVisible: this.gameOverText?.visible,
+            goTextAlpha: this.gameOverText?.alpha,
+            suppressRender: this.suppressPieceRenderThisFrame,
+            suppressNext: this.suppressPieceRenderNextFrame,
+            skipGravity: this.skipGravityThisFrame,
+          });
+          this.zenTopoutPendingFinish = false;
+          this.zenTopoutFreezeActive = false;
+          this.zenTopoutCooldown = false;
+          this.zenTopoutFreezeStart = 0;
+          // Restore ARE handling
+          this.areDelay =
+            this._zenSavedAREDelay !== undefined && this._zenSavedAREDelay !== null
+              ? this._zenSavedAREDelay
+              : this.areDelay;
+          this._zenSavedAREDelay = null;
+          this.areTimer = 0;
+          this.areActive = false;
+          restoreBgmRate();
+          if (this.time?.delayedCall) {
+            this.time.delayedCall(0, () => this.spawnPiece());
+          } else if (typeof setTimeout === "function") {
+            setTimeout(() => this.spawnPiece(), 0);
+          } else {
+            this.spawnPiece();
+          }
+        } catch (err) {
+          try {
+            console.error("[ZenTopout] finalize error (showGameOverScreen zen path)", err);
+          } catch {}
+          this.zenTopoutPendingFinish = false;
+          this.zenTopoutFreezeActive = false;
+          this.zenTopoutCooldown = false;
+          restoreBgmRate();
+        }
+      };
+
+      const doClear = () => {
+        finalizeZenTopout();
+      };
+
+      // Drive the fade for 2s then clear
+      if (this.time?.delayedCall) {
+        console.log("[ZenTopout] schedule clear (delayedCall)");
+        this.time.delayedCall(2000, doClear);
+      } else if (typeof setTimeout === "function") {
+        console.log("[ZenTopout] schedule clear (setTimeout)");
+        setTimeout(doClear, 2000);
+      } else {
+        console.log("[ZenTopout] immediate clear (no timer)");
+        doClear();
+      }
+      return;
+    }
+
+    // One-shot suppression (used by Zen recoveries that haven't activated freeze yet)
+    if (this.suppressGameOverOnce) {
+      this.suppressGameOverOnce = false;
+      this.gameOver = false;
+      this.showGameOverText = false;
+      this.gameOverTextTimer = 0;
+      this.gameOverSfxPlayed = true;
+      this.gameOverFadeDoneTime = null;
+      return;
+    }
+
     if (this.creditsActive) {
       this.rollFailedDuringRoll = true;
       // Topping out during credits is a fail: set to at least green line
-      this.setGradeLineColor("green");
+      this.rollHighestLine = Math.max(this.rollHighestLine, 18);
     }
     this.gameOver = true;
     this.gameOverTimer = 0; // Start timer for 10 seconds
@@ -13217,6 +14267,27 @@ class GameScene extends Phaser.Scene {
   }
 
   drawLevelBar() {
+    // If Zen display mode is "none", hide level/lines UI entirely
+    if (this.isZenSandboxActive && this.isZenSandboxActive()) {
+      const mode = (this.zenSandboxConfig?.displayMode || "").toLowerCase();
+      if (mode === "none") {
+        [
+          this.levelLabel,
+          this.levelDisplayLabel,
+          this.levelDisplayText,
+          this.currentLevelText,
+          this.capLevelText,
+          this.levelBar,
+        ]
+          .filter(Boolean)
+          .forEach((el) => {
+            el.setVisible(false);
+            if (el.clear) el.clear();
+          });
+        return;
+      }
+    }
+
     const uiX = Math.max(20, this.borderOffsetX - 200) + 50;
     const levelBottomY = this.borderOffsetY + this.playfieldHeight - 60;
     const levelRowHeight = 20; // Decreased spacing
@@ -13550,6 +14621,11 @@ class GameScene extends Phaser.Scene {
 
     // Update UI
     this.scoreText.setText(this.score.toString());
+    if (this.scorePerPieceText) {
+      const piecesForScore = Math.max(1, this.totalPiecesPlaced || 0);
+      const scorePerPiece = this.score / piecesForScore;
+      this.scorePerPieceText.setText(scorePerPiece.toFixed(2));
+    }
 
     // Update grade display only for modes that use grading
     if (hasGrading) {
@@ -13662,6 +14738,7 @@ class GameScene extends Phaser.Scene {
         this.gameMode && typeof this.gameMode.getModeId === "function"
           ? this.gameMode.getModeId()
           : this.selectedMode;
+      const isTgm3Mode = typeof modeId === "string" && modeId.startsWith("tgm3");
       const isTgm2Normal = modeId === "tgm2_normal";
       const isMarathonMode = this.selectedMode === "marathon";
       const maxLevel =
@@ -13702,8 +14779,13 @@ class GameScene extends Phaser.Scene {
           (!isMarathonMode ? this.level < maxLevel : true) &&
           typeof storedFullTime !== "number";
         const currentElapsed = this.currentTime - this.sectionStartTime;
+        // Main section stopwatch should continue past *70; only COOL split freezes.
         const timeValue =
-          typeof storedFullTime === "number" ? storedFullTime : isCurrent ? currentElapsed : null;
+          typeof storedFullTime === "number"
+            ? storedFullTime
+            : isCurrent
+              ? currentElapsed
+              : null;
         sectionTimesArray.push(timeValue);
 
         const tetrisValue =
@@ -13741,12 +14823,18 @@ class GameScene extends Phaser.Scene {
             : i === displayedCurrentSection
               ? this.currentTime - this.sectionStartTime
               : undefined;
-        const splitTime =
-          typeof storedCoolTime === "number"
+        // In TGM3, cumulative totals should use the COOL (0-*70) split; otherwise use full time.
+        const splitTime = isTgm3Mode
+          ? typeof storedCoolTime === "number"
             ? storedCoolTime
             : typeof liveTime === "number"
               ? liveTime
-              : storedFullTime;
+              : undefined
+          : typeof storedFullTime === "number"
+            ? storedFullTime
+            : typeof liveTime === "number"
+              ? liveTime
+              : undefined;
         const hasCompletedTime = typeof splitTime === "number";
         this.sectionTotalTexts[i].setVisible(shouldShow && hasCompletedTime);
 
@@ -13964,7 +15052,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Draw game over text - centered on screen (only after 3 seconds)
-    if (this.showGameOverText) {
+    // Skip in Zen to avoid overlay
+    if (this.showGameOverText && !(this.isZenSandboxActive && this.isZenSandboxActive())) {
       const gameOverFontSize = Math.max(
         48,
         Math.min(72, Math.floor(this.cellSize * 1.5)),
