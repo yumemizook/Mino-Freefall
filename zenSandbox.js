@@ -698,22 +698,40 @@
       if (typeof scene.setZenSandboxConfig !== "function") {
         scene.setZenSandboxConfig = function (updates) {
           try {
-            console.log("[ZenSandbox][Config] setZenSandboxConfig called", {
-              updates,
-              hasUpdateFn: typeof this.updateZenSandboxDisplay === "function",
-              zenActive: !!(this.isZenSandboxActive && this.isZenSandboxActive()),
-            });
+            console.log("[ZenSandbox][Config] setZenSandboxConfig called", { updates });
           } catch {}
           const cfg = helper.saveConfig(updates);
           this.zenSandboxConfig = cfg;
           helper.resetRuntime(this, cfg);
-          if (typeof this.updateZenSandboxDisplay === "function") {
+          const hasUpdater = typeof this.updateZenSandboxDisplay === "function";
+          try {
+            console.log("[ZenSandbox][Config] updateZenSandboxDisplay exists?", { hasUpdater, uiDisplay: cfg?.uiDisplay });
+          } catch {}
+          if (hasUpdater) {
             try {
-              console.log("[ZenSandbox][Config] calling updateZenSandboxDisplay", {
-                uiDisplay: cfg?.uiDisplay,
-              });
-            } catch {}
-            this.updateZenSandboxDisplay();
+              this.updateZenSandboxDisplay();
+            } catch (err) {
+              console.error("[ZenSandbox][Config] updateZenSandboxDisplay threw", err);
+            }
+          } else {
+            console.warn("[ZenSandbox][Config] updateZenSandboxDisplay missing on scene");
+          }
+          // Also push the change to the active GameScene if present (MenuScene panel might own the handler)
+          try {
+            const mgr = this.game?.scene;
+            const gameScene = mgr?.getScene && mgr.getScene("GameScene");
+            const canForward =
+              gameScene &&
+              typeof gameScene.updateZenSandboxDisplay === "function" &&
+              gameScene !== this &&
+              gameScene.updateZenSandboxDisplay !== this.updateZenSandboxDisplay;
+            if (canForward && !gameScene._zenDisplayForwarding) {
+              gameScene._zenDisplayForwarding = true;
+              gameScene.updateZenSandboxDisplay();
+              gameScene._zenDisplayForwarding = false;
+            }
+          } catch (err) {
+            console.warn("[ZenSandbox][Config] failed forwarding update to GameScene", err);
           }
           if (updates) {
             const cheeseChanged =
@@ -786,6 +804,29 @@
       if (typeof scene.getZenSandboxConfig !== "function") {
         scene.getZenSandboxConfig = function () {
           return this.zenSandboxConfig || helper.loadConfig();
+        };
+      }
+      // Provide a fallback display updater for non-GameScene scenes that don't own the in-game UI
+      const sceneKey = scene.scene && scene.scene.key;
+      if (sceneKey && sceneKey !== "GameScene" && typeof scene.updateZenSandboxDisplay !== "function") {
+        scene.updateZenSandboxDisplay = function () {
+          if (this._zenDisplayForwarding) return;
+          try {
+            const mgr = this.game?.scene;
+            const gameScene = mgr?.getScene && mgr.getScene("GameScene");
+            const canForward =
+              gameScene &&
+              typeof gameScene.updateZenSandboxDisplay === "function" &&
+              gameScene !== this &&
+              gameScene.updateZenSandboxDisplay !== this.updateZenSandboxDisplay;
+            if (canForward && !gameScene._zenDisplayForwarding) {
+              gameScene._zenDisplayForwarding = true;
+              gameScene.updateZenSandboxDisplay();
+              gameScene._zenDisplayForwarding = false;
+            }
+          } catch (err) {
+            console.warn("[ZenSandbox][Config] fallback updater failed", err);
+          }
         };
       }
     },
