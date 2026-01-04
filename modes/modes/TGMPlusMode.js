@@ -214,12 +214,11 @@ class TGMPlusMode extends BaseMode {
             }
             return level; // Stay at stop level
         } else if (updateType === 'lines') {
-            // Line clears advance level (up to 4) and can bypass stop levels; 998->999 requires line clear
-            const lineIncrement = Math.min(Math.max(amount || 0, 0), 4);
-            if (oldLevel === 998 && lineIncrement > 0) {
+            // Line clears advance level by 1 and can bypass stop levels, but 998->999 requires line clear
+            if (oldLevel === 998 && amount > 0) {
                 return 999;
             }
-            return Math.min(level + lineIncrement, 999);
+            return Math.min(level + 1, 999);
         }
         return level;
     }

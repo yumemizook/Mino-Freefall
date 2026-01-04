@@ -110,11 +110,6 @@ class MarathonMode extends BaseMode {
     reset() {
         this.linesCleared = 0;
     }
-
-    // Identifier used by game scene for mode-specific behaviors (e.g., BGM)
-    getModeId() {
-        return 'marathon';
-    }
 }
 
 // Export for use in other modules
