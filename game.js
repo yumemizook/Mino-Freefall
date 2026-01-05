@@ -6206,7 +6206,11 @@ class GameScene extends Phaser.Scene {
           : 999;
       return Math.ceil(targetLines / this.getSectionLength());
     }
-    return 10;
+    const maxLevel =
+      (this.gameMode && typeof this.gameMode.getGravityLevelCap === "function"
+        ? this.gameMode.getGravityLevelCap()
+        : this.gravityLevelCap) || 999;
+    return Math.max(1, Math.ceil(maxLevel / this.getSectionLength()));
   }
 
   isPuzzleMode(modeId) {
@@ -6389,6 +6393,10 @@ class GameScene extends Phaser.Scene {
   }
 
   applyInitialGradeFromMode() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
     const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
     const hasGrading = modeConfig.hasGrading !== false;
 
@@ -6411,6 +6419,20 @@ class GameScene extends Phaser.Scene {
       }
       if (this.gameMode.tgm3Grading && typeof this.gameMode.tgm3Grading.reset === "function") {
         this.gameMode.tgm3Grading.reset();
+      }
+      // Explicitly reset Shirase grading fields in case the mode object is reused across runs
+      const isShirase =
+        modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
+      if (isShirase) {
+        const ladder = Array.isArray(this.gameMode.gradeLadder)
+          ? this.gameMode.gradeLadder
+          : [];
+        const lowest = typeof modeConfig.lowestGrade === "string" ? modeConfig.lowestGrade : "1";
+        const idx = Math.max(0, ladder.indexOf(lowest));
+        this.gameMode.gradeIndex = idx >= 0 ? idx : 0;
+        this.gameMode.sectionGrades = {};
+        this.gameMode.sectionTimes = {};
+        this.gameMode.rollReached = false;
       }
     }
 
@@ -7890,9 +7912,15 @@ class GameScene extends Phaser.Scene {
         this.sectionTallyTexts = [];
         const sectionLength = this.getSectionLength();
         const maxSections = this.getMaxSectionsForTracker();
+        const maxLevelForDisplay =
+          (this.gameMode && typeof this.gameMode.getGravityLevelCap === "function"
+            ? this.gameMode.getGravityLevelCap()
+            : this.gravityLevelCap) || 999;
         for (let i = 0; i < maxSections; i++) {
           const sectionStart = i * sectionLength;
-          const sectionEnd = sectionStart + sectionLength - 1;
+          const nominalEnd = sectionStart + sectionLength - 1;
+          const isLast = i === maxSections - 1;
+          const sectionEnd = isLast ? maxLevelForDisplay : nominalEnd;
           const y = tableStartY + i * rowHeight;
 
           const label = this.add.text(
@@ -8345,7 +8373,7 @@ class GameScene extends Phaser.Scene {
     this.pauseStartTime = null;
 
     // Initialize game mode first so grading/config is ready
-    if (this.gameMode && this.gameMode.initializeGameState) {
+    if (this.gameMode && typeof this.gameMode.initializeForGameScene === "function") {
       this.gameMode.initializeForGameScene(this);
     }
     // Ensure grade is initialized at mode start (before UI and first piece)
@@ -12624,17 +12652,17 @@ class GameScene extends Phaser.Scene {
       }
       this.pendingSectionGradeAdjust = null;
       // Apply TGM3 internal timing/gravity phase on section entry using internal level with COOL bonus
-      if (
-        this.gameMode &&
-        typeof this.gameMode.getModeId === "function" &&
-        this.gameMode.getModeId() === "tgm3_master" &&
-        typeof this.gameMode.updateTimingPhase === "function"
-      ) {
-        const sectionLength = this.getSectionLength();
-        const internalLevel =
-          section * sectionLength + (typeof this.gameMode.coolBonus === "number" ? this.gameMode.coolBonus : 0);
-        this.gameMode.internalLevel = internalLevel;
-        this.gameMode.updateTimingPhase(internalLevel);
+      if (this.gameMode && typeof this.gameMode.getModeId === "function") {
+        const modeId = this.gameMode.getModeId();
+        if (modeId === "tgm3_master" && typeof this.gameMode.updateTimingPhase === "function") {
+          this.gameMode.updateTimingPhase(this.gameMode.internalLevel || this.level);
+        } else if (
+          (modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode") &&
+          typeof this.gameMode.updateTiming === "function"
+        ) {
+          // Refresh Shirase timing at section boundaries
+          this.gameMode.updateTiming(this.level);
+        }
       }
     }
 
@@ -12656,10 +12684,13 @@ class GameScene extends Phaser.Scene {
     if (this.selectedMode === "marathon") {
       this.sectionCap = (section + 1) * 10;
     } else {
-      this.sectionCap = (section + 1) * 100;
-      if (section >= 9) {
-        this.sectionCap = 999;
-      }
+      const maxLevel =
+        this.gameMode && typeof this.gameMode.getGravityLevelCap === "function"
+          ? this.gameMode.getGravityLevelCap()
+          : this.gravityLevelCap || 999;
+      const defaultCap = (section + 1) * 100;
+      // Clamp to mode max (e.g., Shirase 1300)
+      this.sectionCap = Math.min(defaultCap, maxLevel);
     }
   }
 
@@ -14567,15 +14598,16 @@ class GameScene extends Phaser.Scene {
       // Sprint: 40 for sprint_40, 100 for sprint_100
       sectionCap = this.selectedMode === "sprint_40" ? 40 : 100;
     } else {
-      // TGM modes: default section calculation
+      // TGM modes: default section calculation using mode cap
       const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
       const section = Math.floor(this.level / 100);
       if (maxLevel === 300) {
         // TGM2 Normal: always show 300 as the cap
         sectionCap = 300;
       } else {
-        // Default: sections are 0-99, 100-199, etc. up to 999
-        sectionCap = section >= 9 ? 999 : (section + 1) * 100;
+        const defaultCap = (section + 1) * 100;
+        // Clamp to mode max (e.g., Shirase 1300)
+        sectionCap = Math.min(defaultCap, maxLevel);
       }
     }
 

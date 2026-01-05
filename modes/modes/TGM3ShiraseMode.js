@@ -96,7 +96,7 @@ class TGM3ShiraseMode extends BaseMode {
             this.gradeIndex = this.gradeLadder.length - 1;
         }
 
-        // Refresh timings based on next level
+        // Refresh timings based on next level (use internal for future use if added)
         this.updateTiming(nextLevel);
 
         return nextLevel;
@@ -149,6 +149,23 @@ class TGM3ShiraseMode extends BaseMode {
     getARR() { return this.config.arr; }
     getLockDelay() { return this.currentTiming?.lock ?? this.config.lockDelay; }
     getLineClearDelay() { return this.currentTiming?.lineClear ?? this.config.lineClearDelay; }
+
+    // Ensure grading always starts at 1 when entering the mode
+    initializeForGameScene(gameScene) {
+        if (super.initializeForGameScene) super.initializeForGameScene(gameScene);
+        this.gradeIndex = 0;
+        this.sectionGrades = {};
+        this.sectionTimes = {};
+        this.rollReached = false;
+    }
+
+    // Allow game scene to explicitly reset grading state between runs
+    resetGrading(gameScene) {
+        this.gradeIndex = 0;
+        this.sectionGrades = {};
+        this.sectionTimes = {};
+        this.rollReached = false;
+    }
 }
 
 // Export
