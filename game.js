@@ -10666,7 +10666,10 @@ class GameScene extends Phaser.Scene {
       typeof zenRowsPerSecondSpawn === "number"
         ? zenRowsPerSecondSpawn
         : (internalGravity / 256) * 60;
-    const isInstantGravity = effectiveRowsPerSecond >= 1200; // 20G == 20 rows/frame (1200 rows/sec at 60fps)
+    const hardDropOnSpawn =
+      this.gameMode?.getConfig?.().specialMechanics?.hardDropOnSpawn === true;
+    const isInstantGravity =
+      hardDropOnSpawn || effectiveRowsPerSecond >= 1200; // 20G == 20 rows/frame (1200 rows/sec at 60fps)
 
     if (isInstantGravity) {
       // For 20G+ gravity, immediately hard drop the piece to the ground/stack
@@ -14946,6 +14949,8 @@ class GameScene extends Phaser.Scene {
           ? this.gameMode.getModeId()
           : this.selectedMode;
       const isTgm3Mode = typeof modeId === "string" && modeId.startsWith("tgm3");
+      const isShiraseMode =
+        modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
       const isTgm2Normal = modeId === "tgm2_normal";
       const isMarathonMode = this.selectedMode === "marathon";
       const maxLevel =
@@ -15059,10 +15064,11 @@ class GameScene extends Phaser.Scene {
           this.sectionTallyTexts[i].setText(tallyText);
         }
         if (this.sectionPerfTexts && this.sectionPerfTexts[i]) {
-          const perf =
+          const perfRaw =
             Array.isArray(this.sectionPerformance) && this.sectionPerformance[i]
               ? this.sectionPerformance[i]
               : "";
+          const perf = isShiraseMode && perfRaw !== "REGRET" ? "" : perfRaw;
           this.sectionPerfTexts[i].setText(perf);
           this.sectionPerfTexts[i].setColor(perf === "COOL" ? "#ffff55" : "#ff7777");
         }
