@@ -11,6 +11,13 @@ class TGM3ShiraseMode extends BaseMode {
         this.sectionGrades = {};
         this.rollReached = false;
         this.currentTiming = this.getTimingForLevel(0);
+
+        // Simple section-based grading: start at 1, advance per section (no advance on REGRET)
+        this.gradeLadder = [
+            '1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13'
+        ];
+        this.gradeIndex = 0;
+        this.lineColor = 'none';
     }
 
     getModeConfig() {
@@ -27,9 +34,9 @@ class TGM3ShiraseMode extends BaseMode {
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
-            lowestGrade: '',
+            lowestGrade: '1',
             gravityLevelCap: 1300,
-            hasGrading: false,
+            hasGrading: true,
             specialMechanics: {
                 torikan: true,
                 torikanTimes: {
@@ -85,6 +92,8 @@ class TGM3ShiraseMode extends BaseMode {
 
         if (nextLevel >= max) {
             this.rollReached = true;
+            // Award S13 upon reaching 1300 (start of credits)
+            this.gradeIndex = this.gradeLadder.length - 1;
         }
 
         // Refresh timings based on next level
@@ -109,6 +118,29 @@ class TGM3ShiraseMode extends BaseMode {
             gameScene.sectionPerformance = gameScene.sectionPerformance || [];
             gameScene.sectionPerformance[sectionIndex] = this.sectionGrades[sectionIndex];
         }
+    }
+
+    // Section clear grading: advance one step if no REGRET
+    onShiraseSectionComplete(hadRegret = false) {
+        if (!hadRegret) {
+            this.gradeIndex = Math.min(this.gradeIndex + 1, this.gradeLadder.length - 1);
+        }
+    }
+
+    getDisplayedGrade() {
+        return this.gradeLadder[this.gradeIndex] || '1';
+    }
+
+    getInternalGrade() {
+        return this.gradeIndex;
+    }
+
+    getGradePoints() {
+        return 0; // Hide grade points UI for Shirase
+    }
+
+    getGravityLevelCap() {
+        return this.config.gravityLevelCap || 1300;
     }
 
     getARE() { return this.currentTiming?.are ?? this.config.are; }

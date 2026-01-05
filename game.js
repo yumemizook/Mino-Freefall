@@ -1218,12 +1218,15 @@ class Board {
   }
 
   applyMonochromeTextures(scene) {
+    // Mono is handled per-queue entry; keep existing stack/preview colors
     const textureKey = scene.rotationSystem === "ARS" ? "mono_ars" : "mono";
-    this.currentTextureKey = textureKey;
+    this.activeTextureKey = textureKey;
+    this.currentTextureKey = null;
   }
 
   clearMonochromeTextures() {
     this.currentTextureKey = null;
+    this.activeTextureKey = null;
   }
 
   isValidPosition(piece, x, y) {
@@ -1258,7 +1261,11 @@ class Board {
               originalColor: piece.baseColor || piece.color,
             };
           } else {
-            this.grid[y + r][x + c] = piece.color;
+            // Preserve texture key for monochrome pieces so stack keeps their texture
+            const lockTextureKey = piece.textureKey || this.activeTextureKey || null;
+            this.grid[y + r][x + c] = lockTextureKey
+              ? { color: piece.color, textureKey: lockTextureKey }
+              : piece.color;
           }
         }
       }
@@ -1376,7 +1383,7 @@ class Board {
           let rowAlpha =
             scene.minoRowFadeAlpha && scene.minoRowFadeAlpha[r] !== undefined
               ? scene.minoRowFadeAlpha[r]
-              : 1;
+              : scene.stackAlpha;
           if (scene.strobeActive) {
             const t = scene.currentTime || 0;
             const omega = (2 * Math.PI) / 0.5; // 0.5s cycle
@@ -1412,8 +1419,18 @@ class Board {
           }
 
           const cellVal = this.grid[r][c];
-          const isPowerObj = cellVal && typeof cellVal === "object";
-          const color = isPowerObj ? cellVal.color : cellVal;
+          const isPowerObj =
+            cellVal && typeof cellVal === "object" && !!cellVal.powerupType;
+          const color =
+            cellVal && typeof cellVal === "object"
+              ? cellVal.color ?? cellVal
+              : cellVal;
+          const cellTextureKey =
+            cellVal && typeof cellVal === "object" && cellVal.textureKey
+              ? cellVal.textureKey
+              : scene.rotationSystem === "ARS"
+                ? "mino_ars"
+                : "mino_srs";
           if (scene.minoFadeActive) {
             const minoIndex = scene.placedMinos.findIndex(
               (mino) => mino.x === c && mino.y === r && mino.color === color,
@@ -1423,23 +1440,27 @@ class Board {
             }
           }
 
-          const textureKey = scene.monochromeActive && this.currentTextureKey
-            ? this.currentTextureKey
-            : scene.rotationSystem === "ARS"
-              ? "mino_ars"
-              : "mino_srs";
+          const resolveTextureKey = (key) => {
+            if (!key) return key;
+            const tex = scene.textures ? scene.textures.get(key) : null;
+            const srcOk = tex && tex.source && tex.source[0] && tex.source[0].image;
+            if (srcOk) return key;
+            // Fallback: try matching mono/mono_ars where the other variant may be loaded
+            if (key === "mono_ars" && scene.textures?.exists("mono_ars")) return "mono_ars";
+            if (key === "mono" && scene.textures?.exists("mono")) return "mono";
+            return key;
+          };
+
+          const textureKey = resolveTextureKey(cellTextureKey);
           // Always dim placed stack relative to active piece (even during line clears)
           const baseAlpha = zenActive
             ? rowAlpha // already set to stackAlpha outside fade, or fading value during fade
             : rowAlpha * (scene.stackAlpha || 1);
-          const tintColor =
-            scene.monochromeActive && textureKey.startsWith("mono")
-              ? 0xffffff
-              : color;
+          const isMonoTexture = textureKey && textureKey.startsWith("mono");
+          const tintColor = isMonoTexture ? null : color;
           const texture = scene.textures ? scene.textures.get(textureKey) : null;
-          const textureSource = texture && texture.source ? texture.source[0] : null;
           const hasValidTextureSource =
-            !!texture && !!textureSource && !!textureSource.image;
+            !!textureKey && !!scene.textures && scene.textures.exists(textureKey);
           const drawX = offsetX + c * cellSize;
           const drawY = offsetY + (r - startRow) * cellSize;
           // X-ray effect: only render current sweep column (ghost still visible elsewhere)
@@ -1457,15 +1478,16 @@ class Board {
           if (hasValidTextureSource && !isPowerObj) {
             const sprite = scene.add.sprite(renderX, renderY, textureKey);
             sprite.setDisplaySize(drawCellSize, drawCellSize);
-            sprite.setTint(tintColor);
+            if (tintColor !== null) {
+              sprite.setTint(tintColor);
+            } else {
+              sprite.clearTint();
+            }
             sprite.setAlpha(baseAlpha);
             scene.gameGroup.add(sprite);
           } else {
             const graphics = scene.add.graphics();
-            const fillColor =
-              scene.monochromeActive && textureKey.startsWith("mono")
-                ? 0xffffff
-                : color || 0x010101;
+            const fillColor = color || 0x010101;
             graphics.fillStyle(fillColor, baseAlpha);
             graphics.fillRect(
               renderX - drawCellSize / 2,
@@ -1731,14 +1753,15 @@ class Piece {
           // Only draw pieces that are in the visible area (row 2 and below in the 22-row matrix)
           if (pieceY >= 2) {
             const textureKey =
-              scene.monochromeActive && scene.board && scene.board.currentTextureKey
-                ? scene.board.currentTextureKey
+              this.textureKey ||
+              (scene.monochromeActive && scene.board && scene.board.activeTextureKey
+                ? scene.board.activeTextureKey
                 : scene.rotationSystem === "ARS"
                   ? "mino_ars"
-                  : "mino_srs";
+                  : "mino_srs");
             const tintColor =
-              scene.monochromeActive && textureKey.startsWith("mono")
-                ? (scene.rotationSystem === "ARS" ? 0xffffff : 0x00ff00)
+              textureKey && textureKey.startsWith("mono")
+                ? null // draw raw mono texture, no tint
                 : this.color;
             const texture = scene.textures ? scene.textures.get(textureKey) : null;
             const textureSource = texture && texture.source ? texture.source[0] : null;
@@ -1755,15 +1778,16 @@ class Piece {
                 textureKey,
               );
               sprite.setDisplaySize(drawCellSize, drawCellSize);
-              sprite.setTint(tintColor);
+              if (tintColor !== null) {
+                sprite.setTint(tintColor);
+              } else {
+                sprite.clearTint();
+              }
               sprite.setAlpha(finalAlpha);
               scene.gameGroup.add(sprite);
             } else {
               const graphics = scene.add.graphics();
-              const fillColor =
-                scene.monochromeActive && textureKey.startsWith("mono")
-                  ? 0xffffff
-                  : this.color;
+              const fillColor = this.color;
               graphics.fillStyle(fillColor, finalAlpha);
               graphics.fillRect(
                 renderX - drawCellSize / 2,
@@ -2822,7 +2846,10 @@ class MenuScene extends Phaser.Scene {
       case "asuka_normal":
       case "asuka_hard": // Master, 20G, Race
         return {
-          left: entry.grade || "9",
+          left:
+            entry.lineColor && entry.lineColor !== "none"
+              ? `${entry.grade || "9"} (${entry.lineColor})`
+              : entry.grade || "9",
           middle: `L${fmtNum(entry.level)}`,
           right: fmtTime(entry.time),
         };
@@ -3704,7 +3731,7 @@ class SettingsScene extends Phaser.Scene {
 
     // SDF slider (5x–40x and 20G)
     const sdfDefault = 6; // 6x default
-    const sdfValue = this.getStoredTiming("timing_sdf_mult", sdfDefault);
+    const sdfValue = this.normalizeSdfValue(this.getStoredTiming("timing_sdf_mult", sdfDefault));
     const sdfSliderY = lineAreSliderY + 70;
     this.sdfLabel = this.add
       .text(timingX, sdfSliderY - 30, "SDF (x speed)", {
@@ -3728,14 +3755,14 @@ class SettingsScene extends Phaser.Scene {
     this.sdfSliderFill.fillRect(
       timingX - timingSliderWidth / 2,
       sdfSliderY - timingSliderHeight / 2,
-      timingSliderWidth * this.timingToPct(sdfValue, 5, 100),
+      timingSliderWidth * this.sdfValueToPct(sdfValue),
       timingSliderHeight,
     );
 
     this.sdfSliderKnob = this.add.graphics();
     this.sdfSliderKnob.fillStyle(0xffffff);
     this.sdfSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(sdfValue, 5, 100),
+      timingX - timingSliderWidth / 2 + timingSliderWidth * this.sdfValueToPct(sdfValue),
       sdfSliderY,
       8,
     );
@@ -4486,6 +4513,29 @@ class SettingsScene extends Phaser.Scene {
     return (clamped - min) / (max - min || 1);
   }
 
+  normalizeSdfValue(value) {
+    if (!Number.isFinite(value)) return 5;
+    if (value >= 100) return 100; // 20G marker
+    return Math.min(Math.max(value, 5), 40);
+  }
+
+  sdfValueToPct(value) {
+    // Map 5–40x across 90% of the bar; final 10% is the 20G detent
+    const linearSpan = 0.9;
+    if (value >= 100) return 1;
+    const clamped = Math.min(Math.max(value, 5), 40);
+    return ((clamped - 5) / (40 - 5)) * linearSpan;
+  }
+
+  sdfPctToValue(pct) {
+    const linearSpan = 0.9;
+    const step = 1;
+    if (pct >= linearSpan) return 100; // snap end to 20G
+    const linearPct = Math.max(0, Math.min(1, pct / linearSpan));
+    const raw = 5 + linearPct * (40 - 5);
+    return this.clampStep(raw, 5, 40, step);
+  }
+
   formatSDFDisplay(value) {
     if (value >= 100) return "20G";
     return `${value.toFixed(0)}x`;
@@ -4633,13 +4683,9 @@ class SettingsScene extends Phaser.Scene {
   updateSDFFromPointer(pointer, slider) {
     if (!slider) return;
     const { x, width } = slider;
-    const min = 5;
-    const max = 100; // 100 represents 20G
-    const step = 1;
     const relativeX = pointer.x - (x - width / 2);
     const pct = Math.max(0, Math.min(1, relativeX / width));
-    const raw = min + pct * (max - min);
-    const value = this.clampStep(raw, min, max, step);
+    const value = this.sdfPctToValue(pct);
     this.setStoredTiming("timing_sdf_mult", value);
     this.updateSDFDisplay(value, { x, width, y: slider.y });
   }
@@ -4647,7 +4693,7 @@ class SettingsScene extends Phaser.Scene {
   updateSDFDisplay(value, slider) {
     if (!slider) return;
     const { x, width, y } = slider;
-    const pct = this.timingToPct(value, 5, 100);
+    const pct = this.sdfValueToPct(value);
     if (this.sdfSliderFill) {
       this.sdfSliderFill.clear();
       this.sdfSliderFill.fillStyle(0x00ff00);
@@ -5146,6 +5192,8 @@ class AssetLoaderScene extends Phaser.Scene {
     // Load all assets for the game
     ensureImageTexture("mino_srs", "img/mino.png");
     ensureImageTexture("mino_ars", "img/minoARS.png");
+    ensureImageTexture("mono", "img/mono.png");
+    ensureImageTexture("mono_ars", "img/monoARS.png");
 
     // Load BGM files from the correct directory paths
     try {
@@ -5608,7 +5656,7 @@ class GameScene extends Phaser.Scene {
     this.areRotationKeys = { k: false, space: false, l: false }; // Track which rotation keys are held during ARE
 
     // Enhanced scoring system
-    this.comboCount = -1; // -1 means no combo active
+    this.comboCount = this.getComboStartValue(); // -1 means no combo active; 0 means TGM combo value 1
     this.standardComboCount = -1;
     this.lastClearType = null; // 'single', 'double', 'triple', 'tetris', 'tspin'
     this.backToBack = false;
@@ -6712,6 +6760,15 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const allowsB2BUI = [
+      "sprint_40",
+      "sprint_100",
+      "sprint",
+      "ultra",
+      "zen",
+      "marathon",
+    ].some((id) => modeIdLower.includes(id));
+    this.showB2BUI = allowsB2BUI;
     const isEligibleTimingOverride = [
       "sprint_40",
       "sprint_100",
@@ -6791,13 +6848,26 @@ class GameScene extends Phaser.Scene {
       this.lineAreOverride = 0;
       this.lineClearDelayOverride = 0;
     }
-    // Soft drop speed multiplier (keep as-is, scalar not time-based)
-    this.softDropMultiplier = config.softDropMultiplier || 6;
-    if (isEligibleTimingOverride) {
-      const storedSdf = this.getStoredTiming("timing_sdf_mult", null);
-      if (storedSdf !== null) {
-        const clamped = Math.min(Math.max(storedSdf, 5), 100);
-        this.softDropMultiplier = clamped;
+    // Soft drop speed multiplier
+    const modeUsesFixedSoftDrop = ![
+      "sprint_40",
+      "sprint_100",
+      "sprint",
+      "ultra",
+      "zen",
+      "marathon",
+    ].some((id) => modeIdLower.includes(id));
+    if (modeUsesFixedSoftDrop) {
+      // TGM modes: enforce strict 1G (1 row/frame) soft drop speed
+      this.softDropMultiplier = 1;
+    } else {
+      this.softDropMultiplier = config.softDropMultiplier || 6;
+      if (isEligibleTimingOverride) {
+        const storedSdf = this.getStoredTiming("timing_sdf_mult", null);
+        if (storedSdf !== null) {
+          const clamped = Math.min(Math.max(storedSdf, 5), 100);
+          this.softDropMultiplier = clamped;
+        }
       }
     }
 
@@ -7133,9 +7203,11 @@ class GameScene extends Phaser.Scene {
       Boolean(specialMechanics.tgm2Grading) ||
       (typeof modeId === "string" && modeId.startsWith("tgm2"));
     const isTgm3 = modeId === "tgm3_master" || modeId === "tgm3" || modeId === "tgm3_shirase" || modeId === "shirase";
+    const isShiraseMode = modeId === "tgm3_shirase" || modeId === "shirase";
     const hideGradePoints =
       modeId === "tgm1" ||
       modeId === "20g" ||
+      isShiraseMode ||
       (!isTgm3 &&
         this.gameMode &&
         typeof this.gameMode.isTwentyGMode === "function" &&
@@ -7313,6 +7385,10 @@ class GameScene extends Phaser.Scene {
         align: "right",
       })
       .setOrigin(1, 0);
+    // Hide score/piece by default unless Ultra; Zen visibility is handled via sandbox display modes
+    const shouldShowScorePerPiece = isUltraMode;
+    this.scorePerPieceLabel.setVisible(shouldShowScorePerPiece);
+    this.scorePerPieceText.setVisible(shouldShowScorePerPiece);
 
     // Clear banner (line clear/spin indicator) - slides in from left of matrix
     this.createClearBannerUI(levelBottomY, scoreRowHeight, uiFontSize);
@@ -7522,7 +7598,7 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setDepth(2000)
-      .setVisible(false);
+      .setVisible(!!this.showB2BUI);
     uiParent.add(this.b2bChainText);
 
     // Standard combo display (for sprint/ultra/marathon/zen)
@@ -8023,7 +8099,7 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.totalLines = 0;
     this.piecesPlaced = 0;
-    this.comboCount = -1;
+    this.comboCount = this.getComboStartValue();
     this.backToBack = false;
     this.lastClearType = null;
     this.lastPieceType = null;
@@ -9863,7 +9939,7 @@ class GameScene extends Phaser.Scene {
         return;
       }
       let zenRowsPerSecond = null;
-      if (this.zenSandboxConfig) {
+      if (zenActive && this.zenSandboxConfig) {
         const cfg = this.zenSandboxConfig;
         const mode = cfg.gravityMode || "none";
         if (mode === "none") {
@@ -10571,8 +10647,29 @@ class GameScene extends Phaser.Scene {
 
     // Check for gravity high enough to warrant instant drop-on-spawn behavior
     const internalGravity = this.getTGMGravitySpeed(this.level);
-    if (internalGravity >= 5120) {
-      // For 20G gravity, immediately hard drop the piece to the ground/stack
+    const zenActive = this.isZenSandboxActive && this.isZenSandboxActive();
+    let zenRowsPerSecondSpawn = null;
+    if (zenActive && this.zenSandboxConfig) {
+      const cfg = this.zenSandboxConfig;
+      const mode = cfg.gravityMode || "none";
+      if (mode === "none") {
+        zenRowsPerSecondSpawn = 0;
+      } else if (mode === "static") {
+        const rpf = Number(cfg.gravityRowsPerFrame || 0) || 0;
+        zenRowsPerSecondSpawn = rpf * 60;
+      } else if (typeof this.getZenGravityRowsPerSecond === "function") {
+        // Use the same helper to respect preset progression
+        zenRowsPerSecondSpawn = this.getZenGravityRowsPerSecond(0);
+      }
+    }
+    const effectiveRowsPerSecond =
+      typeof zenRowsPerSecondSpawn === "number"
+        ? zenRowsPerSecondSpawn
+        : (internalGravity / 256) * 60;
+    const isInstantGravity = effectiveRowsPerSecond >= 1200; // 20G == 20 rows/frame (1200 rows/sec at 60fps)
+
+    if (isInstantGravity) {
+      // For 20G+ gravity, immediately hard drop the piece to the ground/stack
       // but do NOT lock it - let it be placed on top of the stack
       this.currentPiece.hardDrop(this.board);
       // Set grounded state since piece is now on the ground/stack
@@ -10771,7 +10868,10 @@ class GameScene extends Phaser.Scene {
         modeIdLower === "20g");
     const isShiraseMode =
       modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
-    const monoActive = isShiraseMode && this.level >= 1000;
+    const forceMonoDebug =
+      typeof window !== "undefined" && window.__forceShiraseMonoTest === true;
+    // After level 1000 (i.e., starting with the piece spawned at 1001), append mono-textured entries
+    const monoActive = isShiraseMode && (this.level >= 1001 || forceMonoDebug);
     const monoTextureKey = this.rotationSystem === "ARS" ? "mono_ars" : "mono";
 
     const isTgm3Mode =
@@ -10795,6 +10895,8 @@ class GameScene extends Phaser.Scene {
           : typeof p?.piece === "string"
             ? p.piece.toUpperCase()
             : null;
+
+    const visiblePreviewCount = this.nextPiecesCount || 1;
 
     while (this.nextPieces.length < minCount) {
       // Check if current mode supports powerup minos
@@ -10820,14 +10922,15 @@ class GameScene extends Phaser.Scene {
         }
       }
 
+      const queueIndex = this.nextPieces.length; // 0-based index where this piece will sit
+      const shouldApplyMono = monoActive && queueIndex >= visiblePreviewCount;
+
       const entry =
-        monoActive && piece && typeof piece === "object" && !piece.textureKey
+        shouldApplyMono && piece && typeof piece === "object" && !piece.textureKey
           ? { ...piece, textureKey: monoTextureKey }
-          : monoActive && typeof piece === "string"
+          : shouldApplyMono && typeof piece === "string"
             ? { type: piece, textureKey: monoTextureKey }
             : piece;
-
-      const queueIndex = this.nextPieces.length; // 0-based index where this piece will sit
 
       // Ti-specific: apply history rejection only to the piece immediately after the visible 3-preview window (index 3).
       if (isTgm3Mode) {
@@ -11321,7 +11424,8 @@ class GameScene extends Phaser.Scene {
       this.updateAttackStats(attackResult.attack, this.currentTime || 0);
       this.updateAttackUI();
       const shouldShowB2B =
-        attackResult.isDifficult || attackResult.b2bBroken || attackResult.newChain >= 1;
+        this.showB2BUI &&
+        (attackResult.isDifficult || attackResult.b2bBroken || attackResult.newChain >= 1);
       if (shouldShowB2B && this.b2bChainText) this.b2bChainText.setVisible(true);
       this.showB2BChain(
         attackResult.b2bMaintained,
@@ -11460,19 +11564,25 @@ class GameScene extends Phaser.Scene {
       this.generateNextPieces();
     }
     if (this.nextPieces.length < 1) {
-      return "I";
+      return { type: "I", textureKey: null };
     }
     const raw = this.nextPieces.shift();
-    let t =
-      typeof raw === "string"
-        ? raw
-        : typeof raw?.type === "string"
+    if (raw && typeof raw === "object") {
+      // Already an object with metadata (e.g., textureKey); normalize type casing
+      const type =
+        typeof raw.type === "string"
           ? raw.type
-          : typeof raw?.piece === "string"
+          : typeof raw.piece === "string"
             ? raw.piece
-            : raw;
+            : typeof raw.piece === "object" && typeof raw.piece.type === "string"
+              ? raw.piece.type
+              : "I";
+      return { ...raw, type: type.toUpperCase() };
+    }
+    // String path
+    let t = typeof raw === "string" ? raw : raw;
     if (typeof t !== "string") t = "I";
-    return t.toUpperCase();
+    return { type: t.toUpperCase(), textureKey: null };
   }
 
   performHoldSwap({ bypassCanHold = false, isIHS = false } = {}) {
@@ -11488,15 +11598,25 @@ class GameScene extends Phaser.Scene {
     }
 
     if (this.holdPiece) {
-      // Swap current with held
+      // Swap current with held, preserving texture keys
       const holdType = this.holdPiece.type;
-      this.holdPiece = new Piece(currentType, this.rotationSystem, 0);
-      this.currentPiece = new Piece(holdType, this.rotationSystem, 0);
+      const holdTextureKey = this.holdPiece.textureKey || null;
+      const currentTextureKey = this.currentPiece?.textureKey || null;
+      this.holdPiece = new Piece(currentType, this.rotationSystem, 0, currentTextureKey);
+      this.currentPiece = new Piece(holdType, this.rotationSystem, 0, holdTextureKey);
     } else {
-      // Move current to hold, pull next from queue
-      this.holdPiece = new Piece(currentType, this.rotationSystem, 0);
+      // Move current to hold, pull next from queue (preserve texture)
+      const currentTextureKey = this.currentPiece?.textureKey || null;
+      this.holdPiece = new Piece(currentType, this.rotationSystem, 0, currentTextureKey);
       const nextType = this.getNextPieceTypeFromQueue();
-      this.currentPiece = new Piece(nextType, this.rotationSystem, 0);
+      const nextTextureKey =
+        nextType && typeof nextType === "object" && nextType.textureKey ? nextType.textureKey : null;
+      this.currentPiece = new Piece(
+        typeof nextType === "string" ? nextType : nextType?.type || nextType?.piece || nextType,
+        this.rotationSystem,
+        0,
+        nextTextureKey,
+      );
     }
 
     // Reset position/rotation on the new current piece
@@ -11925,7 +12045,7 @@ class GameScene extends Phaser.Scene {
         clearType = clearType ? `${clearType} all clear` : "all clear";
       }
     } else {
-      this.comboCount = -1;
+      this.comboCount = this.getComboStartValue();
     }
 
     // Combos: start at -1; first clear sets to 0, second consecutive clear reaches 1
@@ -11975,11 +12095,12 @@ class GameScene extends Phaser.Scene {
     // Combo = Previous combo value + (2 * Cleared lines) - 2, or 1 if no lines cleared
     let combo = 1; // Default for no lines cleared
     if (lines > 0) {
-      this.comboCount = this.comboCount === -1 ? 0 : this.comboCount;
+      const comboStart = this.getComboStartValue();
+      this.comboCount = this.comboCount < comboStart ? comboStart : this.comboCount;
       this.comboCount += 2 * lines - 2;
       combo = Math.max(1, this.comboCount + 1); // +1 because combo starts at 1
     } else {
-      this.comboCount = -1;
+      this.comboCount = this.getComboStartValue();
     }
 
     // Calculate bravo bonus (perfect clear)
@@ -12327,7 +12448,21 @@ class GameScene extends Phaser.Scene {
     // Check for important level milestones
     const milestones = [100, 200, 300, 500, maxLevel];
     if (milestones.includes(this.level) && this.level !== oldLevel) {
-      if (this.level === maxLevel) {
+      const isTgm3MasterMode =
+        this.selectedMode === "tgm3_master" || this.selectedMode === "tgm3";
+      const isShiraseMode =
+        this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase";
+
+      // TGM3 Master: trigger credits at displayed level 999 (internal level may exceed)
+      const shouldStartCreditsTgm3Master =
+        isTgm3MasterMode && this.level >= 999 && !this.creditsActive && !this.creditsPending;
+
+      // Shirase: trigger credits when displayed level hits 1300 (maxLevel for mode)
+      const reachedShiraseMax = isShiraseMode && this.level >= maxLevel && !this.creditsActive && !this.creditsPending;
+
+      const reachedMax = this.level === maxLevel;
+
+      if (shouldStartCreditsTgm3Master || reachedShiraseMax || reachedMax) {
         const sectionLength = this.getSectionLength();
         const basisAtMax = this.getSectionBasisValue();
         const oldBasisForMax =
@@ -12413,7 +12548,8 @@ class GameScene extends Phaser.Scene {
             ? this.gameMode.getModeId()
             : this.selectedMode;
         if (result === "cool") {
-          this.gameMode.onSectionCool();
+          // Defer grade increment to start of next section; record performance now
+          this.pendingSectionGradeAdjust = "cool";
           // Only add generic rollBonus for non-TGM3 Master modes
           if (
             typeof this.rollBonus === "number" &&
@@ -12431,13 +12567,32 @@ class GameScene extends Phaser.Scene {
           this.coolAnnouncementsTargets[currentSectionIndex] = targetLevel;
           this.coolAnnouncementsShown.delete(currentSectionIndex);
         } else if (result === "regret") {
-          this.gameMode.onSectionRegret();
+          // Defer grade decrement to start of next section; record performance now
+          this.pendingSectionGradeAdjust = "regret";
           this.sectionPerformance[completedSection] = "REGRET";
           // Show REGRET once at start of next section
           const nextSection = section;
           this.regretAnnouncementsPending[nextSection] = true;
         } else {
           this.sectionPerformance[completedSection] = null;
+          this.pendingSectionGradeAdjust = null;
+        }
+      } else {
+        // Shirase: use its own section regret/grade flow
+        const modeId =
+          this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode;
+        const isShiraseMode =
+          modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";
+        if (isShiraseMode && typeof this.gameMode.onSectionComplete === "function") {
+          this.gameMode.onSectionComplete(this, completedSection, this.sectionTimes[completedSection]);
+          const hadRegret =
+            this.gameMode.sectionGrades &&
+            this.gameMode.sectionGrades[completedSection] === "REGRET";
+          if (typeof this.gameMode.onShiraseSectionComplete === "function") {
+            this.gameMode.onShiraseSectionComplete(hadRegret);
+          }
         }
       }
 
@@ -12457,6 +12612,14 @@ class GameScene extends Phaser.Scene {
         this.regretAnnouncementsShown.add(section);
         delete this.regretAnnouncementsPending[section];
       }
+
+      // Apply deferred grade adjustments at the start of the new section
+      if (this.pendingSectionGradeAdjust === "cool") {
+        this.gameMode.onSectionCool();
+      } else if (this.pendingSectionGradeAdjust === "regret") {
+        this.gameMode.onSectionRegret();
+      }
+      this.pendingSectionGradeAdjust = null;
       // Apply TGM3 internal timing/gravity phase on section entry using internal level with COOL bonus
       if (
         this.gameMode &&
@@ -12653,6 +12816,24 @@ class GameScene extends Phaser.Scene {
   isStandardComboMode() {
     const m = this.selectedMode;
     return m === "ultra" || m === "zen" || m === "marathon" || m === "sprint_40" || m === "sprint_100";
+  }
+
+  getComboStartValue() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isTgm1 = modeIdLower === "tgm1";
+    const isTgm3 =
+      modeIdLower === "tgm3" ||
+      modeIdLower === "tgm3_master" ||
+      modeIdLower === "tgm3_easy" ||
+      modeIdLower === "tgm3_sakura" ||
+      modeIdLower === "tgm3_shirase" ||
+      modeIdLower === "shirase";
+    // TGM1/TGM3 combos start at 1 (internal 0); other modes use -1 sentinel
+    return isTgm1 || isTgm3 ? 0 : -1;
   }
 
   updateStandardCombo(onLineClear, nowSeconds) {
@@ -13158,7 +13339,7 @@ class GameScene extends Phaser.Scene {
     this.sectionTransition = false;
     this.sectionMessage = null;
     this.sectionMessageTimer = 0;
-    this.comboCount = -1;
+    this.comboCount = this.getComboStartValue();
     this.backToBack = false;
     this.totalLines = 0;
     this.lastClearType = null;
@@ -13700,6 +13881,32 @@ class GameScene extends Phaser.Scene {
     if (this.leaderboardSaved) return;
     if (!this.selectedMode) return;
     if (typeof this.saveLeaderboardEntry !== "function") return;
+
+    // Shirase: store section-based grade and line color
+    if ((this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase") && this.gameMode) {
+      const entry = {
+        grade:
+          typeof this.gameMode.getDisplayedGrade === "function"
+            ? this.gameMode.getDisplayedGrade()
+            : this.grade,
+        level: this.level,
+        lineColor: this.gradeLineColor || "none",
+        time:
+          this.currentTime !== undefined && this.currentTime !== null
+            ? `${Math.floor(this.currentTime / 60)
+                .toString()
+                .padStart(2, "0")}:${Math.floor(this.currentTime % 60)
+                .toString()
+                .padStart(2, "0")}.${Math.floor((this.currentTime % 1) * 100)
+                .toString()
+                .padStart(2, "0")}`
+            : undefined,
+        pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
+      };
+      this.saveLeaderboardEntry(this.selectedMode, entry);
+      this.leaderboardSaved = true;
+      return;
+    }
 
     // For sprint modes, only save completed runs (40L/100L)
     if (
@@ -14911,12 +15118,17 @@ class GameScene extends Phaser.Scene {
           ? rawNext
           : typeof rawNext?.type === "string"
             ? rawNext.type
-            : typeof rawNext?.piece === "string"
-              ? rawNext.piece
-              : rawNext;
+          : typeof rawNext?.piece === "string"
+            ? rawNext.piece
+            : rawNext;
       if (typeof previewType !== "string") {
         previewType = "I";
       }
+
+      const rawTextureKey =
+        rawNext && typeof rawNext === "object" && rawNext.textureKey
+          ? rawNext.textureKey
+          : null;
 
       // Detect queued powerup (if raw object carries powerupType)
       if (!queuedPowerupType && rawNext && typeof rawNext === "object" && rawNext.powerupType) {
@@ -14924,11 +15136,7 @@ class GameScene extends Phaser.Scene {
       }
 
       const previewTextureKey =
-        this.monochromeActive && this.board && this.board.currentTextureKey
-          ? this.board.currentTextureKey
-          : this.rotationSystem === "ARS"
-            ? "mino_ars"
-            : "mino_srs";
+        rawTextureKey || (this.rotationSystem === "ARS" ? "mino_ars" : "mino_srs");
       const nextPiece = new Piece(previewType, this.rotationSystem, 0, previewTextureKey);
       // Use matrix-relative positioning like the main game pieces
       nextPiece.x = 0;
@@ -14979,7 +15187,12 @@ class GameScene extends Phaser.Scene {
         // Create a copy of the hold piece with default rotation for display
         let holdType =
           typeof this.holdPiece.type === "string" ? this.holdPiece.type : "I";
-        const displayPiece = new Piece(holdType, this.holdPiece.rotationSystem, 0);
+        const displayPiece = new Piece(
+          holdType,
+          this.holdPiece.rotationSystem,
+          0,
+          this.holdPiece.textureKey || null,
+        );
         displayPiece.x = 0;
         displayPiece.y = 2; // Start from the top visible row
         displayPiece.draw(this, holdX, holdY + 30, previewCellSize);

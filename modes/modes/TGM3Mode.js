@@ -54,7 +54,7 @@ class TGM3Mode extends BaseMode {
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
-            gravityLevelCap: 1500,
+            gravityLevelCap: 1899,
             hasGrading: true,
             specialMechanics: {
                 coolRegret: true,

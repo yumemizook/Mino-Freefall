@@ -497,7 +497,7 @@
         "Static rows/frame",
         `${Number(cfg.gravityRowsPerFrame || 0).toFixed(2)}`,
         (val) => {
-          const num = Math.max(0, Math.min(4, Number(val)));
+          const num = Math.max(0, Number(val));
           if (Number.isFinite(num)) {
             scene.setZenSandboxConfig &&
               scene.setZenSandboxConfig({ gravityRowsPerFrame: num, gravityMode: "static" });

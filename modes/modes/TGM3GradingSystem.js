@@ -99,6 +99,14 @@ class TGM3GradingSystem {
         this.previousDisplayedGrade = '9';
         this.gradeUpsAchieved = 0;
         this.staffRollLines = 0;
+
+        // Ladder used for display when applying section/roll bonuses beyond S9
+        this.gradeLadder = [
+            '9', '8', '7', '6', '5', '4', '3', '2', '1',
+            'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9',
+            'M', 'MK', 'MV', 'MO', 'MM', 'GM',
+        ];
     }
 
     reset() {
@@ -201,10 +209,12 @@ class TGM3GradingSystem {
 
     applySectionRegret() {
         this.sectionRegretCount += 1;
+        // Section regrets deduct one internal grade (gradeMapping level), not just display offset
         if (this.internalGrade > 0) {
             this.internalGrade -= 1;
             this.gradePoints = 0;
             this.updateDecayRate();
+            this.decayTimer = 0;
         }
     }
 
@@ -228,12 +238,23 @@ class TGM3GradingSystem {
     }
 
     getDisplayedGrade() {
-        const gradeIndex = Math.min(this.internalGrade, this.gradeMapping.length - 1);
-        const base = this.gradeMapping[gradeIndex]?.display || '9';
-        // Apply section COOL bonus and REGRET deductions to displayed grade estimation
-        const netBoost = this.sectionCoolBonus - this.sectionRegretCount + Math.floor(this.staffRollBonus);
-        const effectiveIndex = Math.max(0, Math.min(gradeIndex + netBoost, this.gradeMapping.length - 1));
-        return this.gradeMapping[effectiveIndex]?.display || base;
+        // Base index comes from mapping (capped at S9)
+        const mapIndex = Math.min(this.internalGrade, this.gradeMapping.length - 1);
+        const baseDisplay = this.gradeMapping[mapIndex]?.display || '9';
+
+        // Use the extended ladder to walk beyond S9 with bonuses
+        const baseLadderIndex = this.gradeLadder.indexOf(baseDisplay);
+        const netBoost =
+            this.sectionCoolBonus + Math.floor(this.staffRollBonus);
+        const targetIndex = Math.max(
+            0,
+            Math.min(
+                baseLadderIndex + netBoost,
+                this.gradeLadder.length - 1,
+            ),
+        );
+
+        return this.gradeLadder[targetIndex] ?? baseDisplay;
     }
 
     // TAP-style display without COOL/REGRET bonuses
