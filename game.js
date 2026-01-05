@@ -6438,10 +6438,10 @@ class GameScene extends Phaser.Scene {
 
     // Always start from the mode's lowest grade (or default "9"), ignoring any carried-over state
     // or mode getters that might be holding previous run values.
-    const configLowestGrade =
-      (modeConfig && typeof modeConfig.lowestGrade === "string" && modeConfig.lowestGrade) ||
-      "9";
-    const baselineGrade = configLowestGrade || "9";
+    const baselineGrade =
+      modeConfig && typeof modeConfig.lowestGrade === "string"
+        ? modeConfig.lowestGrade
+        : "9";
     const baselineInternal =
       typeof modeConfig.initialInternalGrade === "number"
         ? modeConfig.initialInternalGrade
@@ -7229,6 +7229,7 @@ class GameScene extends Phaser.Scene {
     const hideGradePoints =
       modeId === "tgm1" ||
       modeId === "20g" ||
+      isTADeathMode ||
       isShiraseMode ||
       (!isTgm3 &&
         this.gameMode &&
@@ -7258,10 +7259,12 @@ class GameScene extends Phaser.Scene {
       const initialDisplayedGrade =
         this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
           ? this.initialGradeBaseline
-          : this.grade || "9";
+          : this.grade ?? "9";
       this.grade = initialDisplayedGrade;
-      const gradeTextValue = this.grade || "9";
-      const gradeVisible = !!gradeTextValue;
+      const gradeTextValue = initialDisplayedGrade;
+      const gradeVisible =
+        (typeof gradeTextValue === "string" && gradeTextValue.trim() !== "") ||
+        (typeof gradeTextValue !== "string" && gradeTextValue != null);
       this.gradeText = this.add
         .text(gradeX + gradeWidth / 2, gradeY + 40, gradeTextValue, {
           fontSize: `${xlargeFontSize}px`,
@@ -8162,6 +8165,7 @@ class GameScene extends Phaser.Scene {
     this.sectionTimes = [];
     this.sectionTetrises = [];
     this.currentSectionTetrisCount = 0;
+    this.refreshModeTimingsForCurrentLevel(this.level);
 
     this.isGrounded = false;
     this.lockDelay = 0;
@@ -8840,6 +8844,9 @@ class GameScene extends Phaser.Scene {
     this.areTime = 0;
     this.conventionalPPS = 0;
     this.rawPPS = 0;
+
+    // Re-apply mode timings for the reset level (respecting level-based curves)
+    this.refreshModeTimingsForCurrentLevel(this.level);
     this.maxPpsRecorded = 0;
     this.worstChoke = 0;
     this.ppsHistory = [];
@@ -10832,7 +10839,7 @@ class GameScene extends Phaser.Scene {
       }
       this.isFirstSpawn = false;
     } else {
-      this.updateLevel("piece");
+      this.advanceLevel("piece");
     }
   }
 
@@ -11474,7 +11481,7 @@ class GameScene extends Phaser.Scene {
 
     // Only adjust level for actual line clears; piece-based increments happen on spawn
     if (linesToClear.length > 0) {
-      this.updateLevel("lines", linesToClear.length);
+      this.advanceLevel("lines", linesToClear.length);
     }
     this.canHold = true;
 
@@ -12114,6 +12121,67 @@ class GameScene extends Phaser.Scene {
     this.lastPieceType = pieceType;
   }
 
+  /**
+   * Re-apply mode-provided timings for the current level (or supplied level) when no user override is active.
+   * Ensures level-based timing curves (e.g., TGM Master/Death/Shirase) stay in sync after level changes.
+   */
+  refreshModeTimingsForCurrentLevel(levelOverride = null) {
+    if (this.isEligibleTimingOverride || !this.gameMode) return;
+
+    const timingLevel =
+      typeof levelOverride === "number"
+        ? levelOverride
+        : typeof this.gameMode.internalLevel === "number"
+          ? this.gameMode.internalLevel
+          : this.level;
+
+    if (typeof this.gameMode.updateTimingPhase === "function") {
+      this.gameMode.updateTimingPhase(timingLevel);
+    }
+    if (typeof this.gameMode.updateTiming === "function") {
+      this.gameMode.updateTiming(timingLevel);
+    }
+
+    if (this.gameMode.getDAS) this.dasDelay = this.gameMode.getDAS();
+    if (this.gameMode.getARR) this.arrDelay = this.gameMode.getARR();
+    if (this.gameMode.getLockDelay) this.lockDelayMax = this.gameMode.getLockDelay();
+    if (this.gameMode.getARE) this.areDelay = this.gameMode.getARE();
+    if (this.gameMode.getLineARE) this.lineAreOverride = this.gameMode.getLineARE();
+    if (this.gameMode.getLineClearDelay) {
+      this.lineClearDelayOverride = this.gameMode.getLineClearDelay();
+    }
+
+    // Ensure lock timer respects updated limit immediately
+    if (this.lockDelay > this.lockDelayMax) {
+      this.lockDelay = this.lockDelayMax;
+    }
+  }
+
+  /**
+   * Debug helper: jump to a level and immediately apply mode timings for that level.
+   * Invoke via console: game.scene.keys.GameScene.setTimingDebugLevel(500)
+   */
+  setTimingDebugLevel(level) {
+    const raw = Number(level);
+    const target = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+    const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
+    const clamped = Math.min(target, maxLevel);
+
+    this.level = clamped;
+    this.startingLevel = clamped;
+    if (this.gameMode && typeof this.gameMode.internalLevel === "number") {
+      this.gameMode.internalLevel = clamped;
+    }
+
+    this.refreshModeTimingsForCurrentLevel(clamped);
+
+    // Refresh UI
+    if (this.currentLevelText) this.currentLevelText.setText(clamped.toString());
+    if (typeof this.drawLevelBar === "function") this.drawLevelBar();
+
+    console.log("[TimingDebug] Level set to", clamped);
+  }
+
   updateTGM1Score(lines, pieceType = null, spinInfo = { isSpin: false, isTSpin: false }) {
     // Official TGM1 scoring formula:
     // Score = ceil([level + cleared lines]/4 + soft dropped rows + (2 * hard dropped rows))
@@ -12166,7 +12234,7 @@ class GameScene extends Phaser.Scene {
     this.lastPieceType = pieceType;
   }
 
-  updateLevel(type, amount = 1) {
+  advanceLevel(type = "piece", amount = 1) {
     if (this.creditsActive) {
       return;
     }
@@ -12220,6 +12288,9 @@ class GameScene extends Phaser.Scene {
     if (this.level > maxLevel) {
       this.level = maxLevel;
     }
+
+    // Refresh mode-driven timings (e.g., Shirase level-based tables) when no user override is active
+    this.refreshModeTimingsForCurrentLevel();
 
     // Torikan checks
     const isShiraseMode =

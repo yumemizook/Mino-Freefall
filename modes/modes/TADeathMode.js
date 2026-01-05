@@ -485,7 +485,7 @@ class TADeathMode extends BaseMode {
         super.reset();
         
         // Reset T.A. Death specific variables
-        this.displayedGrade = '9';
+        this.displayedGrade = '';
         this.internalGrade = 31;
         this.isMGrade = false;
         this.isGMGrade = false;
