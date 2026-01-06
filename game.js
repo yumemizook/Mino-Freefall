@@ -14318,6 +14318,21 @@ class GameScene extends Phaser.Scene {
         pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
       };
       this.saveLeaderboardEntry(this.selectedMode, entry);
+      // Submit rating for Shirase (level-based)
+      try {
+        const submitScore = window.FirebaseClient?.submitScore;
+        if (submitScore) {
+          submitScore(this.selectedMode, {
+            grade: entry.grade,
+            level: entry.level,
+            lines: this.lines,
+            timeSeconds: this.currentTime != null ? Number(this.currentTime) : null,
+            score: this.score,
+          });
+        }
+      } catch (err) {
+        console.warn("Rating submit failed (shirase)", err);
+      }
       this.leaderboardSaved = true;
       return;
     }
@@ -14366,6 +14381,28 @@ class GameScene extends Phaser.Scene {
     };
     this.saveLeaderboardEntry(this.selectedMode, entry);
     this.leaderboardSaved = true;
+
+    // Submit to Firebase rating (non-zen/puzzle only)
+    try {
+      const submitScore = window.FirebaseClient?.submitScore;
+      if (submitScore) {
+        const modeId = this.selectedMode;
+        // Skip zen/puzzle-like modes
+        if (!modeId.includes("zen") && !modeId.includes("sakura") && !modeId.includes("puzzle")) {
+          const ratingEntry = {
+            score: this.score,
+            level: this.level,
+            lines: this.lines,
+            grade: entry.grade,
+            hanabi: entry.hanabi,
+            timeSeconds: this.currentTime != null ? Number(this.currentTime) : null,
+          };
+          submitScore(modeId, ratingEntry);
+        }
+      }
+    } catch (err) {
+      console.warn("Rating submit failed", err);
+    }
   }
 
   getBestScore(mode) {
@@ -15739,9 +15776,14 @@ const config = {
     AssetLoaderScene,
     LoadingScreenScene,
     GameScene,
-  ],
+    typeof ProfileOverlayScene !== "undefined" ? ProfileOverlayScene : null,
+    typeof AuthScene !== "undefined" ? AuthScene : null,
+  ].filter(Boolean),
   backgroundColor: "#000000",
   fps: 60,
+  dom: {
+    createContainer: true,
+  },
   render: {
     antialias: false,
     pixelArt: true,

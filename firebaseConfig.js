@@ -3,7 +3,10 @@ const initializeApp = firebaseNS.initializeApp;
 const getApps = firebaseNS.getApps;
 
 function loadConfig() {
-  const b64 = import.meta?.env?.VITE_FIREBASE_CONFIG_B64 || process.env?.FIREBASE_CONFIG_B64;
+  const b64 =
+    window.FIREBASE_CONFIG_B64 ||
+    import.meta?.env?.VITE_FIREBASE_CONFIG_B64 ||
+    process?.env?.FIREBASE_CONFIG_B64;
   if (!b64) throw new Error("Missing Firebase config env");
   try {
     return JSON.parse(atob(b64));
