@@ -67,6 +67,37 @@ class TGM3SakuraMode extends BaseMode {
     getName() { return this.modeName; }
     getModeId() { return this.modeId; }
 
+    getDAS() {
+        const das = this.config.das;
+        console.log(`TGM3 Sakura DAS: ${das}`);
+        return das;
+    }
+    getARR() {
+        const arr = this.config.arr;
+        console.log(`TGM3 Sakura ARR: ${arr}`);
+        return arr;
+    }
+    getARE() {
+        const are = this.config.are;
+        console.log(`TGM3 Sakura ARE: ${are}`);
+        return are;
+    }
+    getLineARE() {
+        const lineAre = this.config.lineAre;
+        console.log(`TGM3 Sakura Line ARE: ${lineAre}`);
+        return lineAre;
+    }
+    getLockDelay() {
+        const lock = this.config.lockDelay;
+        console.log(`TGM3 Sakura Lock Delay: ${lock}`);
+        return lock;
+    }
+    getLineClearDelay() {
+        const lineClear = this.config.lineClearDelay;
+        console.log(`TGM3 Sakura Line Clear Delay: ${lineClear}`);
+        return lineClear;
+    }
+
     // --- Lifecycle hooks ---
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);

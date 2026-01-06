@@ -189,25 +189,15 @@ class TGM2MasterMode extends BaseMode {
     }
     
     // Get timing values (dynamic based on current timing phase)
-    getDAS() {
-        return this.getCurrentTimingPhase().das;
-    }
+    getDAS() { return this.getCurrentTimingPhase().das; }
     
-    getARR() {
-        return this.getCurrentTimingPhase().arr;
-    }
+    getARR() { return this.getCurrentTimingPhase().arr; }
     
-    getARE() {
-        return this.getCurrentTimingPhase().are;
-    }
+    getARE() { return this.getCurrentTimingPhase().are; }
     
-    getLineARE() {
-        return this.getCurrentTimingPhase().lineAre;
-    }
+    getLineARE() { return this.getCurrentTimingPhase().lineAre; }
     
-    getLockDelay() {
-        return this.getCurrentTimingPhase().lock;
-    }
+    getLockDelay() { return this.getCurrentTimingPhase().lock; }
     
     getLineClearDelay() {
         return this.getCurrentTimingPhase().lineClear;
@@ -220,14 +210,18 @@ class TGM2MasterMode extends BaseMode {
     
     // Update timing phase based on level
     updateTimingPhase(level) {
+        const cappedLevel = Math.min(level, this.config.gravityLevelCap || 999);
         const oldPhase = this.currentTimingPhase;
+        let newPhase = this.timingPhases.length; // default to fastest phase if no range matched
         
         for (let i = this.timingPhases.length - 1; i >= 0; i--) {
-            if (level >= this.timingPhases[i].minLevel && level <= this.timingPhases[i].maxLevel) {
-                this.currentTimingPhase = i + 1; // Convert to 1-based index
+            if (cappedLevel >= this.timingPhases[i].minLevel && cappedLevel <= this.timingPhases[i].maxLevel) {
+                newPhase = i + 1; // Convert to 1-based index
                 break;
             }
         }
+
+        this.currentTimingPhase = newPhase;
         
         // Notify if timing phase changed
         if (oldPhase !== this.currentTimingPhase) {
@@ -237,10 +231,7 @@ class TGM2MasterMode extends BaseMode {
     
     // Handle timing phase change
     onTimingPhaseChange(oldPhase, newPhase) {
-        console.log(`TGM2 Master: Timing phase changed from ${oldPhase} to ${newPhase}`);
-        
-        // Play timing change sound if available
-        // This would trigger visual/audio feedback for the speed increase
+        // Hook available for timing change effects (no logging)
     }
     
     // Initialize mode for game scene
@@ -252,6 +243,7 @@ class TGM2MasterMode extends BaseMode {
         
         // Initialize timing phase
         this.updateTimingPhase(gameScene.level);
+        // Phase initialized; no logging
         
         // Initialize M-Roll conditions
         this.checkMRollConditions(gameScene);

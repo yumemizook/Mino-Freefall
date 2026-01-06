@@ -54,7 +54,8 @@ class TGM3Mode extends BaseMode {
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
-            gravityLevelCap: 1899,
+            // Displayed level caps at 999; internalLevel carries COOL bonuses up to 1899
+            gravityLevelCap: 999,
             hasGrading: true,
             specialMechanics: {
                 coolRegret: true,
@@ -155,7 +156,7 @@ class TGM3Mode extends BaseMode {
             }
         }
         if (old !== this.currentTimingPhase) {
-            console.log(`TGM3: timing phase ${old} -> ${this.currentTimingPhase}`);
+            // Phase change hook (no logging)
         }
     }
 
@@ -230,6 +231,9 @@ class TGM3Mode extends BaseMode {
         if (this.tgm3Grading && typeof this.tgm3Grading.reset === 'function') {
             this.tgm3Grading.reset();
         }
+        // Log initial timing set at mode start
+        this.updateTimingPhase(gameScene?.level ?? 0);
+        // Phase initialized; no logging
     }
 
     update(gameScene, deltaTime) {

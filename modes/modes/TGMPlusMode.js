@@ -128,29 +128,17 @@ class TGMPlusMode extends BaseMode {
     }
     
     // Get timing values (fixed for TGM+, same as Normal mode)
-    getDAS() {
-        return this.config.das;
-    }
+    getDAS() { return this.config.das; }
     
-    getARR() {
-        return this.config.arr;
-    }
+    getARR() { return this.config.arr; }
     
-    getARE() {
-        return this.config.are;
-    }
+    getARE() { return this.config.are; }
     
-    getLineARE() {
-        return this.config.lineAre;
-    }
+    getLineARE() { return this.config.lineAre; }
     
-    getLockDelay() {
-        return this.config.lockDelay;
-    }
+    getLockDelay() { return this.config.lockDelay; }
     
-    getLineClearDelay() {
-        return this.config.lineClearDelay;
-    }
+    getLineClearDelay() { return this.config.lineClearDelay; }
     
     // Generate fixed 24-row garbage pattern (based on tgm2modes.md specifications)
     generateGarbagePattern() {

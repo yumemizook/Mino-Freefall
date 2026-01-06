@@ -15,19 +15,19 @@ class TADeathMode extends BaseMode {
             ghostEnabled: true,             // Ghost piece enabled
             levelUpType: 'piece',           // Level up per piece
             lineClearBonus: 1,
-            lowestGrade: '',
+            lowestGrade: '1',
             gravityLevelCap: 999,
             specialMechanics: {
                 fixed20G: true,             // Fixed 20G gravity throughout
                 progressiveTimings: true,   // 6 progressive timing phases
                 torikanLimit: true,         // Time limit at level 500
-                minimalGrading: true,       // Only M and GM grades
+                minimalGrading: false,      // Only M and GM grades
                 deathMechanics: true        // Death mode specific mechanics
             }
         };
         
         // T.A. Death grading (minimal - only M and GM)
-        this.displayedGrade = ''; // No grade until torikan is beaten
+        this.displayedGrade = '1'; // Start at grade 1 (hidden until UI shows)
         this.internalGrade = 31;   // Start at 31 (9.5 grade level)
         this.isMGrade = false;
         this.isGMGrade = false;
@@ -107,33 +107,15 @@ class TADeathMode extends BaseMode {
     }
     
     // Get timing values (dynamic based on current timing phase)
-    getDAS() {
-        const das = this.getCurrentTimingPhase().das;
-        console.log(`T.A.Death DAS: ${das} (phase ${this.currentTimingPhase})`);
-        return das;
-    }
+    getDAS() { return this.getCurrentTimingPhase().das; }
 
-    getARR() {
-        const arr = this.getCurrentTimingPhase().arr;
-        console.log(`T.A.Death ARR: ${arr} (phase ${this.currentTimingPhase})`);
-        return arr;
-    }
+    getARR() { return this.getCurrentTimingPhase().arr; }
 
-    getARE() {
-        const are = this.getCurrentTimingPhase().are;
-        console.log(`T.A.Death ARE: ${are} (phase ${this.currentTimingPhase})`);
-        return are;
-    }
+    getARE() { return this.getCurrentTimingPhase().are; }
 
-    getLineARE() {
-        return this.getCurrentTimingPhase().lineAre;
-    }
+    getLineARE() { return this.getCurrentTimingPhase().lineAre; }
 
-    getLockDelay() {
-        const lock = this.getCurrentTimingPhase().lock;
-        console.log(`T.A.Death Lock Delay: ${lock} (phase ${this.currentTimingPhase})`);
-        return lock;
-    }
+    getLockDelay() { return this.getCurrentTimingPhase().lock; }
 
     getLineClearDelay() {
         return this.getCurrentTimingPhase().lineClear;
@@ -163,9 +145,7 @@ class TADeathMode extends BaseMode {
     
     // Handle timing phase change
     onTimingPhaseChange(oldPhase, newPhase) {
-        console.log(`T.A. Death: Timing phase changed from ${oldPhase} to ${newPhase}`);
-        
-        // T.A. Death has very strict timing - this is life/death critical
+        // T.A. Death has very strict timing - hook for future cues (no logging)
         this.playTimingChangeSound();
     }
     
@@ -178,15 +158,41 @@ class TADeathMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
+        // Ensure grade starts at baseline (grade 1)
+        this.displayedGrade = '1';
+        this.internalGrade = 31;
+        if (gameScene) {
+            gameScene.grade = '1';
+        }
+        if (gameScene && gameScene.gradeText) {
+            gameScene.gradeText.setText(this.displayedGrade);
+            if (typeof gameScene.updateGradeUIVisibility === 'function') {
+                gameScene.updateGradeUIVisibility();
+            }
+        }
+        this.updateTimingPhase(gameScene.level);
     }
     
     // Handle level progression
     onLevelUpdate(level, oldLevel, updateType, amount) {
-        // Update timing phase
-        this.updateTimingPhase(level);
+        let nextLevel = level;
+
+        if (updateType === 'piece') {
+            nextLevel = Math.min(level + 1, 999);
+        } else if (updateType === 'lines') {
+            const lineIncrement = Math.min(amount || 0, 4);
+            if (oldLevel === 998 && lineIncrement > 0) {
+                nextLevel = 999;
+            } else {
+                nextLevel = Math.min(level + lineIncrement, 999);
+            }
+        }
+
+        // Update timing phase using the level we will move to
+        this.updateTimingPhase(nextLevel);
 
         // Check for torikan start (level 500)
-        if (level >= 500 && !this.startedAtLevel500) {
+        if (nextLevel >= 500 && !this.startedAtLevel500) {
             this.startedAtLevel500 = true;
             this.onTorikanStart();
         }
@@ -196,15 +202,14 @@ class TADeathMode extends BaseMode {
 
         if (updateType === 'piece') {
             if (!atStopLevel && level < 999) {
-                return level + 1;
+                return nextLevel;
             }
             return level;
         } else if (updateType === 'lines') {
-            const lineIncrement = Math.min(amount || 0, 4);
-            if (oldLevel === 998 && lineIncrement > 0) {
+            if (oldLevel === 998 && (amount || 0) > 0) {
                 return 999;
             }
-            return Math.min(level + lineIncrement, 999);
+            return nextLevel;
         }
 
         return level;
@@ -324,7 +329,7 @@ class TADeathMode extends BaseMode {
     }
     
     // Award M grade
-    awardMGrade() {
+    awardMGrade(gameScene = null) {
         if (!this.hasReachedMGrade) {
             this.hasReachedMGrade = true;
             this.displayedGrade = 'M';
@@ -334,6 +339,13 @@ class TADeathMode extends BaseMode {
             
             // Continue to level 999 for potential GM grade
             // No immediate completion for M grade
+            if (gameScene) {
+                gameScene.grade = 'M';
+                if (gameScene.gradeText) gameScene.gradeText.setText('M');
+                if (typeof gameScene.updateGradeUIVisibility === 'function') {
+                    gameScene.updateGradeUIVisibility();
+                }
+            }
         }
     }
     
@@ -341,7 +353,7 @@ class TADeathMode extends BaseMode {
     checkDeathCompletion(gameScene) {
         if (gameScene.level >= 999) {
             // GM grade: Reach level 999 regardless of time
-            this.awardGMGrade();
+            this.awardGMGrade(gameScene);
             // Start 30s credits roll with stack intact
             gameScene.startCredits(30);
             console.log('T.A. Death: Credits started at level 999');
@@ -351,7 +363,7 @@ class TADeathMode extends BaseMode {
     }
     
     // Award GM grade
-    awardGMGrade() {
+    awardGMGrade(gameScene = null) {
         this.displayedGrade = 'GM';
         this.isGMGrade = true;
         this.isDeathComplete = true;
@@ -360,6 +372,13 @@ class TADeathMode extends BaseMode {
         
         // Show completion message
         this.showCompletionMessage(gameScene, 'GM');
+        if (gameScene) {
+            gameScene.grade = 'GM';
+            if (gameScene.gradeText) gameScene.gradeText.setText('GM');
+            if (typeof gameScene.updateGradeUIVisibility === 'function') {
+                gameScene.updateGradeUIVisibility();
+            }
+        }
         
         // Proceed to game over
         gameScene.showGameOverScreen();
@@ -466,7 +485,7 @@ class TADeathMode extends BaseMode {
         return {
             score: 0,
             level: 0,
-            grade: '9',
+            grade: '',
             time: '0:00.00',
             torikanPassed: false,
             timingPhase: 1,
@@ -485,7 +504,8 @@ class TADeathMode extends BaseMode {
         super.reset();
         
         // Reset T.A. Death specific variables
-        this.displayedGrade = '';
+        this.displayedGrade = '1';
+
         this.internalGrade = 31;
         this.isMGrade = false;
         this.isGMGrade = false;

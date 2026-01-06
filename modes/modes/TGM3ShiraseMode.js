@@ -66,7 +66,20 @@ class TGM3ShiraseMode extends BaseMode {
     }
 
     updateTiming(level) {
+        const previous = this.currentTiming;
         this.currentTiming = this.getTimingForLevel(level);
+        const p = previous || {};
+        const c = this.currentTiming || {};
+        const changed =
+            !previous ||
+            p.are !== c.are ||
+            p.lineAre !== c.lineAre ||
+            p.das !== c.das ||
+            p.lock !== c.lock ||
+            p.lineClear !== c.lineClear;
+        if (changed) {
+            // Timing updated (no logging)
+        }
     }
 
     getName() { return this.modeName; }
@@ -157,6 +170,8 @@ class TGM3ShiraseMode extends BaseMode {
         this.sectionGrades = {};
         this.sectionTimes = {};
         this.rollReached = false;
+        // Initialize timing at mode start without logging
+        this.updateTiming(gameScene?.level ?? 0);
     }
 
     // Allow game scene to explicitly reset grading state between runs

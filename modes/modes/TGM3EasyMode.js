@@ -52,6 +52,13 @@ class TGM3EasyMode extends BaseMode {
     getName() { return this.modeName; }
     getModeId() { return this.modeId; }
 
+    getDAS() { return this.config.das; }
+    getARR() { return this.config.arr; }
+    getARE() { return this.config.are; }
+    getLineARE() { return this.config.lineAre; }
+    getLockDelay() { return this.config.lockDelay; }
+    getLineClearDelay() { return this.config.lineClearDelay; }
+
     onLevelUpdate(level, oldLevel, type, amount) {
         // Match other modes: pieces advance levels normally until 99; beyond 99 only line clears advance
         let next = oldLevel;

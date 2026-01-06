@@ -42,12 +42,13 @@ class TGM1Mode extends BaseMode {
         };
     }
 
-    // Timing getter methods
+    // Timing getter methods (fixed timings; no phase changes to log)
     getDAS() { return this.getModeConfig().das; }
     getARR() { return this.getModeConfig().arr; }
     getARE() { return this.getModeConfig().are; }
     getLineARE() { return this.getModeConfig().are; } // Same as ARE for TGM1
     getLockDelay() { return this.getModeConfig().lockDelay; }
+
     getLineClearDelay() { return this.getModeConfig().are; } // Use ARE for line clear delay
 
     // TGM1 uses the standard TGM1 gravity curve

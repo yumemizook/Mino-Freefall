@@ -1812,18 +1812,23 @@ class Piece {
   }
 }
 
-// Get starting level from URL parameters
-function getStartingLevel() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const levelParam = urlParams.get("level");
-
-  if (levelParam !== null) {
-    const level = parseInt(levelParam);
-    if (!isNaN(level) && level >= 0 && level <= 999) {
-      return level;
-    }
+// Debug helper to control starting level (non-URL)
+let __debugStartingLevel = 0;
+function setDebugStartingLevel(level) {
+  const n = parseInt(level);
+  if (!Number.isFinite(n) || n < 0 || n > 2000) {
+    console.warn("[Debug] Invalid starting level, must be between 0 and 2000");
+    return __debugStartingLevel;
   }
-  return 0;
+  __debugStartingLevel = n;
+    console.info(`[Debug] Starting level set to ${__debugStartingLevel}`);
+  return __debugStartingLevel;
+}
+function getDebugStartingLevel() {
+  return __debugStartingLevel || 0;
+}
+if (typeof window !== "undefined") {
+  window.setDebugStartingLevel = setDebugStartingLevel;
 }
 
 class MenuScene extends Phaser.Scene {
@@ -1990,6 +1995,7 @@ class MenuScene extends Phaser.Scene {
     this.startButton = null;
     this.settingsButton = null;
     this.settingsBorder = null;
+
   }
 
   create() {
@@ -2446,10 +2452,13 @@ class MenuScene extends Phaser.Scene {
       const y = startY + index * rowHeight;
 
       const formatted = this.formatLeaderboardEntry(modeId, entry);
+      const lineColor = entry && entry.lineColor ? entry.lineColor : "none";
+      const gradeColor =
+        lineColor === "orange" ? "#ff8800" : lineColor === "green" ? "#00ff00" : "#ffff00";
       const leftText = this.add
         .text(this.leaderboardContainer.x - 110, y, formatted.left, {
           fontSize: "24px",
-          fill: "#ffff00",
+          fill: gradeColor,
           fontFamily: "Courier New",
           fontStyle: "bold",
         })
@@ -2458,20 +2467,17 @@ class MenuScene extends Phaser.Scene {
       // Stack secondary fields (middle/right) in one column
       const secondaryX = this.leaderboardContainer.x + 40;
       const middleText = this.add
-        .text(secondaryX, y - rowHeight * 0.2, formatted.middle, {
+        .text(secondaryX - 5, y - rowHeight * 0.2, formatted.middle, {
           fontSize: "16px",
           fill: "#00ffff",
           fontFamily: "Courier New",
-          fontStyle: "bold",
         })
-        .setOrigin(0.5, 0.5);
-
+        .setOrigin(0, 0.5);
       const rightText = this.add
         .text(secondaryX, y + rowHeight * 0.2, formatted.right, {
           fontSize: "16px",
-          fill: "#cccccc",
+          fill: "#ffffff",
           fontFamily: "Courier New",
-          fontStyle: "bold",
         })
         .setOrigin(0.5, 0.5);
 
@@ -2583,6 +2589,9 @@ class MenuScene extends Phaser.Scene {
     }
 
     this.selectedModeId = modeId;
+
+    // Always start from default level
+    setDebugStartingLevel(0);
 
     // Start the AssetLoaderScene first; it will continue to LoadingScreenScene -> GameScene
     this.scene.start("AssetLoaderScene", { mode: modeId, gameMode: mode });
@@ -2850,7 +2859,7 @@ class MenuScene extends Phaser.Scene {
             entry.lineColor && entry.lineColor !== "none"
               ? `${entry.grade || "9"} (${entry.lineColor})`
               : entry.grade || "9",
-          middle: `L${fmtNum(entry.level)}`,
+          middle: `Lv. ${fmtNum(entry.level)}`,
           right: fmtTime(entry.time),
         };
       default:
@@ -5332,7 +5341,7 @@ class GameScene extends Phaser.Scene {
     this.suppressPieceRenderThisFrame = false;
     this.lastGroundedY = null; // Track last grounded row for ARS lock reset rule
     this.isGrounded = false;
-    this.level = getStartingLevel(); // Set starting level from URL parameter
+    this.level = getDebugStartingLevel(); // Set starting level from debug helper
     this.startingLevel = this.level; // Preserve the starting level for restarts
     this.piecesPlaced = 0; // Track pieces for level system
     this.score = 0;
@@ -5380,7 +5389,8 @@ class GameScene extends Phaser.Scene {
     this.xrayColumn = 0;
     this.strobeActive = false;
     this.regretMessageTimer = 0;
-    this.tapInternalGradeText = null;
+    this.tapGradeLabelText = null;
+    this.tapGradeValueText = null;
     this.regretMessageText = null;
     this.playfieldBorder = null;
     this.gameOver = false;
@@ -5946,13 +5956,17 @@ class GameScene extends Phaser.Scene {
     this.creditsTimer = 0;
     this.creditsDuration = 61.6; // 61.60 seconds
     this.creditsText = null;
-    this.creditsScrollSpeed = 0.5; // pixels per frame
+    this.creditsScrollSpeed = 0.5; // pixels per frame (calibrated at roll start)
+    this.creditsScrollCalibrated = false;
     this.creditsAlpha = 1;
     this.congratulationsActive = false;
     this.gameComplete = false;
     this.level999Reached = false; // Track when level 999 is reached for TGM behavior
     this.creditsFinalized = false;
     this.rollFailedDuringRoll = false;
+    this.rollStartSfxPlayed = false;
+    this.bigRollPending = false;
+    this.rollBonusAwardedDuringRoll = false;
 
     this.invisibleStackActive = false;
     this.fadingRollActive = false;
@@ -6198,7 +6212,47 @@ class GameScene extends Phaser.Scene {
     this.inputPerPieceText.setText(inputsPerPiece.toFixed(2));
   }
 
+  setGradeLineColor(color) {
+    this.gradeLineColor = color || "none";
+  }
+
+  getGradeLineColorForRoll() {
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+
+    const reachedCredits = !!this.creditsActive || !!this.creditsFinalized;
+    if (!reachedCredits) return "none";
+
+    const isTgm2Like =
+      modeIdLower === "tgm2" ||
+      modeIdLower === "tgm2_master" ||
+      modeIdLower === "tgm2_normal";
+    const isRollFailed = !!this.rollFailedDuringRoll;
+    const rollLines = this.rollLinesCleared || 0;
+    const isMRoll = this.rollType === "mroll";
+
+    if (isRollFailed) return "green";
+
+    if (isTgm2Like && isMRoll && rollLines < 32) {
+      return "green";
+    }
+
+    return "orange";
+  }
+
   getMaxSectionsForTracker() {
+    // TGM3 modes: clamp tracker to 0-999 (10 sections)
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    if (modeId === "tgm3_master" || modeId === "tgm3") {
+      return 10;
+    }
+
     if (this.selectedMode === "marathon") {
       const targetLines =
         this.gameMode && typeof this.gameMode.targetLines === "number"
@@ -6434,6 +6488,12 @@ class GameScene extends Phaser.Scene {
         this.gameMode.sectionTimes = {};
         this.gameMode.rollReached = false;
       }
+    }
+
+    // Ensure internal level baseline aligns with current starting level for modes that track it (e.g., TGM3)
+    if (this.gameMode && typeof this.gameMode.internalLevel === "number") {
+      const starting = this.startingLevel != null ? this.startingLevel : this.level || 0;
+      this.gameMode.internalLevel = starting;
     }
 
     // Always start from the mode's lowest grade (or default "9"), ignoring any carried-over state
@@ -7159,23 +7219,34 @@ class GameScene extends Phaser.Scene {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
-    // Calculate optimal cell size to utilize more of the screen space
-    // Use more aggressive sizing to fill the screen better
-    const maxCellWidth = Math.floor((windowWidth * 0.8) / this.board.cols); // Use 80% of width for playfield
-    const maxCellHeight = Math.floor((windowHeight * 0.9) / this.visibleRows); // Use 90% of height for playfield
-    this.cellSize = Math.min(maxCellWidth, maxCellHeight, 40); // Cap at 40 for better utilization
+    // Calculate optimal cell size to utilize screen space while keeping content in-bounds
+    // Leave a fixed padding so side UI and timers stay visible on narrow windows
+    const paddingX = 60;
+    const paddingY = 80;
+    const maxCellWidth = Math.floor(
+      Math.max(100, windowWidth - paddingX) / this.board.cols,
+    );
+    const maxCellHeight = Math.floor(
+      Math.max(120, windowHeight - paddingY) / this.visibleRows,
+    );
+    this.cellSize = Math.min(maxCellWidth, maxCellHeight, 40);
 
-    // Ensure minimum cell size for readability
-    this.cellSize = Math.max(this.cellSize, 20);
+    // Ensure minimum cell size for readability, but allow smaller than before to fit narrow windows
+    this.cellSize = Math.max(this.cellSize, 16);
 
     // Calculate playfield dimensions and store as instance properties
     this.playfieldWidth = this.cellSize * this.board.cols;
     this.playfieldHeight = this.cellSize * this.visibleRows;
 
-    // Center the border with better screen utilization
-    this.borderOffsetX = Math.floor((windowWidth - this.playfieldWidth) / 2);
-    this.borderOffsetY =
-      Math.floor((windowHeight - this.playfieldHeight) / 2) - 30; // Adjusted for better centering
+    // Center the border with better screen utilization (clamp to keep on-screen)
+    this.borderOffsetX = Math.max(
+      10,
+      Math.floor((windowWidth - this.playfieldWidth) / 2),
+    );
+    this.borderOffsetY = Math.max(
+      10,
+      Math.floor((windowHeight - this.playfieldHeight) / 2) - 20,
+    );
 
     // Move the matrix to the right within the border
     this.matrixOffsetX = this.borderOffsetX + 17; // Shifted 2px left to align with border
@@ -7207,6 +7278,23 @@ class GameScene extends Phaser.Scene {
       24,
       Math.min(40, Math.floor(this.cellSize * 1.5)),
     ); // Larger for time
+
+    // Ensure UI parent groups exist (resize can occur after shutdown/destroy)
+    if (!this.gameGroup) {
+      this.gameGroup = this.add.group();
+    }
+    if (!this.overlayGroup) {
+      this.overlayGroup = this.add.group();
+    }
+
+    const safeWindowWidth = Math.max(
+      320,
+      this.windowWidth || this.scale?.width || window.innerWidth,
+    );
+    const safeWindowHeight = Math.max(
+      320,
+      this.windowHeight || this.scale?.height || window.innerHeight,
+    );
 
     // UI positioned to the left of border, moved 50px right
     const uiX = Math.max(20, this.borderOffsetX - 200) + 50;
@@ -7256,10 +7344,17 @@ class GameScene extends Phaser.Scene {
       this.gradeDisplay = this.add.graphics();
       this.gradeDisplay.lineStyle(2, 0xffffff);
       this.gradeDisplay.strokeRect(gradeX, gradeY, gradeWidth, 80);
+      const modeProvidedGrade =
+        this.gameMode &&
+        typeof this.gameMode.getDisplayedGrade === "function"
+          ? this.gameMode.getDisplayedGrade()
+          : null;
       const initialDisplayedGrade =
         this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
           ? this.initialGradeBaseline
-          : this.grade ?? "9";
+          : modeProvidedGrade !== null && modeProvidedGrade !== undefined
+            ? modeProvidedGrade
+            : this.grade ?? "9";
       this.grade = initialDisplayedGrade;
       const gradeTextValue = initialDisplayedGrade;
       const gradeVisible =
@@ -7419,9 +7514,27 @@ class GameScene extends Phaser.Scene {
     this.createClearBannerUI(levelBottomY, scoreRowHeight, uiFontSize);
 
     // Piece per second displays - moved to right side of matrix, aligned with bottom of stack
-    const ppsX = this.borderOffsetX + this.cellSize * this.board.cols + 20;
-    const ppsY = this.borderOffsetY + this.playfieldHeight - 40; // Align with bottom of stack
-    const spikeY = this.borderOffsetY + this.playfieldHeight * 0.5;
+    const ppsX = Math.max(
+      20,
+      Math.min(
+        safeWindowWidth - 180,
+        this.borderOffsetX + this.cellSize * this.board.cols + 20,
+      ),
+    );
+    const ppsY = Math.max(
+      40,
+      Math.min(
+        safeWindowHeight - 80,
+        this.borderOffsetY + this.playfieldHeight - 40,
+      ),
+    ); // Align with bottom of stack
+    const spikeY = Math.max(
+      40,
+      Math.min(
+        safeWindowHeight - 100,
+        this.borderOffsetY + this.playfieldHeight * 0.5,
+      ),
+    );
 
     // Attack metrics (above PPS)
     const atkLabelStyle = {
@@ -7763,13 +7876,17 @@ class GameScene extends Phaser.Scene {
     }
 
     if (shouldShowSectionTracker) {
-      const trackerX = Math.max(20, this.borderOffsetX - 430);
       const trackerWidth = 240;
+      const trackerX = Math.max(
+        20,
+        Math.min(safeWindowWidth - trackerWidth - 20, this.borderOffsetX - 430),
+      );
       const gradePanelLeftX = hasGrading ? uiX + 25 : uiX;
       const shouldShiftTrackerDown = trackerX + trackerWidth >= gradePanelLeftX - 10;
-      const trackerY = shouldShiftTrackerDown
-        ? this.borderOffsetY + 170
-        : this.borderOffsetY - 10;
+      const trackerY = Math.max(
+        10,
+        shouldShiftTrackerDown ? this.borderOffsetY + 170 : this.borderOffsetY - 10,
+      );
       const sectionRowHeight = Math.max(16, Math.floor(this.cellSize * 0.6));
       this.sectionTrackerGroup = this.add.container(trackerX, trackerY);
 
@@ -7923,7 +8040,14 @@ class GameScene extends Phaser.Scene {
           const sectionStart = i * sectionLength;
           const nominalEnd = sectionStart + sectionLength - 1;
           const isLast = i === maxSections - 1;
-          const sectionEnd = isLast ? maxLevelForDisplay : nominalEnd;
+          // For TGM3, hard clamp final section to 900-999 even though internal level exceeds 999
+          const isTgm3ModeForTracker =
+            modeId === "tgm3_master" || modeId === "tgm3" || modeId === "tgm3_shirase";
+          const sectionEndRaw = isLast ? maxLevelForDisplay : nominalEnd;
+          const sectionEnd =
+            isTgm3ModeForTracker && i === maxSections - 1
+              ? Math.min(999, sectionEndRaw)
+              : sectionEndRaw;
           const y = tableStartY + i * rowHeight;
 
           const label = this.add.text(
@@ -7979,8 +8103,16 @@ class GameScene extends Phaser.Scene {
           this.sectionTotalTexts.push(totalText);
         }
 
-        // Staff roll grade bonus display placeholder
-        const rollBonusY = tableStartY + maxSections * rowHeight + 6;
+        // Staff roll grade bonus display placeholder (above TAP grade block)
+        const isTgm3Mode =
+          (this.gameMode &&
+            typeof this.gameMode.getModeId === "function" &&
+            (this.gameMode.getModeId() === "tgm3" ||
+              this.gameMode.getModeId() === "tgm3_master")) ||
+          (typeof this.selectedMode === "string" &&
+            (this.selectedMode === "tgm3" || this.selectedMode === "tgm3_master"));
+        const rollBonusYOffset = isTgm3Mode ? 150 : 0;
+        const rollBonusY = tableStartY + maxSections * rowHeight + 6 + rollBonusYOffset;
         this.staffRollBonusText = this.add.text(0, rollBonusY, "ROLL BONUS: --", {
           fontSize: `${sectionLabelFontSize}px`,
           fill: "#ccc",
@@ -7992,15 +8124,24 @@ class GameScene extends Phaser.Scene {
         this.staffRollBonusText.setVisible(false);
 
         // TAP internal grade (TGM2-style mapping, no COOL bonus)
-        const tapGradeY = rollBonusY + rowHeight;
-        this.tapInternalGradeText = this.add.text(0, tapGradeY, "TAP GRADE: --", {
+        const tapBlockY = rollBonusY + rowHeight + 4 - 100 + rollBonusYOffset;
+        const tapLabelStyle = {
           fontSize: `${sectionLabelFontSize}px`,
           fill: "#ffffaa",
           fontFamily: "Courier New",
           fontStyle: "bold",
-        });
-        this.sectionTrackerGroup.add(this.tapInternalGradeText);
-        this.tapInternalGradeText.setVisible(false);
+        };
+        const tapValueStyle = {
+          fontSize: `${Math.max(sectionTimeFontSize + 6, sectionLabelFontSize + 4)}px`,
+          fill: "#fff",
+          fontFamily: "Courier New",
+          fontStyle: "bold",
+        };
+        this.tapGradeLabelText = this.add.text(0, tapBlockY, "TAP GRADE", tapLabelStyle);
+        this.tapGradeValueText = this.add.text(0, tapBlockY + rowLineHeight, "--", tapValueStyle);
+        this.sectionTrackerGroup.add([this.tapGradeLabelText, this.tapGradeValueText]);
+        this.tapGradeLabelText.setVisible(false);
+        this.tapGradeValueText.setVisible(false);
       }
     }
 
@@ -8010,8 +8151,14 @@ class GameScene extends Phaser.Scene {
       typeof ZenSandboxHelper !== "undefined" &&
       typeof ZenSandboxHelper.renderPanel === "function"
     ) {
-      const panelX = Math.max(20, this.borderOffsetX - 750);
-      const panelY = Math.max(10, this.borderOffsetY - 30);
+      const panelX = Math.max(
+        10,
+        Math.min(safeWindowWidth - 260, this.borderOffsetX - 750),
+      );
+      const panelY = Math.max(
+        10,
+        Math.min(safeWindowHeight - 120, this.borderOffsetY - 30),
+      );
       const panel = ZenSandboxHelper.renderPanel(this, this.zenSandboxConfig, {
         x: panelX,
         y: panelY,
@@ -8159,7 +8306,7 @@ class GameScene extends Phaser.Scene {
     }
     if (this.hideClearBanner) this.hideClearBanner();
 
-    this.level = this.startingLevel != null ? this.startingLevel : getStartingLevel();
+    this.level = this.startingLevel != null ? this.startingLevel : getDebugStartingLevel();
     this.currentSection = Math.floor(this.getSectionBasisValue() / this.getSectionLength());
     this.sectionStartTime = 0;
     this.sectionTimes = [];
@@ -8806,6 +8953,7 @@ class GameScene extends Phaser.Scene {
       this.gameMode && typeof this.gameMode.internalLevel === "number"
         ? this.gameMode.internalLevel
         : this.level;
+    // Use internal level with COOL bonuses for BGM gating; ensure buffer never undercuts it
     const level = Math.max(
       internalLevel,
       typeof this.bgmInternalLevelBuffer === "number" ? this.bgmInternalLevelBuffer : 0,
@@ -10172,6 +10320,9 @@ class GameScene extends Phaser.Scene {
         this.finalizeCreditsRoll();
       }
     }
+
+    // Update roll bonus UI for TGM3 credits
+    this.updateRollBonusDisplay();
 
     // Draw
 
@@ -12009,6 +12160,19 @@ class GameScene extends Phaser.Scene {
         if (lines > 0) {
           this.lastClearDuringRoll = { lines, time: this.currentTime };
         }
+        // TGM3 staff roll bonus accrues during the roll (use floor only for display)
+        const modeId =
+          (this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode) || "";
+        if (
+          (modeId === "tgm3_master" || modeId === "tgm3") &&
+          this.gameMode &&
+          typeof this.gameMode.addStaffRollLines === "function"
+        ) {
+          this.rollBonusAwardedDuringRoll = true;
+          this.gameMode.addStaffRollLines(lines, this.rollType === "mroll" ? "mroll" : "fading");
+        }
       }
       return;
     }
@@ -12128,18 +12292,32 @@ class GameScene extends Phaser.Scene {
   refreshModeTimingsForCurrentLevel(levelOverride = null) {
     if (this.isEligibleTimingOverride || !this.gameMode) return;
 
+    const modeLevel =
+      this.gameMode && Number.isFinite(this.gameMode.internalLevel)
+        ? this.gameMode.internalLevel
+        : null;
     const timingLevel =
       typeof levelOverride === "number"
         ? levelOverride
-        : typeof this.gameMode.internalLevel === "number"
-          ? this.gameMode.internalLevel
+        : modeLevel !== null
+          ? Math.max(modeLevel, this.level)
           : this.level;
+    const maxLevel =
+      this.gameMode && typeof this.gameMode.getGravityLevelCap === "function"
+        ? this.gameMode.getGravityLevelCap()
+        : 999;
+    const offset =
+      Number.isFinite(this.timingLevelOffset) ? this.timingLevelOffset : 0;
+    const effectiveLevel = Math.min(
+      Math.max(0, timingLevel + offset),
+      maxLevel,
+    );
 
     if (typeof this.gameMode.updateTimingPhase === "function") {
-      this.gameMode.updateTimingPhase(timingLevel);
+      this.gameMode.updateTimingPhase(effectiveLevel);
     }
     if (typeof this.gameMode.updateTiming === "function") {
-      this.gameMode.updateTiming(timingLevel);
+      this.gameMode.updateTiming(effectiveLevel);
     }
 
     if (this.gameMode.getDAS) this.dasDelay = this.gameMode.getDAS();
@@ -12588,24 +12766,26 @@ class GameScene extends Phaser.Scene {
 
         // Start credits when reaching max level
         this.level999Reached = true;
+        if (!this.rollStartSfxPlayed) {
+          this.rollStartSfxPlayed = true;
+          this.playSfx("complete", 0.8);
+        }
 
         const isTGM2Mode =
           this.selectedMode && this.selectedMode.startsWith("tgm2") && maxLevel === 999;
-        const isShiraseMode =
-          this.selectedMode === "tgm3_shirase" || this.selectedMode === "shirase";
+        const isShiraseMax = isShiraseMode && this.level >= maxLevel;
 
-        // TGM2: run 2s stack fade before credits; credits start once fade completes
-        if (isTGM2Mode) {
-          this.creditsPending = true;
-          this.invisibleStackActive = false;
-          this.fadingRollActive = false;
-          this.startMinoFading();
-        } else {
-          this.startCredits();
-          if (this.gameMode && typeof this.gameMode.onCreditsStart === "function") {
-            this.gameMode.onCreditsStart(this);
-          }
+        // Prepare special roll visuals to apply after fade completes
+        if (isShiraseMax) {
+          this.bigBlocksActive = false;
+          this.bigRollPending = true;
         }
+
+        // All rolls: run 2s stack fade before credits; credits start once fade completes
+        this.creditsPending = true;
+        this.invisibleStackActive = false;
+        this.fadingRollActive = false;
+        this.startMinoFading();
       }
     }
 
@@ -12722,6 +12902,17 @@ class GameScene extends Phaser.Scene {
         this.gameMode.onSectionRegret();
       }
       this.pendingSectionGradeAdjust = null;
+
+      // Recompute internal level at section start (after COOL/REGRET adjustments) so timing uses boosted internal level immediately at *00
+      if (
+        this.gameMode &&
+        typeof this.gameMode.internalLevel === "number" &&
+        typeof this.gameMode.coolBonus === "number"
+      ) {
+        this.gameMode.internalLevel = this.level + this.gameMode.coolBonus;
+        this.refreshModeTimingsForCurrentLevel(this.gameMode.internalLevel);
+      }
+
       // Apply TGM3 internal timing/gravity phase on section entry using internal level with COOL bonus
       if (this.gameMode && typeof this.gameMode.getModeId === "function") {
         const modeId = this.gameMode.getModeId();
@@ -13435,6 +13626,10 @@ class GameScene extends Phaser.Scene {
     this.lockDelay = 0;
     this.isGrounded = false;
     this.level = this.startingLevel || 0; // Use preserved starting level or default to 0
+    if (this.gameMode && typeof this.gameMode.internalLevel === "number") {
+      // Reset TGM3 internal level baseline to match current starting level (handles debug level overrides)
+      this.gameMode.internalLevel = this.level;
+    }
     this.piecesPlaced = 0; // Reset piece counter
     this.score = 0;
     this.grade = null;
@@ -13575,7 +13770,14 @@ class GameScene extends Phaser.Scene {
     this.scoreText.setText("0");
     this.currentLevelText.setText("0");
     if (hasGrading) {
-      this.gradeText.setText("9");
+      const isTADeath = modeIdLower === "ta_death" || modeIdLower === "t.a. death";
+      const baselineGrade =
+        this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
+          ? this.initialGradeBaseline
+          : isTADeath
+            ? ""
+            : "9";
+      this.gradeText.setText(baselineGrade);
     }
     // Reset Marathon mode separate level display
     if (isMarathonMode && this.levelDisplayText) {
@@ -13714,6 +13916,7 @@ class GameScene extends Phaser.Scene {
     if (creditsDurationSec != null) {
       this.creditsDuration = creditsDurationSec;
     }
+    this.creditsScrollCalibrated = false;
     // Allow continuous play/spawn during credits
     this.creditsGameplayEnabled = true;
     // Easy mode credits use hanabi bonuses during roll if configured
@@ -13744,12 +13947,41 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Show roll bonus counter only for TGM3 credits roll
+    // Default roll behaviors for modes without explicit flags
     const modeId =
       (this.gameMode && typeof this.gameMode.getModeId === "function"
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isTgm2Like = modeIdLower.startsWith("tgm2");
+    const isTgm3Like = modeIdLower === "tgm3" || modeIdLower === "tgm3_master";
+    const isShiraseLike = modeIdLower === "tgm3_shirase" || modeIdLower === "shirase";
+    if (!this.rollType) {
+      if (isTgm3Like) {
+        this.rollType = "fading";
+        this.fadingRollActive = true;
+        this.invisibleStackActive = false;
+      } else if (isTgm2Like) {
+        this.rollType = "fading";
+        this.fadingRollActive = true;
+        this.invisibleStackActive = false;
+      } else if (isShiraseLike) {
+        this.rollType = "bigroll";
+        this.fadingRollActive = false;
+        this.invisibleStackActive = false;
+      }
+    }
+
+    // Apply pending big-roll (Shirase 1300) once credits begin
+    if (this.bigRollPending) {
+      this.bigBlocksActive = true;
+      this.bigRollPending = false;
+    }
+
+    // Apply roll-specific visibility behavior to existing stack
+    this.applyRollVisibilityBehavior();
+
+    // Show roll bonus counter only for TGM3 credits roll
     const showRollBonus = modeIdLower === "tgm3" || modeIdLower === "tgm3_master";
     if (this.staffRollBonusText) {
       this.staffRollBonusText.setVisible(showRollBonus);
@@ -13762,9 +13994,8 @@ class GameScene extends Phaser.Scene {
 
     // Load credits BGM if available
     try {
-      // Use tm1_2.mp3 for TGM2 Normal mode credits, otherwise use tm1_endroll.mp3
-      const creditsBGMKey =
-        this.selectedMode === "tgm2_normal" ? "stage2" : "credits";
+      // Use tm1_2.mp3 for TGM2 Normal mode credits, otherwise use tm1_endroll.mp3 (cached as tm1_endroll)
+      const creditsBGMKey = this.selectedMode === "tgm2_normal" ? "stage2" : "tm1_endroll";
       this.creditsBGM = this.sound.add(creditsBGMKey, {
         loop: true,
         volume: 0.3,
@@ -13803,18 +14034,31 @@ class GameScene extends Phaser.Scene {
     if (typeof this.rollBonus === "number") {
       const rollFactor = this.rollType === "mroll" ? 1.0 : 0.5;
       this.rollBonus += (this.rollLinesCleared || 0) * rollFactor;
-      // For TGM3 Master: feed roll bonus into grading system (displayed grade) instead of rollBonus accumulation
-      const modeId =
-        this.gameMode && typeof this.gameMode.getModeId === "function"
-          ? this.gameMode.getModeId()
-          : this.selectedMode;
-      if (
-        (modeId === "tgm3_master" || modeId === "tgm3") &&
-        this.gameMode &&
-        typeof this.gameMode.addStaffRollBonus === "function" &&
-        typeof this.gameMode.addStaffRollLines === "function"
-      ) {
-        this.gameMode.addStaffRollLines(this.rollLinesCleared || 0, this.rollType === "mroll" ? "mroll" : "fading");
+    }
+
+    // TGM3: ensure roll bonuses applied to grading (avoid double-adding if already tallied per line)
+    const modeId =
+      this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode;
+    if (
+      (modeId === "tgm3_master" || modeId === "tgm3") &&
+      this.gameMode &&
+      typeof this.gameMode.addStaffRollBonus === "function" &&
+      typeof this.gameMode.addStaffRollLines === "function"
+    ) {
+      if (!this.rollBonusAwardedDuringRoll) {
+        this.gameMode.addStaffRollLines(
+          this.rollLinesCleared || 0,
+          this.rollType === "mroll" ? "mroll" : "fading",
+        );
+      }
+      // Refresh grade text to include roll bonus
+      if (typeof this.gameMode.getDisplayedGrade === "function" && this.gradeText) {
+        const displayGrade = this.gameMode.getDisplayedGrade();
+        if (displayGrade) {
+          this.gradeText.setText(displayGrade);
+        }
       }
     }
 
@@ -13832,13 +14076,12 @@ class GameScene extends Phaser.Scene {
     if (this.invisibleStackActive) {
       this.invisibleStackActive = false;
     }
-
-    // Grade line color: orange on successful roll clear, green on fail/topout
-    if (this.rollFailedDuringRoll) {
-      this.setGradeLineColor("green");
-    } else {
-      this.setGradeLineColor("orange");
+    if (this.bigBlocksActive) {
+      this.bigBlocksActive = false;
     }
+
+    // Grade line color per mode/roll outcome
+    this.setGradeLineColor(this.getGradeLineColorForRoll());
 
     // Delegate to mode-specific finish if available
     if (this.gameMode && typeof this.gameMode.finishCreditRoll === "function") {
@@ -13848,6 +14091,72 @@ class GameScene extends Phaser.Scene {
 
     // Fallback: end the game normally
     this.showGameOverScreen();
+  }
+
+  applyRollVisibilityBehavior() {
+    if (!this.board || !Array.isArray(this.board.grid)) return;
+    const now = this.currentTime || 0;
+
+    if (this.rollType === "mroll") {
+      this.invisibleStackActive = true;
+      this.fadingRollActive = false;
+      this.bigBlocksActive = false;
+    } else if (this.rollType === "fading") {
+      this.fadingRollActive = true;
+      this.invisibleStackActive = false;
+      this.bigBlocksActive = false;
+    } else if (this.rollType === "bigroll") {
+      this.bigBlocksActive = true;
+      this.invisibleStackActive = false;
+      this.fadingRollActive = false;
+    }
+
+    // Ensure fadeGrid exists
+    if (!Array.isArray(this.board.fadeGrid) || this.board.fadeGrid.length !== this.board.rows) {
+      this.board.fadeGrid = Array.from({ length: this.board.rows }, () =>
+        Array(this.board.cols).fill(0),
+      );
+    }
+
+    for (let y = 0; y < this.board.rows; y++) {
+      for (let x = 0; x < this.board.cols; x++) {
+        const cell = this.board.grid[y][x];
+        if (!cell) continue;
+        if (this.rollType === "mroll") {
+          // Hide immediately
+          this.board.fadeGrid[y][x] = now - 1;
+        } else if (this.rollType === "fading") {
+          // Fade out 4s after credits begin
+          this.board.fadeGrid[y][x] = now + 4;
+        } else if (this.rollType === "bigroll") {
+          // No fade; keep visible but big
+          this.board.fadeGrid[y][x] = 0;
+        }
+      }
+    }
+  }
+
+  updateRollBonusDisplay() {
+    if (!this.staffRollBonusText) return;
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const isTgm3 = modeId === "tgm3" || modeId === "tgm3_master";
+    if (!isTgm3 || !this.creditsActive) {
+      return;
+    }
+
+    let bonusValue = null;
+    if (this.gameMode && this.gameMode.tgm3Grading && typeof this.gameMode.tgm3Grading.staffRollBonus === "number") {
+      bonusValue = this.gameMode.tgm3Grading.staffRollBonus;
+    } else if (typeof this.rollBonus === "number") {
+      bonusValue = this.rollBonus;
+    }
+    if (bonusValue !== null) {
+      const displayBonus = Math.floor(bonusValue);
+      this.staffRollBonusText.setText(`ROLL BONUS: ${displayBonus}`);
+    }
   }
 
   trackPlacedMino(x, y, color) {
@@ -14541,7 +14850,14 @@ class GameScene extends Phaser.Scene {
 
     const totalScrollDistance =
       creditsStartY + lastLineCenterOffset + lastLineHeight / 2 - matrixTopY;
-    this.creditsScrollSpeed = totalScrollDistance / (this.creditsDuration * 60); // pixels per frame
+
+    // Calibrate scroll speed/duration so the first line enters at t=0 and last line fully exits at roll end
+    if (!this.creditsScrollCalibrated) {
+      const targetPixelsPerSecond = 72; // constant speed
+      this.creditsDuration = totalScrollDistance / targetPixelsPerSecond;
+      this.creditsScrollSpeed = targetPixelsPerSecond / 60;
+      this.creditsScrollCalibrated = true;
+    }
 
     // Clamp to duration so we don't loop; end position aligns with creditsDuration
     const scrollProgress =
@@ -14954,7 +15270,9 @@ class GameScene extends Phaser.Scene {
         (typeof fetchedGrade === "string" && fetchedGrade.trim() !== "" && fetchedGrade) ||
         (typeof tgm3Grade === "string" && tgm3Grade.trim() !== "" && tgm3Grade) ||
         (this.grade && this.grade) ||
-        (this.initialGradeBaseline ? this.initialGradeBaseline : "9");
+        (this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
+          ? this.initialGradeBaseline
+          : "9");
       this.grade = gradeToShow;
       if (this.gradeText) {
         this.gradeText.setText(gradeToShow);
@@ -14987,16 +15305,19 @@ class GameScene extends Phaser.Scene {
 
       // TAP-style internal grade (TGM2 mapping, no COOL bonuses)
       if (
-        this.tapInternalGradeText &&
+        this.tapGradeLabelText &&
+        this.tapGradeValueText &&
         this.gameMode &&
         this.gameMode.tgm3Grading &&
         typeof this.gameMode.tgm3Grading.getBaseDisplayedGrade === "function"
       ) {
         const tapGrade = this.gameMode.tgm3Grading.getBaseDisplayedGrade();
-        this.tapInternalGradeText.setText(`TAP GRADE: ${tapGrade ?? "--"}`);
-        this.tapInternalGradeText.setVisible(true);
-      } else if (this.tapInternalGradeText) {
-        this.tapInternalGradeText.setVisible(false);
+        this.tapGradeValueText.setText(tapGrade ?? "--");
+        this.tapGradeLabelText.setVisible(true);
+        this.tapGradeValueText.setVisible(true);
+      } else if (this.tapGradeLabelText && this.tapGradeValueText) {
+        this.tapGradeLabelText.setVisible(false);
+        this.tapGradeValueText.setVisible(false);
       }
 
       this.updateGradeUIVisibility();
@@ -15177,8 +15498,13 @@ class GameScene extends Phaser.Scene {
         }
 
         if (hasCompletedTime) {
-          runningTotal += splitTime || 0;
-          this.sectionTotalTexts[i].setText(this.formatTimeValue(runningTotal));
+          if (isTgm3Mode) {
+            // In TGM3, show COOL split per section rather than cumulative
+            this.sectionTotalTexts[i].setText(this.formatTimeValue(splitTime || 0));
+          } else {
+            runningTotal += splitTime || 0;
+            this.sectionTotalTexts[i].setText(this.formatTimeValue(runningTotal));
+          }
         }
       }
 
@@ -15461,17 +15787,40 @@ window.__minoResizeHandler = () => {
   const activeGame = window.__minoGame;
   if (!activeGame || !activeGame.scale) return;
 
-  activeGame.scale.resize(window.innerWidth, window.innerHeight);
-  if (activeGame.scene.scenes.length > 0) {
-    const scene = activeGame.scene.scenes[0];
-    if (scene && scene.calculateLayout) {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // Resize the canvas to the current window resolution
+  const canvas =
+    activeGame.canvas ||
+    (activeGame.scale && activeGame.scale.canvas) ||
+    (activeGame.renderer && activeGame.renderer.canvas);
+  if (!canvas || !canvas.style) {
+    // Defer until Phaser has created the canvas
+    return;
+  }
+
+  activeGame.scale.resize(width, height);
+  if (activeGame.renderer && typeof activeGame.renderer.resize === "function") {
+    activeGame.renderer.resize(width, height);
+  }
+  if (canvas && canvas.style) {
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }
+
+  // Recalculate layout/UI for all scenes that expose the hooks
+  const scenes = activeGame.scene.getScenes(false) || [];
+  scenes.forEach((scene) => {
+    if (scene && typeof scene.calculateLayout === "function") {
       scene.calculateLayout();
-      if (scene.setupUI) {
+      if (typeof scene.setupUI === "function") {
         scene.setupUI();
       }
     }
-  }
-  // Ensure the game is resized correctly on window resize
-  window.addEventListener("resize", resizeGame);
+  });
 };
 window.addEventListener("resize", window.__minoResizeHandler);
+
+// Force an initial resize to align canvas/UI with current window size
+window.__minoResizeHandler();
