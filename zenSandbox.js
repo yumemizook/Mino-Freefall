@@ -704,6 +704,9 @@
           const prevCfg = this.zenSandboxConfig || helper.loadConfig();
           const bagTypeChanged =
             updates && updates.bagType !== undefined && updates.bagType !== prevCfg.bagType;
+          const displayModeChanged =
+            updates && Object.prototype.hasOwnProperty.call(updates, "displayMode") &&
+            updates.displayMode !== prevCfg.displayMode;
 
           // Persist config but do not reset runtime/bag queue on change; defer bag swap to reset
           const cfg = helper.saveConfig({

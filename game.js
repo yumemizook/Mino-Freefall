@@ -4321,6 +4321,22 @@ class SettingsScene extends Phaser.Scene {
     };
   }
 
+  startListeningForKey(action) {
+    // Reset any previous highlight
+    Object.keys(this.keybindTexts || {}).forEach((key) => {
+      const textObj = this.keybindTexts[key];
+      if (textObj && textObj.setStyle) {
+        textObj.setStyle({ fill: "#00ff00" });
+      }
+    });
+
+    // Begin listening for the requested action
+    this.listeningForKey = action;
+    if (this.keybindTexts?.[action]?.setStyle) {
+      this.keybindTexts[action].setStyle({ fill: "#ffff00" });
+    }
+  }
+
   onKeyDown(event) {
     if (this.listeningForKey) {
       const action = this.listeningForKey;
@@ -5646,6 +5662,94 @@ class GameScene extends Phaser.Scene {
           const canShowSpike = showAttack && !this.readyGoPhase;
           this.spikeText.setVisible(canShowSpike);
         }
+
+        // Hide B2B text during Ready/Go and when display mode is none; allow during break animation
+        if (this.b2bChainText) {
+          const chainActive = (this.b2bChainCount ?? -1) > 0;
+          const showB2B =
+            !showNone && !this.readyGoPhase && !!this.showB2BUI && (chainActive || this.b2bBreakAnimating);
+          this.b2bChainText.setVisible(showB2B);
+        }
+      };
+    }
+
+    if (typeof this.destroyZenDisplayTextObjects !== "function") {
+      this.destroyZenDisplayTextObjects = function () {
+        // Stop tweens associated with Zen HUD
+        if (this.spikeFadeTween) {
+          this.spikeFadeTween.stop();
+          this.spikeFadeTween = null;
+        }
+        if (this.standardComboFadeTween) {
+          this.standardComboFadeTween.stop();
+          this.standardComboFadeTween = null;
+        }
+
+        const clearObj = (key) => {
+          const obj = this[key];
+          if (!obj) return;
+          // Hide first to avoid flicker while cleaning up
+          if (obj.setVisible) obj.setVisible(false);
+          // Destroy only if it has lost its scene or supports destroy
+          if (!obj.scene || obj.destroyed || (obj.destroy && typeof obj.destroy === "function")) {
+            try {
+              obj.destroy?.();
+            } catch (_) {
+              // ignore
+            }
+            this[key] = null;
+          }
+        };
+
+        // Attack/efficiency UI
+        [
+          "vsLabel",
+          "vsScoreText",
+          "attackLabel",
+          "attackTotalText",
+          "attackPerMinLabel",
+          "attackPerMinText",
+          "attackPerPieceLabel",
+          "attackPerPieceText",
+          "spikeText",
+        ].forEach(clearObj);
+
+        // PPS/input UI
+        [
+          "pieceCountLabel",
+          "pieceCountText",
+          "ppsLabel",
+          "ppsText",
+          "rawPpsLabel",
+          "rawPpsText",
+          "finesseInputLabel",
+          "finesseInputText",
+          "inputPerPieceLabel",
+          "inputPerPieceText",
+        ].forEach(clearObj);
+
+        // Score UI
+        ["scoreLabel", "scoreText", "scorePerPieceLabel", "scorePerPieceText"].forEach(clearObj);
+
+        // Finesse summary UI
+        if (this.finesseTexts) {
+          ["header", "streakAcc", "errors"].forEach((k) => {
+            const obj = this.finesseTexts[k];
+            if (obj && obj.setVisible) obj.setVisible(false);
+            if (obj && (obj.destroyed || obj.destroy)) {
+              try {
+                obj.destroy?.();
+              } catch (_) {}
+              this.finesseTexts[k] = null;
+            }
+          });
+        }
+
+        // Time UI
+        clearObj("timeText");
+
+        // B2B UI
+        clearObj("b2bChainText");
       };
     }
     this.loadZenSandboxConfig();
@@ -5678,10 +5782,10 @@ class GameScene extends Phaser.Scene {
     this.totalGarbageCleared = 0;
     this.attackSpike = 0;
     this.lastAttackTime = 0;
-    this.attackTotalText = null;
-    this.attackPerMinText = null;
+    this.attackPerPieceLabel = null;
     this.attackPerPieceText = null;
     this.attackPerPieceLabel = null;
+    this.attackPerPieceText = null;
     this.spikeText = null;
     this.vsScoreText = null;
     this.scorePerPieceLabel = null;
@@ -5691,6 +5795,7 @@ class GameScene extends Phaser.Scene {
     this.spikeFadeTween = null;
     this.b2bChainText = null;
     this.b2bChainCount = -1;
+    this.b2bBreakAnimating = false;
     this.standardComboText = null;
     this.standardComboFadeTween = null;
     this.standardComboLastLineTime = 0;
@@ -13399,6 +13504,8 @@ class GameScene extends Phaser.Scene {
   showB2BChain(b2bMaintained, b2bBroken, prevChain, newChain) {
     if (!this.b2bChainText) return;
     this.b2bChainText.setText(`B2B x${newChain}`);
+    // Default: no break animation unless explicitly triggered
+    this.b2bBreakAnimating = false;
 
     if (b2bMaintained && newChain > prevChain) {
       this.b2bChainText.setColor("#ffff55");
@@ -13417,6 +13524,7 @@ class GameScene extends Phaser.Scene {
         this.b2bChainText.setColor("#ff4444");
         this.b2bChainText.setScale(1);
         this.b2bChainText.setVisible(true);
+        this.b2bBreakAnimating = true;
         this.tweens.add({
           targets: this.b2bChainText,
           alpha: { from: 1, to: 0.3 },
@@ -13427,15 +13535,20 @@ class GameScene extends Phaser.Scene {
             this.b2bChainText.setAlpha(1);
             this.b2bChainText.setColor("#ffff55");
             this.b2bChainText.setVisible(false);
+            this.b2bBreakAnimating = false;
           },
         });
       } else {
+        this.b2bChainText.setText("B2B x0");
         this.b2bChainText.setVisible(false);
+        this.b2bBreakAnimating = false;
       }
     } else if (newChain <= 0) {
       this.b2bChainText.setVisible(false);
+      this.b2bBreakAnimating = false;
     } else {
       this.b2bChainText.setVisible(true);
+      this.b2bBreakAnimating = false;
     }
   }
 
@@ -15309,7 +15422,9 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update UI
-    this.scoreText.setText(this.score.toString());
+    if (this.scoreText) {
+      this.scoreText.setText(this.score.toString());
+    }
     if (this.scorePerPieceText) {
       const piecesForScore = Math.max(1, this.totalPiecesPlaced || 0);
       const scorePerPiece = this.score / piecesForScore;
@@ -15384,8 +15499,12 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update piece per second displays
-    this.ppsText.setText(this.conventionalPPS.toFixed(2));
-    this.rawPpsText.setText(this.rawPPS.toFixed(2));
+    if (this.ppsText) {
+      this.ppsText.setText(this.conventionalPPS.toFixed(2));
+    }
+    if (this.rawPpsText) {
+      this.rawPpsText.setText(this.rawPPS.toFixed(2));
+    }
     if (
       this.ppsGraphGraphics &&
       this.ppsGraphArea &&
