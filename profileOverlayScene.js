@@ -20,22 +20,157 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.ratingString = "—";
     this.ratingDigitsReady = false;
     this.ratingColor = "#bbbbbb";
-    this.ratingSpacing = 4;
+    this.ratingSpacing = -25;
     this.tooltip = null;
     this.tooltipDim = null;
     this.tooltipVisible = false;
     this.tooltipBodyName = null;
     this.tooltipBodyRating = null;
     this.tooltipBodyGroups = [];
+    this.bestRowsContainer = null;
+    this.bestRowItems = [];
+    this.tooltipRatingDigits = [];
+    this.tooltipRatingScale = 0.38;
+    this.tooltipRatingPos = { x: 0, y: 0 }; // screen coords (deprecated)
+    this.tooltipRatingLocalPos = { x: 0, y: 0 }; // local to tooltip container
+    this.tooltipRankText = null;
+    this.tooltipAvatarButton = null;
+    this.tooltipNameButton = null;
+    this.tooltipBannerButton = null;
+    this.tooltipSignOutButton = null;
+    this.tooltipBannerImage = null;
+    this.tooltipBannerRect = null;
+    this.bannerCache = {};
+    this.hiddenBannerInput = null;
+    this.bannerHeight = 240;
+    this.currentBannerUrl = null;
+    this.bestRowsLayout = { startX: 0, startY: 0, cardW: 210, cardH: 80, gapX: 16, rowGap: 110 };
     this.currentUser = null;
     this.userDoc = null;
     this.userDocUnsub = null;
     this.fallbackCache = null;
     this.loginContainer = null;
     this.loginFields = {};
+    this.avatarCache = {};
     this.hiddenFileInput = null;
+    this.hiddenBannerInput = null;
     this.lastNameChangeAt = null;
     this.nameTooltip = null;
+    this.nameChangeModal = null;
+  }
+
+  updateBanner(url) {
+    this.currentBannerUrl = url || null;
+    if (this.tooltipBannerImage) {
+      this.tooltipBannerImage.destroy();
+      this.tooltipBannerImage = null;
+    }
+    if (!url) {
+      if (this.tooltipBannerRect) this.tooltipBannerRect.setVisible(false);
+      return;
+    }
+    if (this.tooltipBannerRect) this.tooltipBannerRect.setVisible(true);
+    const cachedKey = url ? this.bannerCache[url] : null;
+    const placeBanner = (key) => {
+      if (!this.tooltip) return;
+      const w = (this.tooltipBg?.width || this.cameras.main.width * 0.75) - 16;
+      const h = this.bannerHeight;
+      const y = -((this.tooltipBg?.height || this.cameras.main.height * 0.75) / 2) + h / 2 + 8;
+      this.tooltipBannerImage = this.add
+        .image(0, y, key)
+        .setOrigin(0.5)
+        .setDisplaySize(w, h)
+        .setDepth((this.tooltip?.depth || this.baseDepth) + 0.3)
+        .setScrollFactor(0);
+      this.tooltip.add(this.tooltipBannerImage);
+    };
+    if (cachedKey && this.textures.exists(cachedKey)) {
+      placeBanner(cachedKey);
+      return;
+    }
+    const key = `banner_${Date.now()}`;
+    this.load.image(key, url);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.bannerCache[url] = key;
+      placeBanner(key);
+    });
+    this.load.start();
+  }
+
+  async handleBannerFile(file) {
+    const FC = window.FirebaseClient;
+    const auth = FC?.getAuth?.();
+    if (!auth?.currentUser) return;
+    const uploader = FC?.updateBannerFromFile;
+    if (!uploader) return;
+    try {
+      const url = await uploader(auth.currentUser, file);
+      this.updateBanner(url);
+    } catch (e) {
+      console.warn("Banner upload failed", e);
+    }
+  }
+
+  handleBannerChange() {
+    if (!this.currentUser) {
+      if (!this.scene.isActive("AuthScene")) {
+        this.scene.launch("AuthScene");
+      } else {
+        this.scene.bringToTop("AuthScene");
+      }
+    } else {
+      this.hiddenBannerInput?.click();
+    }
+  }
+
+  handleSignOut() {
+    const FC = window.FirebaseClient;
+    const signOutUser = FC?.signOutUser;
+    if (typeof signOutUser === "function") {
+      signOutUser().catch((e) => console.warn("Sign out failed", e));
+    }
+  }
+
+  setTooltipRatingVisible(visible) {
+    if (this.tooltipRatingDigits?.length) {
+      this.tooltipRatingDigits.forEach((d) => d.setVisible(visible));
+    }
+    this.tooltipBodyRating?.setVisible(visible && (!this.tooltipRatingDigits?.length || !this.ratingDigitsReady));
+  }
+
+  updateTooltipRatingDigits(value, colorHex) {
+    this.clearTooltipRatingDigits();
+    if (!this.ratingDigitsReady || !this.textures.exists("ratingdigits")) {
+      this.tooltipBodyRating?.setText(value || "—").setColor(colorHex || "#bbbbbb").setVisible(true);
+      return;
+    }
+    const num = Number(value);
+    const digitsStr = Number.isFinite(num) ? Math.max(0, Math.round(num)).toString() : null;
+    if (!digitsStr) {
+      this.tooltipBodyRating?.setText(value || "—").setColor(colorHex || "#bbbbbb").setVisible(true);
+      return;
+    }
+    this.tooltipBodyRating?.setVisible(false);
+    const color = Phaser.Display.Color.HexStringToColor(colorHex || "#bbbbbb").color;
+    const scaledWidth = (this.digitWidth || 100) * this.tooltipRatingScale;
+    const scaledHeight = (this.digitHeight || 100) * this.tooltipRatingScale;
+    const step = Math.round(((this.digitWidth || 100) * this.tooltipRatingScale) + this.ratingSpacing + 5);
+    const targetContainer = this.tooltip || this;
+    const baseDepth = (this.tooltip?.depth || this.baseDepth) + 2;
+    for (let i = 0; i < digitsStr.length; i++) {
+      const d = digitsStr[i];
+      const frameIndex = parseInt(d, 10);
+      const img = this.add
+        .image(this.tooltipRatingLocalPos.x + i * step, this.tooltipRatingLocalPos.y, "ratingdigits", frameIndex)
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(baseDepth)
+        .setDisplaySize(scaledWidth, scaledHeight)
+        .setTint(color)
+        .setVisible(true);
+      targetContainer.add(img);
+      this.tooltipRatingDigits.push(img);
+    }
   }
 
   clearRatingDigits() {
@@ -45,13 +180,21 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.ratingDigits = [];
   }
 
+  clearTooltipRatingDigits() {
+    if (this.tooltipRatingDigits?.length) {
+      this.tooltipRatingDigits.forEach((d) => d.destroy());
+    }
+    this.tooltipRatingDigits = [];
+  }
+
   layoutRatingDigits() {
     if (!this.ratingDigits?.length) return;
     const baseX = this.ratingPos.x;
     const baseY = this.ratingPos.y;
-    const step = (this.digitWidth || 100) * this.ratingScale + this.ratingSpacing;
+    const scaledWidth = (this.digitWidth || 100) * this.ratingScale;
+    const step = Math.round(scaledWidth + this.ratingSpacing);
     this.ratingDigits.forEach((img, idx) => {
-      img.setPosition(baseX + idx * step, baseY);
+      img.setPosition(Math.round(baseX + idx * step), Math.round(baseY));
     });
   }
 
@@ -74,6 +217,8 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.clearRatingDigits();
     const depth = this.baseDepth + 2;
     const color = Phaser.Display.Color.HexStringToColor(this.ratingColor || "#bbbbbb").color;
+    const scaledWidth = (this.digitWidth || 100) * this.ratingScale;
+    const scaledHeight = (this.digitHeight || 100) * this.ratingScale;
     for (let i = 0; i < digitsStr.length; i++) {
       const d = digitsStr[i];
       const frameIndex = parseInt(d, 10);
@@ -82,7 +227,7 @@ class ProfileOverlayScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(depth)
-        .setScale(this.ratingScale)
+        .setDisplaySize(scaledWidth, scaledHeight)
         .setTint(color);
       this.ratingDigits.push(img);
     }
@@ -104,6 +249,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     const cardLeftX = width - margin - cardWidth;
     this.cardHeight = cardHeight;
     this.cardMargin = margin;
+    this.avatarSize = Math.min(cardHeight - 12, 48);
 
     const baseDepth = this.baseDepth; // keep under corner texts if they use higher depth
 
@@ -115,14 +261,11 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setDepth(baseDepth)
       .setInteractive({ useHandCursor: true });
 
-    this.avatarSize = cardHeight - 4;
     this.avatarCircle = this.add
-      .circle(width - margin - 24, margin + cardHeight / 2, (cardHeight - 4) / 2, 0x777777, 1)
+      .circle(width - margin - 24, margin + cardHeight / 2, this.avatarSize / 2, 0x777777, 1)
       .setStrokeStyle(1, 0xaaaaaa)
       .setScrollFactor(0)
-      .setDepth(baseDepth + 1)
-      .setInteractive({ useHandCursor: true })
-      .on("pointerup", () => this.handleAvatarChange());
+      .setDepth(baseDepth + 1);
 
     this.nameText = this.add
       .text(cardLeftX + 12, margin + 10, "Guest", {
@@ -132,11 +275,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setScrollFactor(0)
-      .setDepth(baseDepth + 1)
-      .setInteractive({ useHandCursor: true })
-      .on("pointerup", () => this.handleNameChange());
-    this.nameText.on("pointerover", () => this.showNameTooltip(cardLeftX + 12, margin - 6));
-    this.nameText.on("pointerout", () => this.hideNameTooltip());
+      .setDepth(baseDepth + 1);
 
     const ratingBgY = margin + 34;
     const ratingBgX = cardLeftX - 8;
@@ -145,7 +284,8 @@ class ProfileOverlayScene extends Phaser.Scene {
     const ensureRatingTexture = () => {
       if (this.textures.exists("ratingdigits")) return Promise.resolve();
       return new Promise((resolve) => {
-        this.load.spritesheet("ratingdigits", "img/ratingnumbers.png", { frameWidth: 102, frameHeight: 102 });
+        // Sprite sheet is 1150x115 with 10 digits => 115x115 per frame
+        this.load.spritesheet("ratingdigits", "img/ratingnumbers.png", { frameWidth: 115, frameHeight: 115 });
         this.load.once(Phaser.Loader.Events.COMPLETE, resolve);
         this.load.start();
       });
@@ -160,6 +300,8 @@ class ProfileOverlayScene extends Phaser.Scene {
       }
       this.ratingDigitsReady = true;
       this.updateRatingDigits(this.ratingString, this.colorForRating(this.userDoc?.rating?.value));
+       // Also render tooltip rating sprites once texture is ready
+      this.updateTooltipRatingDigits(this.ratingString, this.colorForRating(this.userDoc?.rating?.value));
     });
 
     this.buildTooltip(baseDepth + 2, cardWidth);
@@ -189,6 +331,18 @@ class ProfileOverlayScene extends Phaser.Scene {
       e.target.value = "";
     });
     document.body.appendChild(this.hiddenFileInput);
+
+    // Hidden file input for banner change
+    this.hiddenBannerInput = document.createElement("input");
+    this.hiddenBannerInput.type = "file";
+    this.hiddenBannerInput.accept = "image/*";
+    this.hiddenBannerInput.style.display = "none";
+    this.hiddenBannerInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (file) this.handleBannerFile(file);
+      e.target.value = "";
+    });
+    document.body.appendChild(this.hiddenBannerInput);
 
     this.scale.on("resize", (gameSize) => this.onResize(gameSize));
     this.onResize({ width, height: this.cameras.main.height });
@@ -231,8 +385,8 @@ class ProfileOverlayScene extends Phaser.Scene {
     const uploader = FC?.updateAvatarFromFile;
     if (!uploader) return;
     try {
-      await uploader(auth.currentUser, file);
-      this.updateAvatar(file);
+      const url = await uploader(auth.currentUser, file);
+      this.updateAvatar(url);
     } catch (e) {
       console.warn("Avatar upload failed", e);
     }
@@ -258,8 +412,65 @@ class ProfileOverlayScene extends Phaser.Scene {
     const password = prompt("Password:");
     if (!email || !password) return;
     FC.signInWithEmailPassword?.(email, password).catch((err) => {
-      alert(`Login failed: ${err?.message || err}`);
+      alert("Unable to update name right now.");
     });
+  }
+
+  showNameTooltip(x, y) {
+    if (!this.nameTooltip) return;
+    this.nameTooltip.setPosition(x, y).setVisible(true);
+  }
+
+  hideNameTooltip() {
+    if (!this.nameTooltip) return;
+    this.nameTooltip.setVisible(false);
+  }
+
+  async handleNameChange(forcedName, password, statusText) {
+    const FC = window.FirebaseClient;
+    const auth = FC?.getAuth?.();
+    const user = auth?.currentUser;
+    if (!user) {
+      this.promptLogin();
+      return;
+    }
+    const now = Date.now();
+    const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+    if (this.lastNameChangeAt && now - this.lastNameChangeAt < cooldownMs) {
+      const remainingDays = Math.ceil((cooldownMs - (now - this.lastNameChangeAt)) / (24 * 60 * 60 * 1000));
+      statusText ? statusText.setText(`Change allowed in ${remainingDays} day(s)`) : alert(`You can change your name again in ${remainingDays} day(s).`);
+      return false;
+    }
+    const newName = forcedName ?? prompt("Enter new display name (3-20 chars):", user.displayName || "");
+    if (!newName) return false;
+    const trimmed = newName.trim();
+    if (trimmed.length < 3 || trimmed.length > 20) {
+      statusText ? statusText.setText("Name must be 3-20 characters") : alert("Name must be 3-20 characters.");
+      return false;
+    }
+    try {
+      // Optional reauth if password provided
+      if (password && FC?.reauthWithPassword) {
+        await FC.reauthWithPassword(user, password);
+      }
+      if (typeof user.updateProfile === "function") {
+        await user.updateProfile({ displayName: trimmed });
+      } else if (FC?.updateDisplayName) {
+        await FC.updateDisplayName(user, trimmed);
+      }
+      this.lastNameChangeAt = now;
+      this.renderTexts();
+      // Optionally write timestamp to Firestore if available
+      if (FC?.updateUserProfileDoc) {
+        FC.updateUserProfileDoc(user.uid, { lastNameChangeAt: new Date(now).toISOString(), profile: { displayName: trimmed } }).catch(() => {});
+      }
+      statusText ? statusText.setText("Updated") : null;
+      return true;
+    } catch (e) {
+      console.warn("Name update failed", e);
+      statusText ? statusText.setText("Unable to update") : alert("Unable to update name right now.");
+      return false;
+    }
   }
 
   onResize(gameSize) {
@@ -294,14 +505,21 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.fallbackCache?.rating?.value;
     const ratingText = ratingVal != null ? Math.round(ratingVal).toString() : "—";
     const ratingColor = ratingVal != null ? this.colorForRating(ratingVal) : "#bbbbbb";
+    const rankVal = this.userDoc?.rating?.absoluteRank ?? this.userDoc?.rating?.rank ?? null;
+    const bannerUrl = this.userDoc?.profile?.bannerUrl || this.currentBannerUrl;
     this.nameText?.setText(name);
     this.ratingString = ratingText;
     this.ratingColor = ratingColor;
     this.updateRatingDigits(this.ratingString, this.ratingColor);
+    this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
+    if (this.tooltipRankText) {
+      this.tooltipRankText.setText(rankVal != null ? `#${rankVal}` : "#-");
+    }
     if (this.tooltipBodyName) this.tooltipBodyName.setText(name);
     if (this.tooltipBodyRating) this.tooltipBodyRating.setText(`Rating: ${ratingText}`);
     const avatarUrl = this.currentUser?.photoURL || this.userDoc?.profile?.photoURL || this.userDoc?.profile?.avatarUrl;
     this.updateAvatar(avatarUrl);
+    if (bannerUrl) this.updateBanner(bannerUrl);
   }
 
   loadFallbackCache() {
@@ -319,10 +537,12 @@ class ProfileOverlayScene extends Phaser.Scene {
     if (!show && this.tooltipVisible) {
       this.hideTooltip();
     }
-    [this.card, this.nameText, this.avatarCircle, this.tooltip, this.tooltipDim].forEach((obj) => {
+    [this.card, this.nameText, this.avatarCircle, this.avatarImage, this.tooltip, this.tooltipDim].forEach((obj) => {
       if (obj) obj.setVisible(show && (obj !== this.tooltip && obj !== this.tooltipDim ? true : this.tooltipVisible));
     });
-    this.setRatingVisible(show && this.tooltipVisible ? this.tooltipVisible : show);
+    // Hide rating while tooltip is open so the grey backdrop sits above it
+    // Keep rating visible on card even when tooltip is open
+    this.setRatingVisible(show);
     if (this.card && this.card.input && this.card.input.enabled && this.input?.activePointer?.isDown) {
       // noop to keep pointer active
     }
@@ -332,10 +552,15 @@ class ProfileOverlayScene extends Phaser.Scene {
     const x = this.game.scale.width - this.cardMargin - 24;
     const y = this.cardMargin + this.cardHeight / 2;
     const size = this.avatarSize;
+    const cachedKey = url ? this.avatarCache[url] : null;
     const setTooltipAvatar = (textureKey) => {
       if (this.tooltipAvatarImage) {
         this.tooltipAvatarImage.destroy();
         this.tooltipAvatarImage = null;
+      }
+      if (this.tooltipAvatarMask) {
+        this.tooltipAvatarMask.destroy();
+        this.tooltipAvatarMask = null;
       }
       if (textureKey && this.tooltip) {
         this.tooltipAvatarImage = this.add
@@ -344,10 +569,15 @@ class ProfileOverlayScene extends Phaser.Scene {
           .setOrigin(0.5)
           .setDepth(this.tooltip.depth + 1)
           .setScrollFactor(0);
-        this.tooltipAvatarCircle?.setVisible(false);
-      } else {
-        this.tooltipAvatarCircle?.setVisible(true);
+        this.tooltip.add(this.tooltipAvatarImage);
+        // Circular mask for tooltip avatar
+        const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+        maskGfx.fillStyle(0xffffff);
+        maskGfx.fillCircle(this.tooltipAvatarCircle.x, this.tooltipAvatarCircle.y, this.tooltipAvatarCircle.radius);
+        this.tooltipAvatarMask = maskGfx.createGeometryMask();
+        this.tooltipAvatarImage.setMask(this.tooltipAvatarMask);
       }
+      this.tooltipAvatarCircle?.setVisible(!textureKey);
     };
 
     if (!url) {
@@ -355,13 +585,15 @@ class ProfileOverlayScene extends Phaser.Scene {
         this.avatarImage.destroy();
         this.avatarImage = null;
       }
+      if (this.avatarMask) {
+        this.avatarMask.destroy();
+        this.avatarMask = null;
+      }
       this.avatarCircle?.setVisible(true);
       setTooltipAvatar(null);
       return;
     }
-    const key = `avatar_${Date.now()}`;
-    this.load.image(key, url);
-    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+    const useTexture = (key) => {
       if (this.avatarImage) this.avatarImage.destroy();
       this.avatarImage = this.add
         .image(x, y, key)
@@ -369,8 +601,28 @@ class ProfileOverlayScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(this.baseDepth + 1);
+      // Circular mask for card avatar
+      if (this.avatarMask) {
+        this.avatarMask.destroy();
+        this.avatarMask = null;
+      }
+      const maskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+      maskGfx.fillStyle(0xffffff);
+      maskGfx.fillCircle(x, y, size / 2);
+      this.avatarMask = maskGfx.createGeometryMask();
+      this.avatarImage.setMask(this.avatarMask);
       this.avatarCircle?.setVisible(false);
       setTooltipAvatar(key);
+    };
+    if (cachedKey && this.textures.exists(cachedKey)) {
+      useTexture(cachedKey);
+      return;
+    }
+    const key = `avatar_${Date.now()}`;
+    this.load.image(key, url);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.avatarCache[url] = key;
+      useTexture(key);
     });
     this.load.start();
   }
@@ -380,7 +632,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     const dim = this.add
       .rectangle(cam.width / 2, cam.height / 2, cam.width, cam.height, 0x000000, 0.65)
       .setScrollFactor(0)
-      .setDepth(depth - 1)
+      .setDepth(depth - 0.5) // above card/avatar, below modal
       .setVisible(false)
       .setInteractive();
 
@@ -393,38 +645,123 @@ class ProfileOverlayScene extends Phaser.Scene {
       fontSize: "18px",
       color: "#ffffff",
     }).setOrigin(0, 0);
+    // Banner background (under text but above modal bg)
+    this.tooltipBannerRect = this.add
+      .rectangle(0, -modalH / 2 + this.bannerHeight / 2 + 8, modalW - 16, this.bannerHeight, 0x222222, 0.6)
+      .setOrigin(0.5)
+      .setDepth(depth + 0.2);
+    this.tooltipBannerImage = null;
+
     const avatarR = 26;
     this.tooltipAvatarCircle = this.add
       .circle(-modalW / 2 + 16 + avatarR, -modalH / 2 + 44 + avatarR, avatarR, 0x777777, 1)
-      .setStrokeStyle(1, 0xaaaaaa)
+      .setStrokeStyle(1, 0xaaaaaa);
+    const closeBtn = this.add
+      .text(modalW / 2 - 12, -modalH / 2 + 12, "[X]", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "14px",
+        color: "#ff9999",
+      })
+      .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
-      .on("pointerup", () => this.handleAvatarChange());
+      .on("pointerup", () => this.hideTooltip());
     this.tooltipBodyName = this.add.text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 44, "Guest", {
       fontFamily: "Courier New, monospace",
       fontSize: "16px",
       color: "#ffffff",
-    }).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on("pointerup", () => this.handleNameChange());
-    this.tooltipBodyRating = this.add.text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 68, "Rating: —", {
-      fontFamily: "Courier New, monospace",
-      fontSize: "14px",
-      color: "#bbbbbb",
     }).setOrigin(0, 0);
-
-    // Placeholder best scores grouped rows
-    this.tooltipBodyGroups = [];
-    const groupYStart = -modalH / 2 + 110;
-    const groupLineHeight = 22;
-    for (let i = 0; i < 6; i++) {
-      const t = this.add.text(-modalW / 2 + 16, groupYStart + i * groupLineHeight, "", {
+    this.tooltipBodyRating = this.add
+      .text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 68, "Rating: —", {
         fontFamily: "Courier New, monospace",
-        fontSize: "13px",
-        color: "#cfcfcf",
-      }).setOrigin(0, 0);
-      this.tooltipBodyGroups.push(t);
-      container.add(t);
-    }
+        fontSize: "14px",
+        color: "#bbbbbb",
+      })
+      .setOrigin(0, 0);
+    this.tooltipRatingPos = {
+      x: -modalW / 2 + 16 + avatarR * 2 + 10,
+      y: -modalH / 2 + 86,
+    };
+    const buttonRowY = -modalH / 2 + 12;
+    const buttonYOffset = 10;
+    const makeHeaderButton = (label, x, color, handler, customY) => {
+      const paddingX = 8;
+      const paddingY = 8;
+      const txt = this.add
+        .text(0, 0, label, {
+          fontFamily: "Courier New, monospace",
+          fontSize: "16px",
+          color,
+        })
+        .setOrigin(0.5);
+      const bg = this.add
+        .rectangle(0, 0, txt.width + paddingX * 2, txt.height + paddingY * 2, 0x111111, 0.9)
+        .setStrokeStyle(1, 0x666666)
+        .setOrigin(0.5);
+      const container = this.add
+        .container(x, (customY ?? (buttonRowY + txt.height / 2 + buttonYOffset)) + (customY ? buttonYOffset : 0), [bg, txt])
+        .setDepth(this.baseDepth + 2)
+        .setScrollFactor(0)
+        .setSize(bg.width, bg.height)
+        .setInteractive(new Phaser.Geom.Rectangle(-bg.width / 2, -bg.height / 2, bg.width, bg.height), Phaser.Geom.Rectangle.Contains)
+        .on("pointerup", handler)
+        .on("pointerover", () => bg.setStrokeStyle(1, 0xffffff))
+        .on("pointerout", () => bg.setStrokeStyle(1, 0x666666));
+      if (container.input) container.input.cursor = "pointer";
+      return { container, bg, txt };
+    };
 
-    container.add([bg, title, this.tooltipAvatarCircle, this.tooltipBodyName, this.tooltipBodyRating]);
+    const buttons = [];
+    const avatarBtn = makeHeaderButton("Avatar", modalW / 2 - 280, "#7cc7ff", () => this.handleAvatarChange());
+    const nameBtn = makeHeaderButton("Name", modalW / 2 - 170, "#c3ff7c", () => this.showNameChangeModal());
+    const bannerBtn = makeHeaderButton("Banner", modalW / 2 - 110, "#ffcc7c", () => this.handleBannerChange());
+    const signOutBtn = makeHeaderButton("Sign Out", modalW / 2 - 16 - 70, "#ff9999", () => this.handleSignOut(), modalH / 2 - 26);
+    const gap = 10;
+    const positionHeaderButtons = () => {
+      const bannerX = modalW / 2 - 110;
+      const { width: bannerW } = bannerBtn.bg;
+      const { width: signW } = signOutBtn.bg;
+      const { width: nameW } = nameBtn.bg;
+      const { width: avatarW } = avatarBtn.bg;
+      bannerBtn.container.setX(bannerX);
+      signOutBtn.container.setX(bannerX + bannerW / 2 + gap + signW / 2);
+      nameBtn.container.setX(bannerX - (bannerW / 2 + gap + nameW / 2));
+      avatarBtn.container.setX(nameBtn.container.x - (nameW / 2 + gap + avatarW / 2));
+      signOutBtn.container.setY(signOutBtn.container.y - 5);
+    };
+    positionHeaderButtons();
+    this.tooltipAvatarButton = avatarBtn.container;
+    this.tooltipNameButton = nameBtn.container;
+    this.tooltipBannerButton = bannerBtn.container;
+    this.tooltipSignOutButton = signOutBtn.container;
+    buttons.push(avatarBtn.container, nameBtn.container, bannerBtn.container, signOutBtn.container);
+
+    this.tooltipRankText = this.add
+      .text(modalW / 2 - 16, -modalH / 2 + 16, "#-", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "40px",
+        color: "#ffffff",
+      })
+      .setOrigin(1, 0);
+
+    // Best score cards container (above tooltip background)
+    this.bestRowsContainer = this.add
+      .container(cam.width / 2, cam.height / 2)
+      .setDepth(this.baseDepth + 1200)
+      .setVisible(false)
+      .setScrollFactor(0);
+
+    container.add([
+      bg,
+      this.tooltipBannerRect,
+      title,
+      this.tooltipAvatarCircle,
+      closeBtn,
+      this.tooltipBodyName,
+      this.tooltipBodyRating,
+      ...buttons,
+      this.tooltipRankText,
+    ]);
+    this.tooltipBg = bg;
     this.tooltipDim = dim;
     this.tooltip = container;
   }
@@ -433,15 +770,28 @@ class ProfileOverlayScene extends Phaser.Scene {
     if (!this.tooltip || !this.tooltipDim) return;
     const modalW = width * 0.75;
     const modalH = height * 0.75;
+    const centerX = width / 2;
+    const centerY = height / 2;
     this.tooltipDim.setPosition(width / 2, height / 2).setSize(width, height);
     this.tooltip.setPosition(width / 2, height / 2);
-    const bg = this.tooltip.list?.find((c) => c.width === this.tooltip.list[0].width); // first child is bg
+    const bg = this.tooltipBg;
     if (bg) {
       bg.setSize(modalW, modalH);
       bg.setPosition(0, 0);
     }
     const offsetX = -modalW / 2 + 16;
     const offsetY = -modalH / 2 + 16;
+    if (this.tooltipBannerRect) {
+      this.tooltipBannerRect
+        .setSize(modalW - 16, this.bannerHeight)
+        .setPosition(0, -modalH / 2 + this.bannerHeight / 2 + 8);
+    }
+    if (this.tooltipBannerImage) {
+      const w = modalW - 16;
+      const h = this.bannerHeight;
+      const y = -modalH / 2 + h / 2 + 8;
+      this.tooltipBannerImage.setDisplaySize(w, h).setPosition(0, y);
+    }
     const avatarR = this.tooltipAvatarCircle?.radius || 26;
     if (this.tooltipAvatarCircle) {
       this.tooltipAvatarCircle.setPosition(offsetX + avatarR, offsetY + 28 + avatarR);
@@ -450,22 +800,55 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.tooltipAvatarImage.setPosition(offsetX + avatarR, offsetY + 28 + avatarR);
     }
     this.tooltipBodyName?.setPosition(offsetX + avatarR * 2 + 10, offsetY + 28);
-    this.tooltipBodyRating?.setPosition(offsetX + avatarR * 2 + 10, offsetY + 52);
-    const groupYStart = offsetY + 94;
-    this.tooltipBodyGroups?.forEach((t, idx) => t.setPosition(offsetX, groupYStart + idx * 22));
+    if (this.tooltipBodyRating) this.tooltipBodyRating?.setPosition(offsetX + avatarR * 2 + 10, offsetY + 52);
+    if (this.tooltipRankText) {
+      this.tooltipRankText.setPosition(offsetX + modalW - 32, offsetY + 16);
+    }
+    const ratingBaseX = offsetX + avatarR * 2 + 10; // align left with name
+    this.tooltipRatingPos = {
+      x: centerX + ratingBaseX,
+      y: centerY + offsetY + 46, // move up by 20px
+    };
+    this.tooltipRatingLocalPos = {
+      x: ratingBaseX,
+      y: offsetY + 46, // move up by 20px
+    };
+    // Re-render tooltip rating digits at new position
+    this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
+    if (this.bestRowsContainer) {
+      this.bestRowsContainer.setPosition(width / 2, height / 2);
+      this.bestRowsLayout = {
+        startX: -modalW / 2 + 16,
+        startY: offsetY + 120,
+        cardW: 200,
+        cardH: 72,
+        gapX: 14,
+        rowGap: 90,
+      };
+    }
   }
 
   toggleTooltip() {
     this.tooltipVisible = !this.tooltipVisible;
     if (this.tooltip) this.tooltip.setVisible(this.tooltipVisible);
     if (this.tooltipDim) this.tooltipDim.setVisible(this.tooltipVisible);
-    if (this.tooltipVisible) this.populateTooltipBestScores();
+    if (this.bestRowsContainer) this.bestRowsContainer.setVisible(this.tooltipVisible);
+    this.tooltipBodyGroups?.forEach((t) => t.setVisible(this.tooltipVisible));
+    this.setTooltipRatingVisible(this.tooltipVisible);
+    if (this.tooltipVisible) {
+      this.layoutTooltip(this.scale.width, this.scale.height);
+      this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
+      this.populateTooltipBestScores();
+    }
   }
 
   hideTooltip() {
     this.tooltipVisible = false;
     if (this.tooltip) this.tooltip.setVisible(false);
     if (this.tooltipDim) this.tooltipDim.setVisible(false);
+    if (this.bestRowsContainer) this.bestRowsContainer.setVisible(false);
+    this.tooltipBodyGroups?.forEach((t) => t.setVisible(false));
+    this.setTooltipRatingVisible(false);
   }
 
   registerInputHandlers() {
@@ -480,55 +863,259 @@ class ProfileOverlayScene extends Phaser.Scene {
         this.toggleTooltip();
       }
     });
-    this.tooltipDim?.on("pointerup", () => {
-      if (this.tooltipVisible) this.hideTooltip();
-    });
-    this.input?.on("pointerdown", (pointer, currentlyOver) => {
-      if (!this.tooltipVisible) return;
-      const overTooltip = currentlyOver?.some?.((obj) => obj === this.tooltip || obj === this.card || this.tooltip?.contains?.(obj));
-      if (!overTooltip) {
-        this.hideTooltip();
+    // Disable outside click to close; only [X] closes now
+    this.tooltipDim?.setInteractive();
+  }
+
+  showNameChangeModal() {
+    if (!this.currentUser) {
+      this.promptLogin();
+      return;
+    }
+    this.destroyNameChangeModal();
+    const cam = this.cameras.main;
+    const w = 300;
+    const h = 170;
+    const overlay = this.add
+      .rectangle(cam.width / 2, cam.height / 2, cam.width, cam.height, 0x000000, 0.65)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 50)
+      .setVisible(true)
+      .setInteractive();
+    const bg = this.add
+      .rectangle(cam.width / 2, cam.height / 2, w, h, 0x111111, 0.95)
+      .setStrokeStyle(1, 0x666666)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 51)
+      .setVisible(true);
+    const title = this.add
+      .text(bg.x, bg.y - h / 2 + 12, "Change Name", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "14px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 52);
+    const name = this.add.dom(bg.x, bg.y - 20, "input", "width:240px;height:24px;font-size:13px;", this.currentUser?.displayName || "");
+    name.node.placeholder = "New display name (3-20)";
+    name.node.maxLength = 20;
+    name.node.tabIndex = 1;
+    const password = this.add.dom(bg.x, bg.y + 10, "input", "width:240px;height:24px;font-size:13px;", "");
+    password.node.type = "password";
+    password.node.placeholder = "Password (for verification)";
+    password.node.tabIndex = 2;
+    const status = this.add
+      .text(bg.x, bg.y + 55, "", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "12px",
+        color: "#ffcccc",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 52);
+    const saveBtn = this.add
+      .text(bg.x - 60, bg.y + 35, "[Save]", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "12px",
+        color: "#c3ff7c",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 52)
+      .setInteractive({ useHandCursor: true });
+    const cancelBtn = this.add
+      .text(bg.x + 60, bg.y + 35, "[Cancel]", {
+        fontFamily: "Courier New, monospace",
+        fontSize: "12px",
+        color: "#ff9999",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(this.baseDepth + 52)
+      .setInteractive({ useHandCursor: true });
+
+    const hideModal = () => {
+      this.destroyNameChangeModal();
+    };
+
+    saveBtn.on("pointerup", async () => {
+      const newName = name.node.value.trim();
+      const pwd = password.node.value;
+      if (newName.length < 3 || newName.length > 20) {
+        status.setText("Name must be 3-20 chars");
+        return;
       }
+      if (!pwd) {
+        status.setText("Password required");
+        return;
+      }
+      status.setText("Updating...");
+      const result = await this.handleNameChange(newName, pwd, status);
+      if (result) hideModal();
     });
+    cancelBtn.on("pointerup", () => hideModal());
+    overlay.on("pointerup", () => hideModal());
+
+    this.nameChangeModal = { overlay, bg, title, name, password, status, saveBtn, cancelBtn };
+  }
+
+  destroyNameChangeModal() {
+    if (!this.nameChangeModal) return;
+    const { overlay, bg, title, status, saveBtn, cancelBtn, name, password } = this.nameChangeModal;
+    [overlay, bg, title, status, saveBtn, cancelBtn].forEach((o) => o?.destroy?.());
+    [name, password].forEach((dom) => dom?.destroy?.());
+    this.nameChangeModal = null;
   }
 
   populateTooltipBestScores() {
     const groups = [
-      { title: "Sprint", keys: ["sprint_40", "sprint_100"] },
-      { title: "Marathon", keys: ["marathon", "ultra"] },
-      { title: "Master", keys: ["tgm1", "tgm2_master", "tgm2_normal", "tgm3_master", "ta_death", "tgm3_shirase"] },
-      { title: "Versus", keys: ["vs_standard"] },
-      { title: "Others", keys: ["zen", "sakura"] },
+      { title: "Easy", keys: ["tgm2_normal", "tgm3_easy"] },
+      { title: "Standard", keys: ["marathon", "ultra", "sprint_40", "sprint_100"] },
+      { title: "Master", keys: ["tgm1", "tgm2_master", "tgm3", "tgm_plus", "tgm4"] },
+      { title: "20G", keys: ["20g", "ta_death", "shirase", "master20g"] },
+      { title: "Race", keys: ["asuka_easy", "asuka", "asuka_hard"] },
     ];
-    const best = this.userDoc?.bestScores || this.userDoc?.modes || {};
-    const lines = [];
-    groups.forEach((g) => {
-      const entries = g.keys
-        .map((k) => (best[k] ? `${k}: ${this.formatScore(best[k])}` : null))
-        .filter(Boolean);
-      if (entries.length) {
-        lines.push(`${g.title}: ${entries.join("  |  ")}`);
-      }
+    const best =
+      this.userDoc?.scores ||
+      this.userDoc?.bestScores ||
+      this.userDoc?.modes ||
+      this.fallbackCache?.scores ||
+      {};
+    const typeColor = {
+      Easy: "#00ff00",
+      Standard: "#0088ff",
+      Master: "#888888",
+      "20G": "#ff0000",
+      Race: "#ff8800",
+    };
+    console.info("[Profile] Populating best plays", {
+      source: this.userDoc?.bestScores ? "bestScores" : this.userDoc?.modes ? "modes" : "fallback",
+      modes: Object.keys(best),
     });
-    while (lines.length < this.tooltipBodyGroups.length) lines.push("");
-    this.tooltipBodyGroups.forEach((t, idx) => t.setText(lines[idx] || ""));
+    // Clear previous cards
+    if (this.bestRowItems?.length) {
+      this.bestRowItems.forEach((c) => c?.destroy?.());
+    }
+    this.bestRowItems = [];
+    const { startX, startY, cardW, cardH, gapX, rowGap } = this.bestRowsLayout || {};
+    groups.forEach((g, rowIdx) => {
+      const rowY = (startY || 0) + rowIdx * (rowGap || 90);
+      const label = this.add.text((startX || 0), rowY, g.title.toUpperCase(), {
+        fontFamily: "Courier New, monospace",
+        fontSize: "13px",
+        color: typeColor[g.title] || "#ffffff",
+      }).setOrigin(0, 0).setScrollFactor(0).setDepth(this.baseDepth + 1205);
+      this.bestRowsContainer.add(label);
+      this.bestRowItems.push(label);
+      g.keys.forEach((k, idx) => {
+        const entry = best[k];
+        const x = (startX || 0) + 120 + idx * ((cardW || 200) + (gapX || 14));
+        const card = this.add.container(x, rowY).setScrollFactor(0).setDepth(this.baseDepth + 1205);
+        const bg = this.add
+          .rectangle(0, 0, cardW || 200, cardH || 72, 0x222222, 0.9)
+          .setOrigin(0, 0)
+          .setStrokeStyle(1, 0x555555);
+        const displayName = this.formatModeName(k);
+        const line1 = this.add.text(8, 6, `[${displayName}]  Rank: ${entry?.rank ?? entry?.position ?? "—"}`, {
+          fontFamily: "Courier New, monospace",
+          fontSize: "12px",
+          color: typeColor[g.title] || "#ffffff",
+        }).setOrigin(0, 0);
+        const main = this.formatScore(entry, k);
+        const line2 = this.add.text(8, 24, `Best: ${main}`, {
+          fontFamily: "Courier New, monospace",
+          fontSize: "12px",
+          color: "#cfcfcf",
+        }).setOrigin(0, 0);
+        const timeVal = entry?.timeSeconds != null ? this.formatTime(entry.timeSeconds) : "—";
+        const scoreVal = entry?.score != null ? `${entry.score}` : "—";
+        const line3 = this.add.text(8, 42, `Time: ${timeVal}    Score: ${scoreVal}`, {
+          fontFamily: "Courier New, monospace",
+          fontSize: "12px",
+          color: "#aaaaaa",
+        }).setOrigin(0, 0);
+        card.add([bg, line1, line2, line3]);
+        this.bestRowsContainer.add(card);
+        this.bestRowItems.push(card);
+      });
+    });
   }
 
-  formatScore(entry) {
+  formatModeName(modeId) {
+    if (!modeId) return "—";
+    const raw = String(modeId).toLowerCase();
+    const special = {
+      tgm: "TGM",
+      "tgm1": "TGM",
+      "tgm2_master": "TGM2 Master",
+      "tgm2_normal": "TGM2 Normal",
+      "tgm3": "TGM3",
+      "tgm3_easy": "TGM3 Easy",
+      "tgm_plus": "TGM+",
+      "tgm4": "TGM4",
+      "20g": "20G",
+      ta_death: "T.A.Death",
+      "tgm3_shirase": "Shirase",
+      master20g: "Master",
+      sprint_40: "40L",
+      sprint_100: "100L",
+    };
+    if (special[raw]) return special[raw];
+    return String(modeId)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  formatModeBlockShort(modeId, entry) {
+    const rank = entry?.rank ?? entry?.position ?? "—";
+    const main = this.formatScore(entry, modeId);
+    const timeVal = entry?.timeSeconds != null ? this.formatTime(entry.timeSeconds) : "—";
+    const scoreVal = entry?.score != null ? `${entry.score}` : "—";
+    return `[${modeId}] Rank:${rank} | ${main} | T:${timeVal} S:${scoreVal}`;
+  }
+
+  formatModeBlock(modeId, entry) {
+    const rank = entry?.rank ?? entry?.position ?? "—";
+    const main = this.formatScore(entry, modeId);
+    const timeVal = entry?.timeSeconds != null ? this.formatTime(entry.timeSeconds) : "—";
+    const scoreVal = entry?.score != null ? `${entry.score}` : "—";
+    const left = `[${modeId}]`.padEnd(12, " ");
+    const mid = `Rank: ${rank}`.padEnd(12, " ");
+    const mainLine = `${left}${mid}${main}`;
+    const subLine = `Time: ${timeVal}    Score: ${scoreVal}`;
+    return `${mainLine}\n${subLine}\n`;
+  }
+
+  formatTime(sec) {
+    const s = Math.max(0, sec || 0);
+    const mm = Math.floor(s / 60)
+      .toString()
+      .padStart(2, "0");
+    const ss = Math.floor(s % 60)
+      .toString()
+      .padStart(2, "0");
+    const cs = Math.floor((s % 1) * 100)
+      .toString()
+      .padStart(2, "0");
+    return `${mm}:${ss}.${cs}`;
+  }
+
+  formatScore(entry, modeId) {
     if (!entry) return "—";
-    if (typeof entry === "number") return entry.toString();
-    if (entry.timeSeconds != null) {
-      const sec = Math.max(0, entry.timeSeconds);
-      const mm = Math.floor(sec / 60)
-        .toString()
-        .padStart(2, "0");
-      const ss = Math.floor(sec % 60)
-        .toString()
-        .padStart(2, "0");
-      return `${mm}:${ss}`;
-    }
-    if (entry.score != null) return `${entry.score}`;
+    const cfg = window.RatingEngine?.MODE_TARGETS?.[modeId];
+    const type = cfg?.type;
+    if (type === "time" && entry.timeSeconds != null) return this.formatTime(entry.timeSeconds);
+    if ((type === "grade" || type === "grade_ext") && entry.grade != null) return `${entry.grade}`;
+    if (type === "level" && (entry.level != null || entry.lines != null)) return `${entry.level ?? entry.lines}`;
+    if (type === "hanabi" && entry.hanabi != null) return `${entry.hanabi}`;
+    if (type === "score" && entry.score != null) return `${entry.score}`;
+    // fallbacks
+    if (entry.timeSeconds != null) return this.formatTime(entry.timeSeconds);
     if (entry.grade != null) return `${entry.grade}`;
+    if (entry.level != null) return `${entry.level}`;
+    if (entry.score != null) return `${entry.score}`;
+    if (typeof entry === "number") return entry.toString();
     return JSON.stringify(entry);
   }
 

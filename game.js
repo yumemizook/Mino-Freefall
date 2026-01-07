@@ -12467,6 +12467,29 @@ class GameScene extends Phaser.Scene {
       this.level = maxLevel;
     }
 
+    // Keep TGM3 internal level in sync with visible level (respecting stops)
+    if (
+      this.gameMode &&
+      typeof this.gameMode.getModeId === "function" &&
+      (this.gameMode.getModeId() === "tgm3_master" || this.gameMode.getModeId() === "tgm3")
+    ) {
+      const cool = typeof this.gameMode.coolBonus === "number" ? this.gameMode.coolBonus : 0;
+      const prevInternal =
+        this.gameMode && typeof this.gameMode.internalLevel === "number"
+          ? this.gameMode.internalLevel
+          : 0;
+      const atStopNow =
+        !isExemptStopMode && this.level % 100 === 99 && !this.creditsActive && !this.creditsPending;
+      const targetInternal = this.level + cool;
+      // At stop levels, keep the higher of previous internal (with COOL) or current target to avoid dropping
+      this.gameMode.internalLevel = atStopNow
+        ? Math.max(prevInternal, targetInternal)
+        : targetInternal;
+      if (typeof this.gameMode.updateTimingPhase === "function") {
+        this.gameMode.updateTimingPhase(this.gameMode.internalLevel);
+      }
+    }
+
     // Refresh mode-driven timings (e.g., Shirase level-based tables) when no user override is active
     this.refreshModeTimingsForCurrentLevel();
 

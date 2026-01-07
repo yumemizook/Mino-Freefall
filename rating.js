@@ -4,15 +4,15 @@
     ultra: { weight: 1.0, targetScore: 100000, type: "score", cap: 600 },
     sprint_40: { weight: 1.2, targetTime: 60, type: "time", cap: 700, targetLines: 40 },
     sprint_100: { weight: 1.2, targetTime: 150, type: "time", cap: 1000, targetLines: 100 },
-    "20g": { weight: 1.4, targetScore: 600000, type: "score", cap: 900 },
+    "20g": { weight: 1.4, targetGrade: "GM", type: "grade", cap: 1100 },
     tgm1: { weight: 1.2, targetGrade: "GM", type: "grade", cap: 900 },
-    tgm2_master: { weight: 1.5, targetGrade: "GM", type: "grade", cap: 1100 },
+    tgm2_master: { weight: 1.5, targetGrade: "GM", type: "grade", cap: 1300 },
     tgm2_normal: { weight: 1.1, targetScore: 300000, type: "score", cap: 700 },
-    tgm3_easy: { weight: 1.1, targetHanabi: 700, type: "hanabi", cap: 1800 },
-    tgm3: { weight: 1.6, targetGrade: "GM", type: "grade_ext", cap: 1300 },
+    tgm3_easy: { weight: 1.1, targetHanabi: 700, type: "hanabi", cap: 800 },
+    tgm3: { weight: 1.6, targetGrade: "GM", type: "grade_ext", cap: 1500 },
     shirase: { weight: 2.0, targetLevel: 1300, type: "level", cap: 2500 },
     tgm_plus: { weight: 1.2, targetLevel: 999, type: "level", cap: 1200 },
-    tadeath: { weight: 1.6, targetLevel: 999, type: "level", cap: 1500 },
+    tadeath: { weight: 1.6, targetLevel: 999, type: "level", cap: 1800 },
   };
 
   const GRADE_ORDER = [
@@ -87,7 +87,7 @@
     } else if (cfg.type === "level") {
       const targetLevel = cfg.targetLevel || cfg.targetLines || 1;
       const currentLevel = entry?.level ?? entry?.lines ?? 0;
-      progress = targetLevel > 0 ? Math.min(1, currentLevel / targetLevel) : 0;
+      progress = targetLevel > 0 ? Math.max(0, currentLevel / targetLevel) : 0;
     } else if (cfg.type === "hanabi" && entry?.hanabi != null) {
       progress = Math.max(0, entry.hanabi) / cfg.targetHanabi;
     }
@@ -96,11 +96,20 @@
     return { value: capped * cfg.weight, cap: cfg.cap * cfg.weight, weight: cfg.weight };
   }
 
+  const MODE_ALIASES = {
+    tgm3_master: "tgm3",
+    tgm3_shirase: "shirase",
+    "t.a. death": "tadeath",
+    ta_death: "tadeath",
+    "tgm+": "tgm_plus",
+  };
+
   function computeRating(scores) {
     const breakdown = {};
     let total = 0;
     Object.entries(scores || {}).forEach(([modeId, entry]) => {
-      const res = computeModeValue(modeId, entry);
+      const key = MODE_ALIASES[modeId] || modeId;
+      const res = computeModeValue(key, entry);
       breakdown[modeId] = res.value;
       total += res.value;
     });

@@ -233,7 +233,10 @@ async function updateUserScoreAndRating(modeId, entry) {
   }
   if (!better) return;
 
-  const newScores = { ...scores, [modeId]: entry };
+  const cleanedEntry = Object.fromEntries(
+    Object.entries(entry).filter(([, v]) => v !== undefined)
+  );
+  const newScores = { ...scores, [modeId]: cleanedEntry };
   const { value, breakdown } = window.RatingEngine.computeRating(newScores);
 
   await docRef.set(
