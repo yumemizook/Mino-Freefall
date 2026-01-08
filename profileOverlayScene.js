@@ -65,6 +65,10 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.tooltipBannerImage.destroy();
       this.tooltipBannerImage = null;
     }
+    if (this.tooltipBannerOverlay) {
+      this.tooltipBannerOverlay.destroy();
+      this.tooltipBannerOverlay = null;
+    }
     if (!url) {
       if (this.tooltipBannerRect) this.tooltipBannerRect.setVisible(false);
       return;
@@ -76,13 +80,44 @@ class ProfileOverlayScene extends Phaser.Scene {
       const w = (this.tooltipBg?.width || this.cameras.main.width * 0.75) - 16;
       const h = this.bannerHeight;
       const y = -((this.tooltipBg?.height || this.cameras.main.height * 0.75) / 2) + h / 2 + 8;
+      
+      // Banner image (centered, no stretching)
       this.tooltipBannerImage = this.add
         .image(0, y, key)
         .setOrigin(0.5)
-        .setDisplaySize(w, h)
-        .setDepth((this.tooltip?.depth || this.baseDepth) + 0.3)
+        .setDepth((this.tooltip?.depth || this.baseDepth) + 0.1) // Behind all text elements
         .setScrollFactor(0);
+      
+      // Scale image to fit banner height while maintaining aspect ratio
+      const texture = this.textures.get(key);
+      if (texture && texture.source) {
+        const imgWidth = texture.source.width;
+        const imgHeight = texture.source.height;
+        const aspectRatio = imgWidth / imgHeight;
+        const displayHeight = h;
+        const displayWidth = displayHeight * aspectRatio;
+        
+        // If image is wider than container, scale to fit width
+        if (displayWidth > w) {
+          const scale = w / displayWidth;
+          this.tooltipBannerImage.setScale(scale);
+        } else {
+          this.tooltipBannerImage.setDisplaySize(displayWidth, displayHeight);
+        }
+      } else {
+        // Fallback: use display size but maintain aspect ratio
+        this.tooltipBannerImage.setDisplaySize(w, h);
+      }
+      
       this.tooltip.add(this.tooltipBannerImage);
+      
+      // Grey tint overlay above banner but below text
+      this.tooltipBannerOverlay = this.add
+        .rectangle(0, y, w, h, 0x000000, 0.3) // Semi-transparent black overlay
+        .setOrigin(0.5)
+        .setDepth((this.tooltip?.depth || this.baseDepth) + 0.2) // Still behind text elements
+        .setScrollFactor(0);
+      this.tooltip.add(this.tooltipBannerOverlay);
     };
     if (cachedKey && this.textures.exists(cachedKey)) {
       placeBanner(cachedKey);
@@ -399,7 +434,7 @@ class ProfileOverlayScene extends Phaser.Scene {
 
     this.nameText = this.add
       .text(cardLeftX + 12, margin + 10, "Guest", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "16px",
         color: "#ffffff",
         antialias: true,
@@ -459,7 +494,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     // Small helper tooltip for name change
     this.nameTooltip = this.add
       .text(cardLeftX + 12, margin - 6, "Change display name (7-day cooldown)", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "12px",
         color: "#c3ff7c",
         backgroundColor: "rgba(0,0,0,0.6)",
@@ -1015,7 +1050,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     const container = this.add.container(cam.width / 2, cam.height / 2).setDepth(depth).setVisible(false).setScrollFactor(0);
     const bg = this.add.rectangle(0, 0, modalW, modalH, 0x111111, 0.95).setOrigin(0.5).setStrokeStyle(1, 0x555555);
     const title = this.add.text(-modalW / 2 + 16, -modalH / 2 + 16, "Profile", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "18px",
       color: "#ffffff",
       antialias: true,
@@ -1025,16 +1060,20 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.tooltipBannerRect = this.add
       .rectangle(0, -modalH / 2 + this.bannerHeight / 2 + 8, modalW - 16, this.bannerHeight, 0x222222, 0.6)
       .setOrigin(0.5)
-      .setDepth(depth + 0.2);
+      .setDepth(depth + 0.05); // Very low depth, just above background
     this.tooltipBannerImage = null;
+    this.tooltipBannerOverlay = null;
 
+    // Position avatar, name, rating, and rank above the banner area
+    const aboveBannerY = -modalH / 2 + 8; // Move up higher (was 16)
     const avatarR = 26;
     this.tooltipAvatarCircle = this.add
-      .circle(-modalW / 2 + 16 + avatarR, -modalH / 2 + 44 + avatarR, avatarR, 0x777777, 1)
-      .setStrokeStyle(1, 0xaaaaaa);
+      .circle(-modalW / 2 + 16 + avatarR, aboveBannerY + avatarR, avatarR, 0x777777, 1)
+      .setStrokeStyle(1, 0xaaaaaa)
+      .setDepth(depth + 0.8); // High depth for text elements
     const closeBtn = this.add
       .text(modalW / 2 - 12, -modalH / 2 + 12, "[X]", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "14px",
         color: "#ff9999",
         antialias: true,
@@ -1043,25 +1082,43 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on("pointerup", () => this.hideTooltip());
-    this.tooltipBodyName = this.add.text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 44, "Guest", {
-      fontFamily: "Courier New, monospace",
-      fontSize: "16px",
+    // Rank text positioned at top right, above banner
+    this.tooltipRankText = this.add
+      .text(modalW / 2 - 16, aboveBannerY, "#-", {
+        fontFamily: "Hatsukoi Friends, monospace",
+        fontSize: "40px",
+        color: "#ffffff",
+        antialias: true,
+        smooth: false,
+      })
+      .setOrigin(1, 0)
+      .setDepth(depth + 0.8); // High depth for text elements
+      
+    // Name and rating positioned above banner, next to avatar
+    this.tooltipBodyName = this.add.text(-modalW / 2 + 16 + avatarR * 2 + 10, aboveBannerY, "Guest", {
+      fontFamily: "Hatsukoi Friends, monospace",
+      fontSize: "20px", // Increased from 16px
       color: "#ffffff",
       antialias: true,
       smooth: false,
-    }).setOrigin(0, 0);
+    }).setOrigin(0, 0)
+    .setDepth(depth + 0.8); // High depth for text elements
+    
     this.tooltipBodyRating = this.add
-      .text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 68, "Rating: —", {
-        fontFamily: "Courier New, monospace",
+      .text(-modalW / 2 + 16 + avatarR * 2 + 10, aboveBannerY + 28, "Rating: —", {
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "14px",
         color: "#bbbbbb",
         antialias: true,
         smooth: false,
       })
-      .setOrigin(0, 0);
+      .setOrigin(0, 0)
+      .setDepth(depth + 0.8); // High depth for text elements
+      
+    // Update rating position for digit display
     this.tooltipRatingPos = {
       x: -modalW / 2 + 16 + avatarR * 2 + 10,
-      y: -modalH / 2 + 86,
+      y: aboveBannerY + 28,
     };
     const buttonRowY = -modalH / 2 + 12;
     const buttonYOffset = 10;
@@ -1070,7 +1127,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       const paddingY = 8;
       const txt = this.add
         .text(0, 0, label, {
-          fontFamily: "Courier New, monospace",
+          fontFamily: "Hatsukoi Friends, monospace",
           fontSize: "16px",
           color,
           antialias: true,
@@ -1095,9 +1152,11 @@ class ProfileOverlayScene extends Phaser.Scene {
     };
 
     const buttons = [];
-    const avatarBtn = makeHeaderButton("Avatar", modalW / 2 - 280, "#7cc7ff", () => this.handleAvatarChange());
-    const nameBtn = makeHeaderButton("Name", modalW / 2 - 170, "#c3ff7c", () => this.showNameChangeModal());
-    const bannerBtn = makeHeaderButton("Banner", modalW / 2 - 110, "#ffcc7c", () => this.handleBannerChange());
+    // Position buttons below the banner area
+    const buttonY = -modalH / 2 + this.bannerHeight + 20;
+    const avatarBtn = makeHeaderButton("Avatar", modalW / 2 - 280, "#7cc7ff", () => this.handleAvatarChange(), buttonY);
+    const nameBtn = makeHeaderButton("Name", modalW / 2 - 170, "#c3ff7c", () => this.showNameChangeModal(), buttonY);
+    const bannerBtn = makeHeaderButton("Banner", modalW / 2 - 110, "#ffcc7c", () => this.handleBannerChange(), buttonY);
     const signOutBtn = makeHeaderButton("Sign Out", modalW / 2 - 16 - 70, "#ff9999", () => this.handleSignOut(), modalH / 2 - 26);
     const gap = 10;
     const positionHeaderButtons = () => {
@@ -1119,16 +1178,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.tooltipSignOutButton = signOutBtn.container;
     buttons.push(avatarBtn.container, nameBtn.container, bannerBtn.container, signOutBtn.container);
 
-    this.tooltipRankText = this.add
-      .text(modalW / 2 - 16, -modalH / 2 + 16, "#-", {
-        fontFamily: "Courier New, monospace",
-        fontSize: "40px",
-        color: "#ffffff",
-        antialias: true,
-        smooth: false,
-      })
-      .setOrigin(1, 0);
-
+    
     // Best score cards container (above tooltip background)
     this.bestRowsContainer = this.add
       .container(cam.width / 2, cam.height / 2)
@@ -1136,7 +1186,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setVisible(false)
       .setScrollFactor(0);
 
-    container.add([
+    const containerItems = [
       bg,
       this.tooltipBannerRect,
       title,
@@ -1146,7 +1196,13 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.tooltipBodyRating,
       ...buttons,
       this.tooltipRankText,
-    ]);
+    ];
+    
+    // Add banner image and overlay if they exist
+    if (this.tooltipBannerImage) containerItems.push(this.tooltipBannerImage);
+    if (this.tooltipBannerOverlay) containerItems.push(this.tooltipBannerOverlay);
+    
+    container.add(containerItems);
     this.tooltipBg = bg;
     this.tooltipDim = dim;
     this.tooltip = container;
@@ -1173,31 +1229,39 @@ class ProfileOverlayScene extends Phaser.Scene {
         .setPosition(0, -modalH / 2 + this.bannerHeight / 2 + 8);
     }
     if (this.tooltipBannerImage) {
+      const y = -modalH / 2 + this.bannerHeight / 2 + 8;
+      this.tooltipBannerImage.setPosition(0, y);
+      // Don't use setDisplaySize here as it's handled in updateBanner with proper aspect ratio
+    }
+    if (this.tooltipBannerOverlay) {
       const w = modalW - 16;
       const h = this.bannerHeight;
       const y = -modalH / 2 + h / 2 + 8;
-      this.tooltipBannerImage.setDisplaySize(w, h).setPosition(0, y);
+      this.tooltipBannerOverlay.setSize(w, h).setPosition(0, y);
     }
+    
+    // Update avatar, name, rating, and rank positioning (above banner)
+    const aboveBannerY = -modalH / 2 + 8; // Match the new position
     const avatarR = this.tooltipAvatarCircle?.radius || 26;
     if (this.tooltipAvatarCircle) {
-      this.tooltipAvatarCircle.setPosition(offsetX + avatarR, offsetY + 28 + avatarR);
+      this.tooltipAvatarCircle.setPosition(-modalW / 2 + 16 + avatarR, aboveBannerY + avatarR);
     }
     if (this.tooltipAvatarImage) {
-      this.tooltipAvatarImage.setPosition(offsetX + avatarR, offsetY + 28 + avatarR);
+      this.tooltipAvatarImage.setPosition(-modalW / 2 + 16 + avatarR, aboveBannerY + avatarR);
     }
-    this.tooltipBodyName?.setPosition(offsetX + avatarR * 2 + 10, offsetY + 28);
-    if (this.tooltipBodyRating) this.tooltipBodyRating?.setPosition(offsetX + avatarR * 2 + 10, offsetY + 52);
+    this.tooltipBodyName?.setPosition(-modalW / 2 + 16 + avatarR * 2 + 10, aboveBannerY);
+    if (this.tooltipBodyRating) this.tooltipBodyRating?.setPosition(-modalW / 2 + 16 + avatarR * 2 + 10, aboveBannerY + 28);
     if (this.tooltipRankText) {
-      this.tooltipRankText.setPosition(offsetX + modalW - 32, offsetY + 16);
+      this.tooltipRankText.setPosition(modalW / 2 - 16, aboveBannerY);
     }
-    const ratingBaseX = offsetX + avatarR * 2 + 10; // align left with name
+    const ratingBaseX = -modalW / 2 + 16 + avatarR * 2 + 10; // align left with name
     this.tooltipRatingPos = {
       x: centerX + ratingBaseX,
-      y: centerY + offsetY + 46, // move up by 20px
+      y: centerY + aboveBannerY + 28,
     };
     this.tooltipRatingLocalPos = {
       x: ratingBaseX,
-      y: offsetY + 46, // move up by 20px
+      y: aboveBannerY + 28,
     };
     // Re-render tooltip rating digits at new position
     this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
@@ -1205,7 +1269,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.bestRowsContainer.setPosition(width / 2, height / 2);
       this.bestRowsLayout = {
         startX: -modalW / 2 + 16,
-        startY: offsetY + 120,
+        startY: -modalH / 2 + this.bannerHeight + 80, // Position below banner and buttons
         cardW: 200,
         cardH: 72,
         gapX: 14,
@@ -1276,7 +1340,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setVisible(true);
     const title = this.add
       .text(bg.x, bg.y - h / 2 + 12, "Change Name", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "14px",
         color: "#ffffff",
       })
@@ -1293,7 +1357,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     password.node.tabIndex = 2;
     const status = this.add
       .text(bg.x, bg.y + 55, "", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "12px",
         color: "#ffcccc",
       })
@@ -1302,7 +1366,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setDepth(this.baseDepth + 1252);
     const saveBtn = this.add
       .text(bg.x - 60, bg.y + 35, "[Save]", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "12px",
         color: "#c3ff7c",
       })
@@ -1312,7 +1376,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     const cancelBtn = this.add
       .text(bg.x + 60, bg.y + 35, "[Cancel]", {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "12px",
         color: "#ff9999",
       })
@@ -1388,7 +1452,7 @@ class ProfileOverlayScene extends Phaser.Scene {
     groups.forEach((g, rowIdx) => {
       const rowY = (startY || 0) + rowIdx * (rowGap || 90);
       const label = this.add.text((startX || 0), rowY, g.title.toUpperCase(), {
-        fontFamily: "Courier New, monospace",
+        fontFamily: "Hatsukoi Friends, monospace",
         fontSize: "13px",
         color: typeColor[g.title] || "#ffffff",
       }).setOrigin(0, 0).setScrollFactor(0).setDepth(this.baseDepth + 1205);
@@ -1404,20 +1468,20 @@ class ProfileOverlayScene extends Phaser.Scene {
           .setStrokeStyle(1, 0x555555);
         const displayName = this.formatModeName(k);
         const line1 = this.add.text(8, 6, `[${displayName}]  Rank: ${entry?.rank ?? entry?.position ?? "—"}`, {
-          fontFamily: "Courier New, monospace",
+          fontFamily: "Hatsukoi Friends, monospace",
           fontSize: "12px",
           color: typeColor[g.title] || "#ffffff",
         }).setOrigin(0, 0);
         const main = this.formatScore(entry, k);
         const line2 = this.add.text(8, 24, `Best: ${main}`, {
-          fontFamily: "Courier New, monospace",
+          fontFamily: "Hatsukoi Friends, monospace",
           fontSize: "12px",
           color: "#cfcfcf",
         }).setOrigin(0, 0);
         const timeVal = entry?.timeSeconds != null ? this.formatTime(entry.timeSeconds) : "—";
         const scoreVal = entry?.score != null ? `${entry.score}` : "—";
         const line3 = this.add.text(8, 42, `Time: ${timeVal}    Score: ${scoreVal}`, {
-          fontFamily: "Courier New, monospace",
+          fontFamily: "Hatsukoi Friends, monospace",
           fontSize: "12px",
           color: "#aaaaaa",
         }).setOrigin(0, 0);
@@ -1518,7 +1582,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(12000);
     const title = this.add.text(bg.x, bg.y - h / 2 + 12, "Account", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "14px",
       color: "#ffffff",
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(12001);
@@ -1532,25 +1596,25 @@ class ProfileOverlayScene extends Phaser.Scene {
     pass.node.placeholder = "Password";
     pass.node.tabIndex = 2;
     const status = this.add.text(bg.x, bg.y + 60, "", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#ffcccc",
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(12001);
 
     const loginBtn = this.add.text(bg.x - 60, bg.y + 30, "[Login]", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#7cc7ff",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(12001).setInteractive({ useHandCursor: true });
 
     const registerBtn = this.add.text(bg.x + 60, bg.y + 30, "[Register]", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#c3ff7c",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(12001).setInteractive({ useHandCursor: true });
 
     const closeBtn = this.add.text(bg.x + w / 2 - 10, bg.y - h / 2 + 8, "X", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#ff9999",
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(12001).setInteractive({ useHandCursor: true });

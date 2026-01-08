@@ -72,6 +72,7 @@ class BaseMode {
         
         switch (config.gravity.type) {
             case 'static':
+            case 'fixed_20g':
                 return config.gravity.value;
             
             case 'linear':

@@ -107,8 +107,8 @@ async function ensureUserDocument(user) {
 
 async function updateAvatarFromFile(user, file) {
   if (!user?.uid) throw new Error("Missing user UID");
-  const uploadAvatar = window.ImgBBSupport?.uploadAvatar;
-  if (!uploadAvatar) throw new Error("ImgBB uploader not available");
+  const uploadAvatar = window.ImageUploadSupport?.uploadAvatar || window.ImgBBSupport?.uploadAvatar;
+  if (!uploadAvatar) throw new Error("Image uploader not available");
   const result = await uploadAvatar(file);
   const db = getFirestore();
   if (!db) throw new Error("Firestore not available");
@@ -124,6 +124,23 @@ async function updateAvatarFromFile(user, file) {
   if (auth?.currentUser?.updateProfile) {
     await auth.currentUser.updateProfile({ photoURL: result.url }).catch(() => {});
   }
+  return result.url;
+}
+
+async function updateBannerFromFile(user, file) {
+  if (!user?.uid) throw new Error("Missing user UID");
+  const uploadBanner = window.ImageUploadSupport?.uploadBanner || window.ImgBBSupport?.uploadBanner;
+  if (!uploadBanner) throw new Error("Image uploader not available");
+  const result = await uploadBanner(file);
+  const db = getFirestore();
+  if (!db) throw new Error("Firestore not available");
+  const docRef = db.collection("users").doc(user.uid);
+  await docRef.update({
+    "profile.bannerUrl": result.url,
+    "profile.bannerId": result.id || null,
+    "profile.bannerDeleteUrl": result.deleteUrl || null,
+    "profile.bannerUpdatedAt": new Date().toISOString(),
+  });
   return result.url;
 }
 
@@ -285,6 +302,7 @@ window.FirebaseClient = {
   signOutUser,
   ensureUserDocument,
   updateAvatarFromFile,
+  updateBannerFromFile,
   updateDisplayName,
   submitScore: updateUserScoreAndRating,
 };

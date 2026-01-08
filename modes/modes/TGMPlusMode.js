@@ -348,7 +348,7 @@ class TGMPlusMode extends BaseMode {
             fill: '#808080',
             stroke: '#000',
             strokeThickness: 2,
-            fontFamily: 'Courier New',
+            fontFamily: 'Hatsukoi Friends',
             fontStyle: 'bold'
         }).setOrigin(0.5);
         
@@ -401,7 +401,7 @@ class TGMPlusMode extends BaseMode {
             fill: '#00ff00',
             stroke: '#000',
             strokeThickness: 3,
-            fontFamily: 'Courier New',
+            fontFamily: 'Hatsukoi Friends',
             fontStyle: 'bold'
         }).setOrigin(0.5);
         

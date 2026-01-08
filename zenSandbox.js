@@ -144,7 +144,7 @@
     const labelText = scene.add.text(0, y, `${label}:`, {
       fontSize: "16px",
       fill: "#ffff00",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       antialias: true,
       smooth: false,
@@ -157,14 +157,14 @@
       const radio = scene.add.text(20, optY, isSelected ? "(●)" : "( )", {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         antialias: true,
         smooth: false,
       });
       const text = scene.add.text(48, optY, opt.label, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         antialias: true,
         smooth: false,
       });
@@ -187,7 +187,7 @@
     const badge = scene.add.text(x, y, "updated", {
       fontSize: "12px",
       fill: "#00ff88",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       antialias: true,
       smooth: false,
@@ -213,7 +213,7 @@
     const labelText = scene.add.text(x, y, `${label}:`, {
       fontSize: "16px",
       fill: "#ffff00",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       antialias: true,
       smooth: false,
@@ -229,7 +229,7 @@
       .text(x + 30, y + 32, `${valueText}`, {
         fontSize: "14px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         antialias: true,
         smooth: false,
       })
@@ -335,7 +335,7 @@
     const bagNotice = scene.add.text(0, bagNoticeY, "Restart Zen mode to apply bag changes.", {
       fontSize: "12px",
       fill: "#ffcc00",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       antialias: true,
       smooth: false,
     });
@@ -577,7 +577,7 @@
           .text(x, y + offset, text, {
             fontSize: "20px",
             fill: "#ffff00",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             antialias: true,
             smooth: false,
           })
@@ -587,7 +587,7 @@
         const labelText = scene.add.text(0, y, `${label}:`, {
           fontSize: "16px",
           fill: "#ffff00",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           antialias: true,
           smooth: false,
@@ -601,14 +601,14 @@
           const radio = scene.add.text(20, optY, isSelected ? "(●)" : "( )", {
             fontSize: "16px",
             fill: "#ffffff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             antialias: true,
             smooth: false,
           });
           const text = scene.add.text(48, optY, opt.label, {
             fontSize: "16px",
             fill: "#ffffff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             antialias: true,
             smooth: false,
           });
@@ -656,7 +656,7 @@
         .text(x - 140, y + lineHeight * 1.0, "Restart Zen mode to apply bag changes.", {
           fontSize: "12px",
           fill: "#ffcc00",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           antialias: true,
           smooth: false,
         })

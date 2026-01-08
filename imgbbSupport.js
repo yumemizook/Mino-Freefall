@@ -1,16 +1,16 @@
 (() => {
-  const IMGBB_KEY_B64 =
-    window.IMGBB_KEY_B64 ||
-    (typeof process !== "undefined" && process?.env?.IMGBB_KEY_B64) ||
-    "YTFkNmUxMDNlYWE0NmY3ODI4OGZjMmM1YWE1NmYzYmQ="; // fallback obfuscated key
+  const FREEIMAGE_KEY_B64 =
+    window.FREEIMAGE_KEY_B64 ||
+    (typeof process !== "undefined" && process?.env?.FREEIMAGE_KEY_B64) ||
+    "NmQyMDdlMDIxOThhODQ3YWE5OGQwYTJhOTAxNDg1YTU="; // fallback obfuscated key
 
   function decodeKey() {
     try {
       // Prefer window override if set explicitly
-      const b64 = window.IMGBB_KEY_B64 || IMGBB_KEY_B64;
+      const b64 = window.FREEIMAGE_KEY_B64 || FREEIMAGE_KEY_B64;
       return atob(b64);
     } catch {
-      throw new Error("Failed to decode ImgBB API key");
+      throw new Error("Failed to decode FreeImage API key");
     }
   }
 
@@ -26,30 +26,66 @@
   async function uploadAvatar(file) {
     if (!file) throw new Error("No file provided");
     const key = decodeKey();
-    const imageBase64 = await fileToBase64(file);
     const formData = new FormData();
-    formData.append("image", imageBase64);
+    formData.append("key", key);
+    formData.append("source", file);
+    formData.append("type", "file");
 
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(key)}`, {
+    const res = await fetch("https://freeimage.host/api/1/upload", {
       method: "POST",
       body: formData,
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`ImgBB upload failed: ${res.status} ${text}`.trim());
+      throw new Error(`FreeImage upload failed: ${res.status} ${text}`.trim());
     }
 
     const data = await res.json();
-    const url = data?.data?.url || data?.data?.display_url;
-    if (!url) throw new Error("ImgBB upload response missing URL");
+    const url = data?.image?.url;
+    if (!url) throw new Error("FreeImage upload response missing URL");
     return {
       url,
-      deleteUrl: data?.data?.delete_url,
-      id: data?.data?.id,
+      deleteUrl: data?.image?.delete_url,
+      id: data?.image?.id,
     };
   }
 
+  async function uploadBanner(file) {
+    if (!file) throw new Error("No file provided");
+    const key = decodeKey();
+    const formData = new FormData();
+    formData.append("key", key);
+    formData.append("source", file);
+    formData.append("type", "file");
+    formData.append("name", `banner_${Date.now()}`);
+
+    const res = await fetch("https://freeimage.host/api/1/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`FreeImage upload failed: ${res.status} ${text}`.trim());
+    }
+
+    const data = await res.json();
+    const url = data?.image?.url;
+    if (!url) throw new Error("FreeImage upload response missing URL");
+    return {
+      url,
+      deleteUrl: data?.image?.delete_url,
+      id: data?.image?.id,
+    };
+  }
+
+  window.ImageUploadSupport = window.ImageUploadSupport || {};
+  window.ImageUploadSupport.uploadAvatar = uploadAvatar;
+  window.ImageUploadSupport.uploadBanner = uploadBanner;
+  
+  // Keep backwards compatibility
   window.ImgBBSupport = window.ImgBBSupport || {};
   window.ImgBBSupport.uploadAvatar = uploadAvatar;
+  window.ImgBBSupport.uploadBanner = uploadBanner;
 })();

@@ -401,7 +401,7 @@ class TADeathMode extends BaseMode {
             fill: color,
             stroke: '#000',
             strokeThickness: 2,
-            fontFamily: 'Courier New',
+            fontFamily: 'Hatsukoi Friends',
             fontStyle: 'bold',
             align: 'center'
         }).setOrigin(0.5);

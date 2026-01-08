@@ -24,6 +24,9 @@ class ModeManager {
             'tgm2': 0x888888,      // grey
             'tgm3': 0x888888,      // grey
             'tgm4': 0x888888,      // grey
+            'tgm4_1_1': 0x888888,  // grey
+            'tgm4_2_1': 0xff0000,  // red (20G)
+            'tgm4_3_1': 0xff0000,  // red (20G)
             '20g': 0xff0000,       // red
             'tadeath': 0xff0000,   // red
             'shirase': 0xff0000,   // red
@@ -105,13 +108,13 @@ class ModeManager {
             'master20g': { modeClass: 'MasterTGM4Mode', config: { difficulty: '20g', description: 'Brand new, unique game mechanics. Can you handle them?' } },
 
             // RACE modes
-            'asuka_easy': { modeClass: 'Mode20G', config: { difficulty: 'race', description: '20G Tetris stacking introduction' } },
-            'asuka_normal': { modeClass: 'Mode20G', config: { difficulty: 'race', description: 'Race mode. Finish 1300 levels in 7 minutes.' } },
-            'asuka_hard': { modeClass: 'Mode20G', config: { difficulty: 'race', description: 'The true test of skill and speed!' } },
+            'asuka_easy': { modeClass: 'AsukaEasyMode', config: { difficulty: 'race', description: '20G Tetris stacking introduction' } },
+            'asuka_normal': { modeClass: 'AsukaNormalMode', config: { difficulty: 'race', description: 'Race mode. Finish 1300 levels in 7 minutes.' } },
+            'asuka_hard': { modeClass: 'AsukaHardMode', config: { difficulty: 'race', description: 'The true test of skill and speed!' } },
 
             // ALL CLEAR / PUZZLE modes
-            'konoha_easy': { modeClass: 'MarathonMode', config: { difficulty: 'puzzle', description: 'Easy all-clear challenge with 5 pieces!' } },
-            'konoha_hard': { modeClass: 'MarathonMode', config: { difficulty: 'puzzle', description: 'Hard all-clear challenge with all 7 pieces!' } },
+            'konoha_easy': { modeClass: 'KonohaEasyMode', config: { difficulty: 'puzzle', description: 'Easy all-clear challenge with 5 pieces!' } },
+            'konoha_hard': { modeClass: 'KonohaHardMode', config: { difficulty: 'puzzle', description: 'Hard all-clear challenge with all 7 pieces!' } },
             'flashpoint': { modeClass: 'ZenMode', config: { difficulty: 'puzzle', description: 'From Flashpoint.' } }
         };
     }
@@ -290,6 +293,60 @@ class ModeManager {
                     }
                     break;
 
+                case 'MasterTGM4Mode':
+                    if (typeof MasterTGM4Mode !== 'undefined') {
+                        modeInstance = new MasterTGM4Mode();
+                    } else {
+                        console.warn('MasterTGM4Mode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'AsukaEasyMode':
+                    if (typeof AsukaEasyMode !== 'undefined') {
+                        modeInstance = new AsukaEasyMode();
+                    } else {
+                        console.warn('AsukaEasyMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'AsukaNormalMode':
+                    if (typeof AsukaNormalMode !== 'undefined') {
+                        modeInstance = new AsukaNormalMode();
+                    } else {
+                        console.warn('AsukaNormalMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'AsukaHardMode':
+                    if (typeof AsukaHardMode !== 'undefined') {
+                        modeInstance = new AsukaHardMode();
+                    } else {
+                        console.warn('AsukaHardMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'KonohaEasyMode':
+                    if (typeof KonohaEasyMode !== 'undefined') {
+                        modeInstance = new KonohaEasyMode();
+                    } else {
+                        console.warn('KonohaEasyMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'KonohaHardMode':
+                    if (typeof KonohaHardMode !== 'undefined') {
+                        modeInstance = new KonohaHardMode();
+                    } else {
+                        console.warn('KonohaHardMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
                 default:
                     console.warn(`Unknown mode class: ${modeDef.modeClass}, using BaseMode fallback`);
                     modeInstance = new BaseMode();
@@ -390,6 +447,9 @@ class ModeManager {
             'tgm2': 'TGM2',
             'tgm3': 'TGM3',
             'tgm4': 'TGM4',
+            'tgm4_1_1': 'TGM4 1.1',
+            'tgm4_2_1': 'TGM4 2.1',
+            'tgm4_3_1': 'TGM4 3.1',
             '20g': '20G',
             'tadeath': 'T.A.Death',
             'shirase': 'Shirase',

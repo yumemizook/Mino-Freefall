@@ -323,7 +323,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       .text(padding, padding, "Mino Freefall - pre-beta", {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setScrollFactor(0)
@@ -333,7 +333,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       .text(width - padding, padding, "", {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -345,7 +345,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       .text(padding, height - padding, "Last commit: loading...", {
         fontSize: "14px",
         fill: "#bbbbbb",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0, 1)
       .setScrollFactor(0)
@@ -355,7 +355,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       .text(width - padding, height - padding, getUserAgentText(), {
         fontSize: "14px",
         fill: "#bbbbbb",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         align: "right",
       })
       .setOrigin(1, 1)
@@ -2038,7 +2038,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX, centerY - 220, "MINO FREEFALL", {
         fontSize: "48px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         shadow: {
           offsetX: 2,
@@ -2073,7 +2073,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX - 100, centerY + 20, "◀", {
         fontSize: "24px",
         fill: "#888888",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -2082,7 +2082,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX + 100, centerY + 20, "▶", {
         fontSize: "24px",
         fill: "#888888",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -2092,7 +2092,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX, centerY + 20, "", {
         fontSize: "24px",
         fill: "#00ffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -2101,7 +2101,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX, centerY + 60, "", {
         fontSize: "14px",
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         wordWrap: { width: 300 },
         align: "center",
       })
@@ -2127,7 +2127,7 @@ class MenuScene extends Phaser.Scene {
         {
           fontSize: "18px",
           fill: "#cccccc",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           align: "center",
           wordWrap: { width: 240 },
         },
@@ -2144,7 +2144,7 @@ class MenuScene extends Phaser.Scene {
       {
         fontSize: "20px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -2157,7 +2157,7 @@ class MenuScene extends Phaser.Scene {
       .text(centerX, centerY + 120, "START GAME", {
         fontSize: "24px",
         fill: "#00ff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -2196,7 +2196,7 @@ class MenuScene extends Phaser.Scene {
       .text(buttonX, buttonY, "Settings", {
         fontSize: "18px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -2377,7 +2377,7 @@ class MenuScene extends Phaser.Scene {
         .text(0, modeTypeY, modeType.name, {
           fontSize: "18px",
           fill: modeTypeColor,
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: index === this.currentModeTypeIndex ? "bold" : "normal",
         })
         .setOrigin(0, 0.5);
@@ -2428,7 +2428,7 @@ class MenuScene extends Phaser.Scene {
         .text(baseX, baseY - 20, `Best Stage: ${placeholders.stage}`, {
           fontSize: "24px",
           fill: "#ffff00",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5, 0.5);
@@ -2437,7 +2437,7 @@ class MenuScene extends Phaser.Scene {
         .text(baseX, baseY + 10, `Completion Rate: ${placeholders.completion}`, {
           fontSize: "18px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5, 0.5);
@@ -2446,7 +2446,7 @@ class MenuScene extends Phaser.Scene {
         .text(baseX, baseY + 40, `Time Taken: ${placeholders.time}`, {
           fontSize: "18px",
           fill: "#cccccc",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5, 0.5);
@@ -2474,7 +2474,7 @@ class MenuScene extends Phaser.Scene {
         .text(this.leaderboardContainer.x - 110, y, formatted.left, {
           fontSize: "24px",
           fill: gradeColor,
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5);
@@ -2485,14 +2485,14 @@ class MenuScene extends Phaser.Scene {
         .text(secondaryX - 5, y - rowHeight * 0.2, formatted.middle, {
           fontSize: "16px",
           fill: "#00ffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         })
         .setOrigin(0, 0.5);
       const rightText = this.add
         .text(secondaryX, y + rowHeight * 0.2, formatted.right, {
           fontSize: "16px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         })
         .setOrigin(0.5, 0.5);
 
@@ -3105,7 +3105,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY - 200, "Settings", {
         fontSize: "36px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3115,7 +3115,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY - 130, `Rotation System: ${rotationSystem}`, {
         fontSize: "24px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -3144,7 +3144,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY - 40, "ARS Lock Reset", {
         fontSize: "18px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3156,7 +3156,7 @@ class SettingsScene extends Phaser.Scene {
         {
           fontSize: "18px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         },
       )
       .setOrigin(0.5)
@@ -3168,7 +3168,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY + 20, "Extra Button Mode", {
         fontSize: "18px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3180,7 +3180,7 @@ class SettingsScene extends Phaser.Scene {
         {
           fontSize: "18px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         },
       )
       .setOrigin(0.5)
@@ -3209,7 +3209,7 @@ class SettingsScene extends Phaser.Scene {
       .text(keybindsX, keybindsY - 40, "Keybinds (Click to change)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3222,7 +3222,7 @@ class SettingsScene extends Phaser.Scene {
         .text(keybindsX - 80, yOffset, this.keybindActions[action] + ":", {
           fontSize: "18px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         })
         .setOrigin(1, 0.5); // Right-aligned
 
@@ -3232,7 +3232,7 @@ class SettingsScene extends Phaser.Scene {
         .text(keybindsX + 80, yOffset, currentKey, {
           fontSize: "18px",
           fill: "#00ff00",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5)
@@ -3254,7 +3254,7 @@ class SettingsScene extends Phaser.Scene {
       .text(volumeX, volumeY - 60, "Master Volume", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3301,7 +3301,7 @@ class SettingsScene extends Phaser.Scene {
         {
           fontSize: "16px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         },
       )
       .setOrigin(0.5);
@@ -3340,7 +3340,7 @@ class SettingsScene extends Phaser.Scene {
       .text(volumeX, volumeY + 40, "BGM Volume", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3385,7 +3385,7 @@ class SettingsScene extends Phaser.Scene {
         {
           fontSize: "16px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         },
       )
       .setOrigin(0.5);
@@ -3424,7 +3424,7 @@ class SettingsScene extends Phaser.Scene {
       .text(volumeX, volumeY + 160, "SFX Volume", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3469,7 +3469,7 @@ class SettingsScene extends Phaser.Scene {
         {
           fontSize: "16px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
         },
       )
       .setOrigin(0.5);
@@ -3519,7 +3519,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, timingY, "DAS (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
     const dasValue = this.getTimingFrames("timing_das_frames", 10);
@@ -3555,7 +3555,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, dasSliderY + 25, `${dasValue.toFixed(1)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3593,7 +3593,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, arrSliderY - 30, "ARR (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3627,7 +3627,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, arrSliderY + 25, `${arrValue.toFixed(1)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3664,7 +3664,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, areSliderY - 30, "ARE (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3698,7 +3698,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, areSliderY + 25, `${areValue.toFixed(0)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3735,7 +3735,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, lineAreSliderY - 30, "Line ARE / LCD (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3769,7 +3769,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, lineAreSliderY + 25, `${lineAreValue.toFixed(0)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3823,7 +3823,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, sdfSliderY - 30, "SDF (x speed)", {
         fontSize: "20px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3858,7 +3858,7 @@ class SettingsScene extends Phaser.Scene {
       .text(timingX, sdfSliderY + 25, sdfDisplay, {
         fontSize: "16px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -3893,7 +3893,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY + 190, "Reset to Defaults", {
         fontSize: "18px",
         fill: "#ff8800",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -3907,7 +3907,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY + 230, "Reset High Scores", {
         fontSize: "18px",
         fill: "#ff8800",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -3921,7 +3921,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY + 270, "Back to Menu", {
         fontSize: "24px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5)
       .setInteractive();
@@ -5115,7 +5115,7 @@ class SettingsScene extends Phaser.Scene {
       .text(centerX, centerY + 320, "High scores reset to defaults!", {
         fontSize: "16px",
         fill: "#00ff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
@@ -5285,7 +5285,7 @@ class AssetLoaderScene extends Phaser.Scene {
       .text(centerX, centerY, "LOADING...", {
         fontSize: "48px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -5438,7 +5438,7 @@ class LoadingScreenScene extends Phaser.Scene {
       .text(centerX, centerY, "LOADING...", {
         fontSize: "48px",
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -5942,7 +5942,7 @@ class GameScene extends Phaser.Scene {
         .text(0, 0, "", {
           fontSize: `${line1Font}px`,
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "left",
         })
@@ -5951,7 +5951,7 @@ class GameScene extends Phaser.Scene {
         .text(0, line1Font + 6, "", {
           fontSize: `${line2Font}px`,
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "left",
         })
@@ -7594,7 +7594,7 @@ class GameScene extends Phaser.Scene {
         .text(gradeX + gradeWidth / 2, gradeY + 40, gradeTextValue, {
           fontSize: `${xlargeFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "center",
         })
@@ -7610,7 +7610,7 @@ class GameScene extends Phaser.Scene {
           .text(gradeX + gradeWidth / 2, gradeY + 90, "0", {
             fontSize: `${largeFontSize - 4}px`,
             fill: "#ffffff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "center",
           })
@@ -7626,7 +7626,7 @@ class GameScene extends Phaser.Scene {
           .text(gradeX + gradeWidth / 2, gradeY + 130, "", {
             fontSize: `${uiFontSize - 2}px`,
             fill: "#cccccc",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "normal",
             align: "center",
           })
@@ -7667,7 +7667,7 @@ class GameScene extends Phaser.Scene {
         .text(uiX + 135, levelBottomY - 4.5 * levelRowHeight - 83, "LEVEL", {
           fontSize: `${uiFontSize - 4}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(1, 0);
@@ -7675,7 +7675,7 @@ class GameScene extends Phaser.Scene {
         .text(uiX + 140, levelBottomY - 4 * levelRowHeight - 83, "1", {
           fontSize: `${levelFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "right",
         })
@@ -7692,7 +7692,7 @@ class GameScene extends Phaser.Scene {
         {
           fontSize: `${uiFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         },
       )
@@ -7705,7 +7705,7 @@ class GameScene extends Phaser.Scene {
       .text(uiX + 135, levelBottomY, "SCORE", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(1, 0);
@@ -7713,7 +7713,7 @@ class GameScene extends Phaser.Scene {
       .text(uiX + 140, levelBottomY + 15, "0", {
         fontSize: `${xlargeFontSize}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7722,7 +7722,7 @@ class GameScene extends Phaser.Scene {
       .text(uiX + 135, levelBottomY + 61, "SCORE/PIECE", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(1, 0);
@@ -7730,7 +7730,7 @@ class GameScene extends Phaser.Scene {
       .text(uiX + 140, levelBottomY + 76, "0.00", {
         fontSize: `${largeFontSize}px`,
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7770,21 +7770,21 @@ class GameScene extends Phaser.Scene {
     const atkLabelStyle = {
       fontSize: `${uiFontSize - 4}px`,
       fill: "#ffdd55",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       align: "right",
     };
     const atkValueStyle = {
       fontSize: `${largeFontSize}px`,
       fill: "#ffffff",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       align: "right",
     };
     const atkSubStyle = {
       fontSize: `${uiFontSize - 6}px`,
       fill: "#cccccc",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
       align: "right",
     };
@@ -7798,7 +7798,7 @@ class GameScene extends Phaser.Scene {
       .text(atkX + 5, atkBaseY + atkRow, "0.00", {
         fontSize: `${largeFontSize - 8}px`,
         fill: "#a0d8ff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7814,7 +7814,7 @@ class GameScene extends Phaser.Scene {
       .text(atkX + 5, atkBaseY + atkRow * 5 + 4, "0.00", {
         fontSize: `${largeFontSize - 6}px`,
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7826,7 +7826,7 @@ class GameScene extends Phaser.Scene {
       .text(atkX + 5, atkBaseY + atkRow * 7 + 8, "0.00", {
         fontSize: `${largeFontSize - 6}px`,
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7835,7 +7835,7 @@ class GameScene extends Phaser.Scene {
       .text(atkX, spikeY, "SPIKE 0", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#ffaa33",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "right",
       })
@@ -7884,7 +7884,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, inputY, "INPUTS", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7893,7 +7893,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, inputY + 15, "0", {
         fontSize: `${uiFontSize - 2}px`,
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7902,7 +7902,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, inputY + 30, "INPUT/PIECE", {
         fontSize: `${uiFontSize - 8}px`,
         fill: "#999999",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7911,7 +7911,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, inputY + 45, "0.00", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7920,7 +7920,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, finesseY, "FINESSE", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#ffdd55",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7929,7 +7929,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, finesseY + 15, "0   100.0%", {
         fontSize: `${uiFontSize - 2}px`,
         fill: "#ffffff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7938,7 +7938,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, finesseY + 30, "0 errors", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#cccccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -7960,7 +7960,7 @@ class GameScene extends Phaser.Scene {
       .text(b2bX, b2bY, "B2B x0", {
         fontSize: `${uiFontSize - 2}px`,
         fill: "#ffff55",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -7974,7 +7974,7 @@ class GameScene extends Phaser.Scene {
       .text(0, 0, "0", {
         fontSize: `${uiFontSize}px`,
         fill: "#88ff88",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -7983,7 +7983,7 @@ class GameScene extends Phaser.Scene {
       .text(this.standardComboNumberText.width + 6, 2, "COMBO", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#88ff88",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -8000,7 +8000,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY - 40, "HANABI", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0);
@@ -8008,7 +8008,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY - 25, "0", {
         fontSize: `${largeFontSize}px`,
         fill: "#ffff88",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -8020,7 +8020,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY - 45, "PIECES", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#ccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0)
@@ -8029,7 +8029,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY - 30, "0", {
         fontSize: `${largeFontSize - 4}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -8040,7 +8040,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY, "PPS", {
         fontSize: `${uiFontSize - 4}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0);
@@ -8048,7 +8048,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY + 15, "0.00", {
         fontSize: `${largeFontSize}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -8057,7 +8057,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY + 40, "RAW PPS", {
         fontSize: `${uiFontSize - 6}px`,
         fill: "#ccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0, 0);
@@ -8065,7 +8065,7 @@ class GameScene extends Phaser.Scene {
       .text(ppsX, ppsY + 55, "0.00", {
         fontSize: `${largeFontSize - 4}px`,
         fill: "#ccc",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
         align: "left",
       })
@@ -8127,7 +8127,7 @@ class GameScene extends Phaser.Scene {
         const header = this.add.text(0, 0, "PPS GRAPH", {
           fontSize: `${uiFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         });
         this.sectionTrackerGroup.add(header);
@@ -8152,7 +8152,7 @@ class GameScene extends Phaser.Scene {
         const summaryStyle = {
           fontSize: `${uiFontSize - 6}px`,
           fill: "#ccc",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         };
         this.ppsSummaryText = this.add.text(
@@ -8167,7 +8167,7 @@ class GameScene extends Phaser.Scene {
         const legendStyle = {
           fontSize: `${uiFontSize - 8}px`,
           fill: "#ccc",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         };
         this.ppsLegendText = this.add.text(
@@ -8186,7 +8186,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize: `${uiFontSize - 6}px`,
             fill: "#ccc",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           },
         );
@@ -8195,7 +8195,7 @@ class GameScene extends Phaser.Scene {
         const header = this.add.text(0, 0, "SECTIONS", {
           fontSize: `${uiFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         });
         this.sectionTrackerGroup.add(header);
@@ -8217,13 +8217,13 @@ class GameScene extends Phaser.Scene {
           const labelStyle = {
             fontSize: `${sectionLabelFontSize}px`,
             fill: "#ccc",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           };
           const timeStyle = {
             fontSize: `${sectionTimeFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           };
 
@@ -8289,33 +8289,33 @@ class GameScene extends Phaser.Scene {
             {
               fontSize: `${sectionLabelFontSize}px`,
               fill: "#ccc",
-              fontFamily: "Courier New",
+              fontFamily: "Hatsukoi Friends",
               fontStyle: "bold",
             },
           );
           const timeText = this.add.text(0, y + rowLineHeight, "--:--.--", {
             fontSize: `${sectionTimeFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           });
 
           const tallyText = this.add.text(140, y, "", {
             fontSize: `${sectionLabelFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           });
           const perfText = this.add.text(200, y + 3, "", {
             fontSize: `${Math.max(sectionLabelFontSize - 2, 12)}px`,
             fill: "#ffff55",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           });
           const totalText = this.add.text(140, y + rowLineHeight, "--:--.--", {
             fontSize: `${sectionTimeFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
           });
 
@@ -8346,7 +8346,7 @@ class GameScene extends Phaser.Scene {
         this.staffRollBonusText = this.add.text(0, rollBonusY, "ROLL BONUS: --", {
           fontSize: `${sectionLabelFontSize}px`,
           fill: "#ccc",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         });
         this.sectionTrackerGroup.add(this.staffRollBonusText);
@@ -8358,13 +8358,13 @@ class GameScene extends Phaser.Scene {
         const tapLabelStyle = {
           fontSize: `${sectionLabelFontSize}px`,
           fill: "#ffffaa",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         };
         const tapValueStyle = {
           fontSize: `${Math.max(sectionTimeFontSize + 6, sectionLabelFontSize + 4)}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         };
         this.tapGradeLabelText = this.add.text(0, tapBlockY, "TAP GRADE", tapLabelStyle);
@@ -8412,7 +8412,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize: `${timeFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "center",
           },
@@ -8427,7 +8427,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize: `${Math.max(timeFontSize - 4, 18)}px`,
             fill: "#ffff55",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "center",
           },
@@ -8481,7 +8481,7 @@ class GameScene extends Phaser.Scene {
       {
         fontSize: `${powerupLabelSize}px`,
         fill: "#0ff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       },
     );
@@ -8870,7 +8870,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize,
             fill: "#ffff55",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "center",
           },
@@ -8957,7 +8957,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize,
             fill: "#ffdd44",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "center",
           },
@@ -9272,7 +9272,7 @@ class GameScene extends Phaser.Scene {
       .text(centerX, centerY, "READY", {
         fontSize: "64px",
         fill: "#ffff00",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -9317,7 +9317,7 @@ class GameScene extends Phaser.Scene {
         .text(centerX, centerY, "GO", {
           fontSize: "64px",
           fill: "#00ff00",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
@@ -15068,7 +15068,7 @@ class GameScene extends Phaser.Scene {
         {
           fontSize: "24px",
           fill: "#ffff88",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "center",
         },
@@ -15215,7 +15215,7 @@ class GameScene extends Phaser.Scene {
           fill: color,
           stroke: "#000000",
           strokeThickness: 2,
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           wordWrap: { width: this.cellSize * this.board.cols - 30 },
           align: "center",
@@ -15296,7 +15296,7 @@ class GameScene extends Phaser.Scene {
           .text(rightX + 17, currentY - 30, currentLinesText, {
             fontSize: `${levelFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "bold",
             align: "right",
           })
@@ -15338,7 +15338,7 @@ class GameScene extends Phaser.Scene {
         .text(rightX + 17, currentY - 30, currentValue, {
           fontSize: `${levelFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "right",
         })
@@ -15397,7 +15397,7 @@ class GameScene extends Phaser.Scene {
         .text(rightX + 17, capY - 25, capText, {
           fontSize: `${levelFontSize}px`,
           fill: "#fff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
           align: "right",
         })
@@ -15425,7 +15425,7 @@ class GameScene extends Phaser.Scene {
         .text(centerX, centerY, "LOADING...", {
           fontSize: "48px",
           fill: "#ffffff",
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
@@ -15881,7 +15881,7 @@ class GameScene extends Phaser.Scene {
     const nextLabel = this.add.text(nextX, nextY, "NEXT", {
       fontSize: `${nextFontSize}px`,
       fill: "#fff",
-      fontFamily: "Courier New",
+      fontFamily: "Hatsukoi Friends",
       fontStyle: "bold",
     });
     this.gameGroup.add(nextLabel);
@@ -15956,7 +15956,7 @@ class GameScene extends Phaser.Scene {
       const holdLabel = this.add.text(holdX, holdY, "HOLD", {
         fontSize: `${holdFontSize}px`,
         fill: "#fff",
-        fontFamily: "Courier New",
+        fontFamily: "Hatsukoi Friends",
         fontStyle: "bold",
       });
       this.gameGroup.add(holdLabel);
@@ -16004,7 +16004,7 @@ class GameScene extends Phaser.Scene {
           fill: "#ffff00",
           stroke: "#000",
           strokeThickness: 2,
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
@@ -16020,7 +16020,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize: `${resumeFontSize}px`,
             fill: "#fff",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "normal",
           },
         )
@@ -16033,7 +16033,7 @@ class GameScene extends Phaser.Scene {
           {
             fontSize: `${resumeFontSize - 4}px`,
             fill: "#ffcccc",
-            fontFamily: "Courier New",
+            fontFamily: "Hatsukoi Friends",
             fontStyle: "normal",
           },
         )
@@ -16061,7 +16061,7 @@ class GameScene extends Phaser.Scene {
           fill: this.sprintCompleted ? "#00ff88" : "#ff0000",
           stroke: "#000",
           strokeThickness: 6,
-          fontFamily: "Courier New",
+          fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0.5);
@@ -16093,7 +16093,7 @@ const config = {
     createContainer: true,
   },
   text: {
-    defaultFont: "Courier New",
+    defaultFont: "Hatsukoi Friends",
     defaultFontSize: "16px",
     antialias: true,
     smooth: false,

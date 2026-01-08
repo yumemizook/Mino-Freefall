@@ -20,28 +20,28 @@ class AuthScene extends Phaser.Scene {
       .setDepth(15001);
 
     const title = this.add.text(panel.x, panel.y - h / 2 + 10, "-- LOGIN --", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "16px",
       color: "#ffffff",
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(15002);
 
     const actionLink = this.add.text(panel.x - 70, panel.y + 110, "[Login]", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#7cc7ff",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(15002).setInteractive({ useHandCursor: true });
     const divider = this.add.text(panel.x, panel.y + 110, "|", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#7cc7ff",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(15002);
     const toggleLink = this.add.text(panel.x + 70, panel.y + 110, "Register instead", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#7cc7ff",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(15002).setInteractive({ useHandCursor: true });
     const forgotText = this.add.text(panel.x, panel.y + 140, "Forgot Password", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#c3ff7c",
     }).setOrigin(0.5).setScrollFactor(0).setDepth(15002).setInteractive({ useHandCursor: true });
@@ -114,13 +114,13 @@ class AuthScene extends Phaser.Scene {
     [nameField, email, pass, pass2].forEach((dom) => wireFocus(dom));
 
     const status = this.add.text(panel.x, panel.y + 180, "", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#ffcccc",
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(15002);
 
     const closeBtn = this.add.text(panel.x + w / 2 - 8, panel.y - h / 2 + 6, "X", {
-      fontFamily: "Courier New, monospace",
+      fontFamily: "Hatsukoi Friends, monospace",
       fontSize: "12px",
       color: "#ff9999",
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(15002).setInteractive({ useHandCursor: true });

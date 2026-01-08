@@ -1,31 +1,35 @@
 // TGM4 1.1 Mode Implementation
 // Recreation of TGM1 Normal mode
 
-class TGM4_1_1Mode extends TGM4BaseMode {
+class TGM4_1_1Mode extends BaseMode {
     constructor() {
         super();
         this.modeName = 'TGM4 1.1';
         this.description = 'TGM4 1.1 mode - TGM1 Normal recreation';
         this.gradePoints = 0;
+        
+        // Initialize tracking variables
+        this.tetrisCount = 0;
+        this.allClearCount = 0;
     }
 
     getModeConfig() {
         return {
             gravity: {
-                type: 'tgm1', // Use TGM1 gravity curve exactly
+                type: 'tgm1', // Use TGM1 gravity curve
                 value: 0,
                 curve: null
             },
-            das: 16/60,      // TGM1 DAS
-            arr: 1/60,       // TGM1 ARR
-            are: 30/60,      // TGM1 ARE
-            lineAre: 30/60,  // TGM1 Line ARE
-            lockDelay: 0.5,  // TGM1 lock delay
-            lineClearDelay: 41/60, // TGM1 line clear
+            das: 14/60,      // TGM1: 14 frames DAS
+            arr: 1/60,       // TGM1: 1 frame ARR
+            are: 27/60,      // TGM1: 27 frames ARE
+            lineAre: 27/60,  // TGM1: 27 frames Line ARE
+            lockDelay: 30/60,  // TGM1: 30 frames lock delay
+            lineClearDelay: 40/60, // TGM1: 40 frames line clear
 
-            nextPieces: 1,   // TGM1 only shows 1 next piece
-            holdEnabled: false, // TGM1 has no hold
-            ghostEnabled: false, // TGM1 has no ghost piece
+            nextPieces: 6,   // TGM4 shows 6 pieces
+            holdEnabled: true, // TGM4 has hold
+            ghostEnabled: true, // TGM4 has ghost piece
             levelUpType: 'piece',
             lineClearBonus: 1,
             gravityLevelCap: 999,
@@ -42,8 +46,11 @@ class TGM4_1_1Mode extends TGM4BaseMode {
 
     // TGM1 scoring system
     calculateScore(baseScore, lines, piece, game) {
-        let score = 0;
+        if (lines === 0) return baseScore;
+
+        // TGM1 official scoring: 40/100/300/1200 × level
         const level = game.level || 1;
+        let score = 0;
 
         switch (lines) {
             case 1:
@@ -65,6 +72,11 @@ class TGM4_1_1Mode extends TGM4BaseMode {
         // Add soft drop points (1 point per cell)
         if (game.softDropPoints) {
             score += game.softDropPoints;
+        }
+
+        // Add hard drop points (2 points per cell)
+        if (game.hardDropPoints) {
+            score += game.hardDropPoints * 2;
         }
 
         return Math.floor(score);
@@ -103,15 +115,13 @@ class TGM4_1_1Mode extends TGM4BaseMode {
 
     // Get current grade
     getCurrentGrade(score, level) {
-        if (this.checkGMRequirements(level, score, this.tetrisCount)) {
-            return 'GM';
-        }
+        // In 1.1, grade is entirely determined by score
         return this.calculateTGM1Grade(score, level);
     }
 
     // Initialize for game scene
     initializeForGameScene(gameScene) {
-        // Set up TGM1-style UI
+        // Set up TGM1-style UI (grade moved down to TGM3 position)
         if (gameScene.scoreText) {
             gameScene.scoreText.setText('SCORE: 0');
         }
@@ -119,52 +129,59 @@ class TGM4_1_1Mode extends TGM4BaseMode {
             gameScene.levelText.setText('LEVEL: 0');
         }
         if (gameScene.gradeText) {
+            // Move grade display down to match TGM3 position
+            gameScene.gradeText.setY(gameScene.gradeText.y + 20); // Move down by 20 pixels
             gameScene.gradeText.setText('GRADE: 9');
         }
     }
 
     // Update UI elements
     update(gameScene, deltaTime) {
-        super.update(gameScene, deltaTime);
-
         if (gameScene.game) {
             // Update grade display
+            const grade = this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
             if (gameScene.gradeText) {
-                const grade = this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
-                gameScene.gradeText.setText(`GRADE: ${grade}`);
+                gameScene.gradeText.setText(`Grade: ${grade}`);
             }
         }
     }
 
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
-        super.handleLineClear(gameScene, linesCleared, pieceType);
-
         // TGM1-specific line clear handling
         if (gameScene.game && linesCleared === 4) {
-            console.log(`TGM4 1.1: Tetris #${this.tetrisCount}`);
+            console.log('TGM4 1.1: Tetris cleared!');
         }
     }
 
     // Handle game over
     onGameOver(gameScene) {
-        super.onGameOver(gameScene);
-        
         if (gameScene.game) {
             const finalGrade = this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
             console.log(`TGM4 1.1 Game Over - Final Grade: ${finalGrade}`);
-            console.log(`Score: ${gameScene.game.score}, Level: ${gameScene.game.level}`);
-            console.log(`Tetris: ${this.tetrisCount}`);
-            
-            if (finalGrade === 'GM') {
-                console.log('Congratulations! Grand Master achieved!');
-            }
         }
     }
 
     // Get mode ID
     getModeId() {
         return 'tgm4_1_1';
+    }
+    
+    // Reset mode state
+    reset() {
+        this.gradePoints = 0;
+        this.tetrisCount = 0;
+        this.allClearCount = 0;
+    }
+    
+    // Get line clear bonus
+    getLineClearBonus() {
+        return 1;
+    }
+    
+    // Get grade points
+    getGradePoints() {
+        return 0;
     }
 
     // Override piece generation to use TGM1 randomizer
@@ -176,4 +193,9 @@ class TGM4_1_1Mode extends TGM4BaseMode {
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = TGM4_1_1Mode;
+}
+
+// Make available globally for browser usage
+if (typeof window !== 'undefined') {
+    window.TGM4_1_1Mode = TGM4_1_1Mode;
 }
