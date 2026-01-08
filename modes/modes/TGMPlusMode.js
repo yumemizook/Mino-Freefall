@@ -330,34 +330,8 @@ class TGMPlusMode extends BaseMode {
             garbageSound.play();
         }
         
-        // Show garbage raise message occasionally
-        if (this.rowsWithGarbage % 5 === 0) {
-            this.showGarbageMessage(gameScene);
-        }
-        
         // Check if garbage has reached the top (game over)
         this.checkGarbageGameOver(gameScene);
-    }
-    
-    // Show garbage raise message
-    showGarbageMessage(gameScene) {
-        if (!gameScene.add) return;
-        
-        const garbageText = gameScene.add.text(gameScene.windowWidth / 2, gameScene.windowHeight / 4, 'GARBAGE!', {
-            fontSize: '32px',
-            fill: '#808080',
-            stroke: '#000',
-            strokeThickness: 2,
-            fontFamily: 'Hatsukoi Friends',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        gameScene.gameGroup.add(garbageText);
-        
-        // Fade out after 1 second
-        gameScene.time.delayedCall(1000, () => {
-            garbageText.destroy();
-        });
     }
     
     // Check if garbage has reached the top (game over condition)
