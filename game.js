@@ -327,7 +327,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
         fontStyle: "bold",
       })
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(14000);
 
     const modeText = scene.add
       .text(width - padding, padding, "", {
@@ -339,7 +339,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       })
       .setOrigin(1, 0)
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(14000);
 
     const commitText = scene.add
       .text(padding, height - padding, "Last commit: loading...", {
@@ -349,7 +349,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       })
       .setOrigin(0, 1)
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(14000);
 
     const userAgentText = scene.add
       .text(width - padding, height - padding, getUserAgentText(), {
@@ -360,7 +360,7 @@ function createOrUpdateGlobalOverlay(scene, modeInfo = {}) {
       })
       .setOrigin(1, 1)
       .setScrollFactor(0)
-      .setDepth(10000);
+      .setDepth(14000);
 
     scene.globalOverlayTexts = {
       titleText,
@@ -1917,6 +1917,21 @@ class MenuScene extends Phaser.Scene {
             description: "Lightning-fast speeds. Do you have what it takes?",
           },
           {
+            id: "tgm4_1_1",
+            name: "TGM4 1.1",
+            description: "TGM1 Normal recreation",
+          },
+          {
+            id: "tgm4_2_1",
+            name: "TGM4 2.1",
+            description: "T.A. Death recreation",
+          },
+          {
+            id: "tgm4_3_1",
+            name: "TGM4 3.1",
+            description: "Shirase recreation to 2000",
+          },
+          {
             id: "master20g",
             name: "Master",
             description:
@@ -2766,8 +2781,6 @@ class MenuScene extends Phaser.Scene {
       case "tgm3":
       case "tgm4":
       case "20g":
-      case "tadeath":
-      case "shirase":
       case "master20g":
       case "asuka_easy":
       case "asuka_normal":
@@ -2775,6 +2788,13 @@ class MenuScene extends Phaser.Scene {
         return (
           byGrade() ||
           byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tadeath":
+      case "shirase": // T.A.Death and Shirase: level -> grade -> time
+        return (
+          byDesc(a.level, b.level) ||
+          byGrade() ||
           byAsc(parseNumTime(a.time), parseNumTime(b.time))
         );
       case "tgm3_sakura": // Puzzle
@@ -2950,6 +2970,8 @@ class SettingsScene extends Phaser.Scene {
       rotate180: "Rotate 180",
       hardDrop: "Hard Drop",
       hold: "Hold",
+      extra: "Extra",
+      backstep: "Backstep (Rewind)",
       pause: "Pause",
       menu: "Return to Menu",
       restart: "Restart",
@@ -3037,6 +3059,29 @@ class SettingsScene extends Phaser.Scene {
       }
     };
 
+    const ensureImageTextureHiRes = (key, hiUrl, loUrl) => {
+      // const hiKey = `${key}__hi`;
+      ensureImageTexture(key, loUrl);
+      // if (!this.textures.exists(hiKey)) {
+      //   this.load.image(hiKey, hiUrl);
+      // }
+
+      // this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      //   if (this.textures.exists(hiKey)) {
+      //     if (this.textures.exists(key)) {
+      //       this.textures.remove(key);
+      //     }
+      //     if (this.textures && typeof this.textures.renameTexture === "function") {
+      //       this.textures.renameTexture(hiKey, key);
+      //     }
+      //   }
+      // });
+    };
+
+    // ensureImageTextureHiRes("mino_srs", "img/mino@2x.png", "img/mino.png");
+    // ensureImageTextureHiRes("mino_ars", "img/minoARS@2x.png", "img/minoARS.png");
+    // ensureImageTextureHiRes("mono", "img/mono@2x.png", "img/mono.png");
+    // ensureImageTextureHiRes("mono_ars", "img/monoARS@2x.png", "img/monoARS.png");
     ensureImageTexture("mino_srs", "img/mino.png");
     ensureImageTexture("mino_ars", "img/minoARS.png");
     ensureImageTexture("mono", "img/mono.png");
@@ -3116,6 +3161,30 @@ class SettingsScene extends Phaser.Scene {
       )
       .setOrigin(0.5)
       .setInteractive();
+
+    // TGM4 Extra button activation mode toggle
+    const extraActivationMode = localStorage.getItem("extraActivationMode") || "hold";
+    this.extraActivationLabel = this.add
+      .text(centerX, centerY + 20, "Extra Button Mode", {
+        fontSize: "18px",
+        fill: "#ffffff",
+        fontFamily: "Courier New",
+      })
+      .setOrigin(0.5);
+
+    this.extraActivationModeText = this.add
+      .text(
+        centerX,
+        centerY + 40,
+        extraActivationMode === "hold" ? "Hold Activation" : "Toggle Activation",
+        {
+          fontSize: "18px",
+          fill: "#ffffff",
+          fontFamily: "Courier New",
+        },
+      )
+      .setOrigin(0.5)
+      .setInteractive();
     this.arsResetModeText.on("pointerdown", () => {
       const current = (localStorage.getItem("arsMoveReset") || "false") === "true";
       const next = !current;
@@ -3123,6 +3192,14 @@ class SettingsScene extends Phaser.Scene {
       this.updateArsResetModeText(next);
     });
     this.updateArsResetModeVisibility(rotationSystem);
+
+    // Extra button activation mode toggle handler
+    this.extraActivationModeText.on("pointerdown", () => {
+      const current = localStorage.getItem("extraActivationMode") || "hold";
+      const next = current === "hold" ? "toggle" : "hold";
+      localStorage.setItem("extraActivationMode", next);
+      this.extraActivationModeText.setText(next === "hold" ? "Hold Activation" : "Toggle Activation");
+    });
 
     // Keybind settings - moved to left side
     const keybindsX = centerX - 300; // Moved to left
@@ -3910,6 +3987,8 @@ class SettingsScene extends Phaser.Scene {
       rotateCCW2: Phaser.Input.Keyboard.KeyCodes.SPACE,
       rotate180: Phaser.Input.Keyboard.KeyCodes.X,
       hold: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      extra: Phaser.Input.Keyboard.KeyCodes.A,
+      backstep: Phaser.Input.Keyboard.KeyCodes.D,
       pause: Phaser.Input.Keyboard.KeyCodes.ESC,
       menu: Phaser.Input.Keyboard.KeyCodes.ESC, // Menu and Pause share key
       start: Phaser.Input.Keyboard.KeyCodes.ENTER,
@@ -4946,6 +5025,21 @@ class SettingsScene extends Phaser.Scene {
             description: "Lightning-fast speeds. Do you have what it takes?",
           },
           {
+            id: "tgm4_1_1",
+            name: "TGM4 1.1",
+            description: "TGM1 Normal recreation",
+          },
+          {
+            id: "tgm4_2_1",
+            name: "TGM4 2.1",
+            description: "T.A. Death recreation",
+          },
+          {
+            id: "tgm4_3_1",
+            name: "TGM4 3.1",
+            description: "Shirase recreation to 2000",
+          },
+          {
             id: "master20g",
             name: "Master",
             description:
@@ -5214,7 +5308,30 @@ class AssetLoaderScene extends Phaser.Scene {
       }
     };
 
+    const ensureImageTextureHiRes = (key, hiUrl, loUrl) => {
+      // const hiKey = `${key}__hi`;
+      ensureImageTexture(key, loUrl);
+      // if (!this.textures.exists(hiKey)) {
+      //   this.load.image(hiKey, hiUrl);
+      // }
+
+      // this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      //   if (this.textures.exists(hiKey)) {
+      //     if (this.textures.exists(key)) {
+      //       this.textures.remove(key);
+      //     }
+      //     if (this.textures && typeof this.textures.renameTexture === "function") {
+      //       this.textures.renameTexture(hiKey, key);
+      //     }
+      //   }
+      // });
+    };
+
     // Load all assets for the game
+    // ensureImageTextureHiRes("mino_srs", "img/mino@2x.png", "img/mino.png");
+    // ensureImageTextureHiRes("mino_ars", "img/minoARS@2x.png", "img/minoARS.png");
+    // ensureImageTextureHiRes("mono", "img/mono@2x.png", "img/mono.png");
+    // ensureImageTextureHiRes("mono_ars", "img/monoARS@2x.png", "img/monoARS.png");
     ensureImageTexture("mino_srs", "img/mino.png");
     ensureImageTexture("mino_ars", "img/minoARS.png");
     ensureImageTexture("mono", "img/mono.png");
@@ -6464,8 +6581,6 @@ class GameScene extends Phaser.Scene {
       case "tgm3":
       case "tgm4":
       case "20g":
-      case "tadeath":
-      case "shirase":
       case "master20g":
       case "asuka_easy":
       case "asuka_normal":
@@ -6473,6 +6588,13 @@ class GameScene extends Phaser.Scene {
         return (
           byGrade() ||
           byDesc(a.level, b.level) ||
+          byAsc(parseNumTime(a.time), parseNumTime(b.time))
+        );
+      case "tadeath":
+      case "shirase": // T.A.Death and Shirase: level -> grade -> time
+        return (
+          byDesc(a.level, b.level) ||
+          byGrade() ||
           byAsc(parseNumTime(a.time), parseNumTime(b.time))
         );
       case "tgm3_sakura": // Puzzle
@@ -7463,8 +7585,11 @@ class GameScene extends Phaser.Scene {
       this.grade = initialDisplayedGrade;
       const gradeTextValue = initialDisplayedGrade;
       const gradeVisible =
-        (typeof gradeTextValue === "string" && gradeTextValue.trim() !== "") ||
-        (typeof gradeTextValue !== "string" && gradeTextValue != null);
+        gradeTextValue !== undefined &&
+        gradeTextValue !== null &&
+        gradeTextValue !== "" &&
+        gradeTextValue !== " " &&
+        gradeTextValue !== 0;
       this.gradeText = this.add
         .text(gradeX + gradeWidth / 2, gradeY + 40, gradeTextValue, {
           fontSize: `${xlargeFontSize}px`,
@@ -8580,6 +8705,8 @@ class GameScene extends Phaser.Scene {
       rotateCCW2: makeKey(keybinds.rotateCCW2, Phaser.Input.Keyboard.KeyCodes.L),
       rotate180: makeKey(keybinds.rotate180, Phaser.Input.Keyboard.KeyCodes.X),
       hold: makeKey(keybinds.hold, Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      extra: makeKey(keybinds.extra, Phaser.Input.Keyboard.KeyCodes.A),
+      backstep: makeKey(keybinds.backstep, Phaser.Input.Keyboard.KeyCodes.D),
       pause: makeKey(keybinds.pause, Phaser.Input.Keyboard.KeyCodes.ESC),
       menu: makeKey(keybinds.menu, Phaser.Input.Keyboard.KeyCodes.M),
       restart: makeKey(keybinds.restart, Phaser.Input.Keyboard.KeyCodes.ENTER),
@@ -8596,6 +8723,8 @@ class GameScene extends Phaser.Scene {
       keybinds.rotateCCW2,
       keybinds.rotate180,
       keybinds.hold,
+      keybinds.extra,
+      keybinds.backstep,
       keybinds.pause,
       keybinds.menu,
       keybinds.restart,
@@ -8946,7 +9075,7 @@ class GameScene extends Phaser.Scene {
       ultra: { segments: [{ end: 999, key: "tm1_1" }] },
       zen: { segments: [{ end: 999, key: "zen_custom" }] },
       tgm1: { segments: sharedTGM1, credits: "tm1_endroll" },
-      tgm_plus: { segments: sharedTGM1, credits: "tm1_endroll" },
+      tgm4: { segments: sharedTGM1, credits: "tm1_endroll" },
       "20g": { segments: sharedTGM1, credits: "tm1_endroll" },
       tgm2: {
         segments: [
@@ -9090,6 +9219,9 @@ class GameScene extends Phaser.Scene {
     if (typeof this.updateZenSandboxDisplay === "function") {
       this.updateZenSandboxDisplay();
     }
+
+    // Ensure grade visibility is properly updated during Ready/Go sequence
+    this.updateGradeUIVisibility?.();
 
     // Pre-initialize PPS/UI at scene display so sprint modes start at zero
     this.totalPiecesPlaced = 0;
@@ -9409,12 +9541,33 @@ class GameScene extends Phaser.Scene {
     const startDown = isDown(this.keys.start);
     const startJustDown = justDown(this.keys.start);
     const holdJustDown = justDown(this.keys.hold);
+    const extraJustDown = justDown(this.keys.extra);
+    const backstepJustDown = justDown(this.keys.backstep);
+    
     if (holdJustDown) {
       this.holdRequest = true;
       // If currently in ARE, mark for IHS; otherwise try to consume immediately later in the frame
       if (this.areActive) {
         this.initialHoldSystem = true;
       }
+    }
+
+    // Handle Extra button
+    if (extraJustDown && this.currentPiece && !this.areActive) {
+      const extraActivationMode = localStorage.getItem("extraActivationMode") || "hold";
+      if (extraActivationMode === "hold") {
+        // Hold activation - Sonic Drop becomes Hard Drop, Soft Lock becomes Soft Drop
+        this.softDropMultiplier = 100; // 20G equivalent
+        // This would need to be implemented in the piece movement logic
+      } else if (extraActivationMode === "toggle") {
+        // Toggle activation - switch between Sonic/Hard Drop
+        this.hardDropEnabled = !this.hardDropEnabled;
+      }
+    }
+
+    // Handle Backstep (Rewind) button
+    if (backstepJustDown && this.gameMode && typeof this.gameMode.onBackstep === "function") {
+      this.gameMode.onBackstep(this);
     }
 
     // Global hold consumption pass (piece-active, not in ARE)
@@ -13667,6 +13820,7 @@ class GameScene extends Phaser.Scene {
       gradeValue !== undefined &&
       gradeValue !== null &&
       gradeValue !== "" &&
+      gradeValue !== " " &&
       gradeValue !== 0;
 
     this.gradeDisplay.setVisible(hasGrade);
@@ -13907,13 +14061,16 @@ class GameScene extends Phaser.Scene {
     this.currentLevelText.setText("0");
     if (hasGrading) {
       const isTADeath = modeIdLower === "ta_death" || modeIdLower === "t.a. death";
+      const isShirase = modeIdLower === "tgm3_shirase" || modeIdLower === "shirase";
       const baselineGrade =
         this.initialGradeBaseline !== null && this.initialGradeBaseline !== undefined
           ? this.initialGradeBaseline
-          : isTADeath
-            ? ""
+          : isTADeath || isShirase
+            ? " "
             : "9";
       this.gradeText.setText(baselineGrade);
+      // Update grade visibility after setting text
+      this.updateGradeUIVisibility?.();
     }
     // Reset Marathon mode separate level display
     if (isMarathonMode && this.levelDisplayText) {
@@ -14089,11 +14246,12 @@ class GameScene extends Phaser.Scene {
         ? this.gameMode.getModeId()
         : this.selectedMode) || "";
     const modeIdLower = typeof modeId === "string" ? modeId.toLowerCase() : "";
+    const isTgm4Like = modeIdLower === "tgm4";
     const isTgm2Like = modeIdLower.startsWith("tgm2");
     const isTgm3Like = modeIdLower === "tgm3" || modeIdLower === "tgm3_master";
     const isShiraseLike = modeIdLower === "tgm3_shirase" || modeIdLower === "shirase";
     if (!this.rollType) {
-      if (isTgm3Like) {
+      if (isTgm4Like || isTgm2Like || isTgm3Like) {
         this.rollType = "fading";
         this.fadingRollActive = true;
         this.invisibleStackActive = false;
@@ -15451,7 +15609,15 @@ class GameScene extends Phaser.Scene {
       this.grade = gradeToShow;
       if (this.gradeText) {
         this.gradeText.setText(gradeToShow);
-        this.gradeText.setVisible(true);
+        // Use proper grade visibility logic instead of always showing
+        const gradeValue = typeof gradeToShow === "string" ? gradeToShow.trim() : gradeToShow;
+        const hasGrade =
+          gradeValue !== undefined &&
+          gradeValue !== null &&
+          gradeValue !== "" &&
+          gradeValue !== " " &&
+          gradeValue !== 0;
+        this.gradeText.setVisible(hasGrade);
       }
       if (this.gradePointsText) {
         const gradePoints =
@@ -15926,8 +16092,16 @@ const config = {
   dom: {
     createContainer: true,
   },
+  text: {
+    defaultFont: "Courier New",
+    defaultFontSize: "16px",
+    antialias: true,
+    smooth: false,
+    stroke: "#000",
+    strokeThickness: 0,
+  },
   render: {
-    antialias: false,
+    antialias: true,
     pixelArt: true,
     roundPixels: true,
     desynchronized: false,
@@ -15973,6 +16147,7 @@ window.__minoResizeHandler = () => {
 
   const width = window.innerWidth;
   const height = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
 
   // Resize the canvas to the current window resolution
   const canvas =
@@ -15985,12 +16160,26 @@ window.__minoResizeHandler = () => {
   }
 
   activeGame.scale.resize(width, height);
-  if (activeGame.renderer && typeof activeGame.renderer.resize === "function") {
-    activeGame.renderer.resize(width, height);
+  if (activeGame.renderer) {
+    if (typeof activeGame.renderer.resolution === "number") {
+      activeGame.renderer.resolution = dpr;
+    }
+    if (typeof activeGame.renderer.resize === "function") {
+      activeGame.renderer.resize(width, height);
+    }
   }
   if (canvas && canvas.style) {
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
+  }
+
+  const targetCanvasWidth = Math.floor(width * dpr);
+  const targetCanvasHeight = Math.floor(height * dpr);
+  if (canvas.width !== targetCanvasWidth) {
+    canvas.width = targetCanvasWidth;
+  }
+  if (canvas.height !== targetCanvasHeight) {
+    canvas.height = targetCanvasHeight;
   }
 
   // Recalculate layout/UI for all scenes that expose the hooks

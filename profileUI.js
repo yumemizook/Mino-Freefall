@@ -74,11 +74,18 @@
   let userDoc = null;
 
   function colorForRating(value) {
-    if (value >= 1600) return "#7cc7ff";
-    if (value >= 1200) return "#c3ff7c";
-    if (value >= 800) return "#ffd37c";
-    if (value >= 400) return "#ff9f7c";
-    return "#bbbbbb";
+    if (value >= 15000) return "#FF00FF"; // rainbow fallback
+    if (value >= 14500) return "#FFD700"; // gold gradient fallback
+    if (value >= 14000) return "#FFD700"; // gold
+    if (value >= 13000) return "#C0C0C0"; // silver
+    if (value >= 12000) return "#CD7F32"; // bronze
+    if (value >= 10000) return "#9B59B6"; // purple
+    if (value >= 7000) return "#FF0000"; // red
+    if (value >= 4000) return "#FFFF00"; // yellow
+    if (value >= 2000) return "#90EE90"; // light green
+    if (value >= 1000) return "#00FFFF"; // cyan
+    if (value >= 0) return "#00FFFF"; // cyan-white gradient fallback
+    return "#bbb";
   }
 
   function initialFromName(name) {

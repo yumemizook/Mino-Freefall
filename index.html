@@ -26,22 +26,39 @@
             font-family: 'Courier New', monospace;
             color: #fff;
             overflow: hidden; /* Prevent scrollbars in fullscreen mode */
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: none;
+            -moz-osx-font-smoothing: unset;
+            text-rendering: geometricPrecision;
+            font-smooth: never;
         }
         #game-container {
             width: 100vw;
             height: 100vh;
             display: block;
         }
-        /* Keep canvas text and pixels crisp when scaled */
+        /* Pixel-perfect canvas rendering for sharp text */
         canvas {
-            image-rendering: optimizeSpeed;
-            image-rendering: -moz-crisp-edges;
-            image-rendering: -webkit-optimize-contrast;
             image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            font-smooth: never;
+            -webkit-font-smoothing: none;
+            -moz-osx-font-smoothing: unset;
+            text-rendering: geometricPrecision;
+        }
+        
+        /* Fallback for browsers that don't support pixelated rendering */
+        @supports not (image-rendering: pixelated) {
+            canvas {
+                image-rendering: -webkit-optimize-contrast;
+                image-rendering: crisp-edges;
+                image-rendering: -moz-crisp-edges;
+                font-smooth: never;
+                -webkit-font-smoothing: none;
+                -moz-osx-font-smoothing: unset;
+                text-rendering: geometricPrecision;
+            }
         }
         #mobile-warning {
             position: fixed;

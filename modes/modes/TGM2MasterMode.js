@@ -27,7 +27,9 @@ class TGM2MasterMode extends BaseMode {
                 fadingRoll: true,          // Enable Fading Roll credit roll
                 mRoll: true,               // Enable M-Roll challenge
                 tgm2Grading: true,         // Use TGM2 grading system
-                progressiveTimings: true   // Enable progressive timing system
+                progressiveTimings: true,  // Enable progressive timing system
+                easyCompletionLevel: 999,  // Enable stack fading at level 999
+                creditsDuration: 61.6       // Credits roll duration
             }
         };
         
@@ -99,7 +101,9 @@ class TGM2MasterMode extends BaseMode {
                 fadingRoll: true,          // Enable Fading Roll credit roll
                 mRoll: true,               // Enable M-Roll challenge
                 tgm2Grading: true,         // Use TGM2 grading system
-                progressiveTimings: true   // Enable progressive timing system
+                progressiveTimings: true,  // Enable progressive timing system
+                easyCompletionLevel: 999,  // Enable stack fading at level 999
+                creditsDuration: 61.6       // Credits roll duration
             }
         };
     }

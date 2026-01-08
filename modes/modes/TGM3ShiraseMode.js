@@ -12,9 +12,9 @@ class TGM3ShiraseMode extends BaseMode {
         this.rollReached = false;
         this.currentTiming = this.getTimingForLevel(0);
 
-        // Simple section-based grading: start at 1, advance per section (no advance on REGRET)
+        // Simple section-based grading: start at no grade, advance per section (no advance on REGRET)
         this.gradeLadder = [
-            '1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13'
+            ' ', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13'
         ];
         this.gradeIndex = 0;
         this.lineColor = 'none';
@@ -34,7 +34,7 @@ class TGM3ShiraseMode extends BaseMode {
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
-            lowestGrade: '1',
+            lowestGrade: ' ',
             gravityLevelCap: 1300,
             hasGrading: true,
             specialMechanics: {
@@ -141,7 +141,9 @@ class TGM3ShiraseMode extends BaseMode {
     }
 
     getDisplayedGrade() {
-        return this.gradeLadder[this.gradeIndex] || '1';
+        const grade = this.gradeLadder[this.gradeIndex] || ' ';
+        // Return ' ' (nothing) if no grade achieved
+        return grade === ' ' ? ' ' : grade;
     }
 
     getInternalGrade() {

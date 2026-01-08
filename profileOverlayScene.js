@@ -129,13 +129,17 @@ class ProfileOverlayScene extends Phaser.Scene {
     if (typeof signOutUser === "function") {
       signOutUser().catch((e) => console.warn("Sign out failed", e));
     }
+    this.hideTooltip();
+    this.setTooltipRatingVisible(false);
+    this.setRatingVisible(false);
   }
 
   setTooltipRatingVisible(visible) {
+    const shouldShow = visible && this.currentUser;
     if (this.tooltipRatingDigits?.length) {
-      this.tooltipRatingDigits.forEach((d) => d.setVisible(visible));
+      this.tooltipRatingDigits.forEach((d) => d.setVisible(shouldShow));
     }
-    this.tooltipBodyRating?.setVisible(visible && (!this.tooltipRatingDigits?.length || !this.ratingDigitsReady));
+    this.tooltipBodyRating?.setVisible(shouldShow && (!this.tooltipRatingDigits?.length || !this.ratingDigitsReady));
   }
 
   updateTooltipRatingDigits(value, colorHex) {
@@ -144,6 +148,13 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.tooltipBodyRating?.setText(value || "—").setColor(colorHex || "#bbbbbb").setVisible(true);
       return;
     }
+    
+    // Handle the case where value is "—" or null/undefined
+    if (!value || value === "—") {
+      this.tooltipBodyRating?.setText("—").setColor(colorHex || "#bbbbbb").setVisible(true);
+      return;
+    }
+    
     const num = Number(value);
     const digitsStr = Number.isFinite(num) ? Math.max(0, Math.round(num)).toString() : null;
     if (!digitsStr) {
@@ -151,25 +162,79 @@ class ProfileOverlayScene extends Phaser.Scene {
       return;
     }
     this.tooltipBodyRating?.setVisible(false);
-    const color = Phaser.Display.Color.HexStringToColor(colorHex || "#bbbbbb").color;
-    const scaledWidth = (this.digitWidth || 100) * this.tooltipRatingScale;
-    const scaledHeight = (this.digitHeight || 100) * this.tooltipRatingScale;
-    const step = Math.round(((this.digitWidth || 100) * this.tooltipRatingScale) + this.ratingSpacing + 5);
+
+    const mult = (this.digitWidth || 0) >= 200 ? 0.5 : 1;
+    const scaledWidth = (this.digitWidth || 100) * this.tooltipRatingScale * mult;
+    const scaledHeight = (this.digitHeight || 100) * this.tooltipRatingScale * mult;
+    const spacing = (this.ratingSpacing + 5) * mult + (mult === 0.5 ? -12 : 0);
     const targetContainer = this.tooltip || this;
     const baseDepth = (this.tooltip?.depth || this.baseDepth) + 2;
-    for (let i = 0; i < digitsStr.length; i++) {
-      const d = digitsStr[i];
-      const frameIndex = parseInt(d, 10);
-      const img = this.add
-        .image(this.tooltipRatingLocalPos.x + i * step, this.tooltipRatingLocalPos.y, "ratingdigits", frameIndex)
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(baseDepth)
-        .setDisplaySize(scaledWidth, scaledHeight)
-        .setTint(color)
-        .setVisible(true);
-      targetContainer.add(img);
-      this.tooltipRatingDigits.push(img);
+    
+    // Check if we need gradient
+    const needsGradient = colorHex && (colorHex.includes("gradient") || colorHex === "rainbow");
+    
+    if (needsGradient) {
+      // Create individual digit sprites with gradient applied directly
+      for (let i = 0; i < digitsStr.length; i++) {
+        const d = digitsStr[i];
+        const frameIndex = parseInt(d, 10);
+        
+        // Verify the frame exists before proceeding
+        const spritesheet = this.textures.get('ratingdigits');
+        const frame = spritesheet.get(frameIndex.toString());
+        
+        if (!frame) {
+          continue; // Skip this digit if frame doesn't exist
+        }
+        
+        // Create gradient digit canvas
+        const gradientDigitTexture = this.createGradientDigitCanvas(
+          frameIndex,
+          colorHex,
+          mult === 0.5 ? scaledWidth / mult : scaledWidth,
+          mult === 0.5 ? scaledHeight / mult : scaledHeight,
+          i,
+          digitsStr.length,
+        );
+        
+        if (!gradientDigitTexture) {
+          continue;
+        }
+        
+        // Create container for this digit
+        const container = this.add.container(this.tooltipRatingLocalPos.x + i * (scaledWidth + spacing), this.tooltipRatingLocalPos.y);
+        container.setDepth(baseDepth);
+        container.setScrollFactor(0);
+        
+        // Add the gradient digit sprite
+        const digitSprite = this.add.image(0, 0, gradientDigitTexture)
+          .setOrigin(0, 0)
+          .setDisplaySize(scaledWidth, scaledHeight);
+        
+        container.add(digitSprite);
+        targetContainer.add(container);
+        this.tooltipRatingDigits.push(container);
+      }
+    } else {
+      // Regular digit sprites with color tint
+      const tintValue = typeof colorHex === 'string' && colorHex.startsWith('#') 
+        ? parseInt(colorHex.replace('#', '0x'), 16) 
+        : colorHex;
+      
+      for (let i = 0; i < digitsStr.length; i++) {
+        const d = digitsStr[i];
+        const frameIndex = parseInt(d, 10);
+        const img = this.add
+          .image(this.tooltipRatingLocalPos.x + i * (scaledWidth + spacing), this.tooltipRatingLocalPos.y, "ratingdigits", frameIndex)
+          .setOrigin(0, 0)
+          .setScrollFactor(0)
+          .setDepth(baseDepth)
+          .setTint(tintValue)
+          .setDisplaySize(scaledWidth, scaledHeight)
+          .setVisible(true);
+        targetContainer.add(img);
+        this.tooltipRatingDigits.push(img);
+      }
     }
   }
 
@@ -191,8 +256,10 @@ class ProfileOverlayScene extends Phaser.Scene {
     if (!this.ratingDigits?.length) return;
     const baseX = this.ratingPos.x;
     const baseY = this.ratingPos.y;
-    const scaledWidth = (this.digitWidth || 100) * this.ratingScale;
-    const step = Math.round(scaledWidth + this.ratingSpacing);
+    const mult = (this.digitWidth || 0) >= 200 ? 0.5 : 1;
+    const scaledWidth = (this.digitWidth || 100) * this.ratingScale * mult;
+    const spacing = this.ratingSpacing * mult + (mult === 0.5 ? -12 : 0);
+    const step = Math.round(scaledWidth + spacing);
     this.ratingDigits.forEach((img, idx) => {
       img.setPosition(Math.round(baseX + idx * step), Math.round(baseY));
     });
@@ -206,6 +273,14 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.clearRatingDigits();
       return;
     }
+    
+    // Handle the case where value is "—" or null/undefined
+    if (!this.ratingString || this.ratingString === "—") {
+      this.ratingText?.setText("—").setColor(this.ratingColor).setVisible(true);
+      this.clearRatingDigits();
+      return;
+    }
+    
     const num = Number(this.ratingString);
     const digitsStr = Number.isFinite(num) ? Math.max(0, Math.round(num)).toString() : null;
     if (!digitsStr) {
@@ -216,28 +291,83 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.ratingText?.setVisible(false);
     this.clearRatingDigits();
     const depth = this.baseDepth + 2;
-    const color = Phaser.Display.Color.HexStringToColor(this.ratingColor || "#bbbbbb").color;
-    const scaledWidth = (this.digitWidth || 100) * this.ratingScale;
-    const scaledHeight = (this.digitHeight || 100) * this.ratingScale;
-    for (let i = 0; i < digitsStr.length; i++) {
-      const d = digitsStr[i];
-      const frameIndex = parseInt(d, 10);
-      const img = this.add
-        .image(this.ratingPos.x, this.ratingPos.y, "ratingdigits", frameIndex)
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(depth)
-        .setDisplaySize(scaledWidth, scaledHeight)
-        .setTint(color);
-      this.ratingDigits.push(img);
+    const mult = (this.digitWidth || 0) >= 200 ? 0.5 : 1;
+    const scaledWidth = (this.digitWidth || 100) * this.ratingScale * mult;
+    const scaledHeight = (this.digitHeight || 100) * this.ratingScale * mult;
+    const spacing = this.ratingSpacing * mult + (mult === 0.5 ? -12 : 0);
+    
+    // Check if we need gradient
+    const needsGradient = this.ratingColor && (this.ratingColor.includes("gradient") || this.ratingColor === "rainbow");
+    
+    if (needsGradient) {
+      // Create individual digit sprites with gradient applied directly
+      for (let i = 0; i < digitsStr.length; i++) {
+        const d = digitsStr[i];
+        const frameIndex = parseInt(d, 10);
+        
+        // Verify the frame exists before proceeding
+        const spritesheet = this.textures.get('ratingdigits');
+        const frame = spritesheet.get(frameIndex.toString());
+        
+        if (!frame) {
+          continue; // Skip this digit if frame doesn't exist
+        }
+        
+        // Create gradient digit canvas
+        const gradientDigitTexture = this.createGradientDigitCanvas(
+          frameIndex,
+          this.ratingColor,
+          mult === 0.5 ? scaledWidth / mult : scaledWidth,
+          mult === 0.5 ? scaledHeight / mult : scaledHeight,
+          i,
+          digitsStr.length,
+        );
+        
+        if (!gradientDigitTexture) {
+          continue;
+        }
+        
+        // Create container for this digit
+        const container = this.add.container(this.ratingPos.x + i * (scaledWidth + spacing), this.ratingPos.y);
+        container.setDepth(depth);
+        container.setScrollFactor(0);
+        
+        // Add the gradient digit sprite
+        const digitSprite = this.add.image(0, 0, gradientDigitTexture)
+          .setOrigin(0, 0)
+          .setDisplaySize(scaledWidth, scaledHeight);
+        
+        container.add(digitSprite);
+        this.ratingDigits.push(container);
+      }
+    } else {
+      // Regular digit sprites with color tint
+      const tintValue = typeof this.ratingColor === 'string' && this.ratingColor.startsWith('#') 
+        ? parseInt(this.ratingColor.replace('#', '0x'), 16) 
+        : this.ratingColor;
+      
+      for (let i = 0; i < digitsStr.length; i++) {
+        const d = digitsStr[i];
+        const frameIndex = parseInt(d, 10);
+        const img = this.add
+          .image(this.ratingPos.x + i * (scaledWidth + spacing), this.ratingPos.y, "ratingdigits", frameIndex)
+          .setOrigin(0, 0)
+          .setScrollFactor(0)
+          .setDepth(depth)
+          .setTint(tintValue)
+          .setDisplaySize(scaledWidth, scaledHeight);
+        this.ratingDigits.push(img);
+      }
     }
-    this.layoutRatingDigits();
+    
+    // Skip layoutRatingDigits since we're positioning manually
   }
 
   setRatingVisible(visible) {
-    this.ratingText?.setVisible(visible);
+    const shouldShow = visible && this.currentUser;
+    this.ratingText?.setVisible(shouldShow);
     if (this.ratingDigits?.length) {
-      this.ratingDigits.forEach((d) => d.setVisible(visible));
+      this.ratingDigits.forEach((d) => d.setVisible(shouldShow));
     }
   }
 
@@ -272,6 +402,8 @@ class ProfileOverlayScene extends Phaser.Scene {
         fontFamily: "Courier New, monospace",
         fontSize: "16px",
         color: "#ffffff",
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(0, 0)
       .setScrollFactor(0)
@@ -284,7 +416,25 @@ class ProfileOverlayScene extends Phaser.Scene {
     const ensureRatingTexture = () => {
       if (this.textures.exists("ratingdigits")) return Promise.resolve();
       return new Promise((resolve) => {
-        // Sprite sheet is 1150x115 with 10 digits => 115x115 per frame
+        // const onComplete = () => {
+        //   this.load.off(Phaser.Loader.Events.LOAD_ERROR, onError);
+        //   resolve();
+        // };
+        // const onError = (file) => {
+        //   if (file && file.key === "ratingdigits") {
+        //     this.load.off(Phaser.Loader.Events.COMPLETE, onComplete);
+        //     this.load.off(Phaser.Loader.Events.LOAD_ERROR, onError);
+        //     this.load.spritesheet("ratingdigits", "img/ratingnumbers.png", { frameWidth: 115, frameHeight: 115 });
+        //     this.load.once(Phaser.Loader.Events.COMPLETE, resolve);
+        //     this.load.start();
+        //   }
+        // };
+
+        // this.load.spritesheet("ratingdigits", "img/ratingnumbers@2x.png", { frameWidth: 230, frameHeight: 230 });
+        // this.load.once(Phaser.Loader.Events.COMPLETE, onComplete);
+        // this.load.on(Phaser.Loader.Events.LOAD_ERROR, onError);
+        // this.load.start();
+
         this.load.spritesheet("ratingdigits", "img/ratingnumbers.png", { frameWidth: 115, frameHeight: 115 });
         this.load.once(Phaser.Loader.Events.COMPLETE, resolve);
         this.load.start();
@@ -314,6 +464,8 @@ class ProfileOverlayScene extends Phaser.Scene {
         color: "#c3ff7c",
         backgroundColor: "rgba(0,0,0,0.6)",
         padding: { x: 4, y: 2 },
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(0, 1)
       .setDepth(baseDepth + 5)
@@ -376,6 +528,19 @@ class ProfileOverlayScene extends Phaser.Scene {
 
     this.renderTexts();
     this.registerInputHandlers();
+    
+    // Add console function for testing rating colors
+    window.testRatingColor = (rating) => {
+      const color = this.colorForRating(rating);
+      console.log(`Rating ${rating} -> Color: ${color}`);
+      this.ratingString = rating.toString();
+      this.ratingColor = color;
+      this.updateRatingDigits(this.ratingString, this.ratingColor);
+      this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
+    };
+    
+    console.log('Rating color test function available: testRatingColor(rating)');
+    console.log('Examples: testRatingColor(196), testRatingColor(5000), testRatingColor(15000)');
   }
 
   async handleAvatarFile(file) {
@@ -489,12 +654,220 @@ class ProfileOverlayScene extends Phaser.Scene {
     }
   }
 
+  createGradientDigitCanvas(frameIndex, colorType, width, height, digitIndex, totalDigits) {
+    const dpr =
+      (this.game && this.game.renderer && typeof this.game.renderer.resolution === "number"
+        ? this.game.renderer.resolution
+        : window.devicePixelRatio || 1) || 1;
+    const textureKey = `gradient_digit_canvas_${frameIndex}_${colorType}_${digitIndex}_${width}_${height}_dpr${dpr}`;
+    
+    if (this.textures.exists(textureKey)) {
+      return textureKey;
+    }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
+    const ctx = canvas.getContext('2d');
+    if (ctx && dpr !== 1) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    
+    // Enable image smoothing for high-quality rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // Get the original digit frame using multiple frame access methods
+    const spritesheet = this.textures.get('ratingdigits');
+    
+    // Try different frame access methods
+    let frame = null;
+    
+    // Method 1: Try get with string key
+    frame = spritesheet.get(frameIndex.toString());
+    
+    // Method 2: Try get with numeric key
+    if (!frame) {
+      frame = spritesheet.get(frameIndex);
+    }
+    
+    // Method 3: Try frames array access
+    if (!frame && spritesheet.frames) {
+      frame = spritesheet.frames[frameIndex];
+    }
+    
+    // Method 4: Try frameNames array access
+    if (!frame && spritesheet.frameNames) {
+      const frameName = spritesheet.frameNames[frameIndex];
+      if (frameName) {
+        frame = spritesheet.get(frameName);
+      }
+    }
+    
+    if (frame && frame.source) {
+      const sourceImage = frame.source.image;
+      const inferredFrameWidth =
+        (typeof frame.cutWidth === "number" && frame.cutWidth) ||
+        (typeof frame.width === "number" && frame.width) ||
+        Math.floor((sourceImage?.width || 0) / 10) ||
+        1;
+      const inferredFrameHeight =
+        (typeof frame.cutHeight === "number" && frame.cutHeight) ||
+        (typeof frame.height === "number" && frame.height) ||
+        (sourceImage?.height || 0) ||
+        1;
+
+      const calculatedX =
+        (typeof frame.cutX === "number" && frame.cutX) ||
+        (typeof frame.x === "number" && frame.x) ||
+        frameIndex * inferredFrameWidth;
+      const calculatedY =
+        (typeof frame.cutY === "number" && frame.cutY) ||
+        (typeof frame.y === "number" && frame.y) ||
+        0;
+      
+      // Draw the digit first
+      ctx.drawImage(
+        sourceImage,
+        calculatedX, calculatedY, inferredFrameWidth, inferredFrameHeight,
+        0, 0, width, height
+      );
+      
+      // Create gradient that spans across all digits
+      const totalWidth = width * totalDigits;
+      const gradient = ctx.createLinearGradient(0, 0, totalWidth, 0);
+      
+      if (colorType === "gold-gradient") {
+        gradient.addColorStop(0, '#FFEB3B');
+        gradient.addColorStop(0.3, '#FFEB3B');
+        gradient.addColorStop(0.5, '#FFD700');
+        gradient.addColorStop(0.7, '#FFD700');
+        gradient.addColorStop(1, '#FFEB3B');
+      } else if (colorType === "cyan-white-cyan-gradient") {
+        // Single consistent cyan-white-cyan pattern across all digits
+        gradient.addColorStop(0, '#00FFFF');
+        gradient.addColorStop(0.5, '#FFFFFF');
+        gradient.addColorStop(1, '#00FFFF');
+      } else if (colorType === "rainbow") {
+        gradient.addColorStop(0, '#FF0000');
+        gradient.addColorStop(0.17, '#FF7F00');
+        gradient.addColorStop(0.33, '#FFFF00');
+        gradient.addColorStop(0.5, '#00FF00');
+        gradient.addColorStop(0.67, '#0000FF');
+        gradient.addColorStop(0.83, '#4B0082');
+        gradient.addColorStop(1, '#9400D3');
+      }
+      
+      // Apply gradient only to the digit pixels using source-atop
+      ctx.globalCompositeOperation = 'source-atop';
+      
+      // Create a temporary canvas for the gradient portion
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = Math.max(1, Math.floor(totalWidth * dpr));
+      tempCanvas.height = Math.max(1, Math.floor(height * dpr));
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx && dpr !== 1) {
+        tempCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      tempCtx.fillStyle = gradient;
+      tempCtx.fillRect(0, 0, totalWidth, height);
+      
+      // Copy just the portion for this digit
+      const sx = Math.floor(digitIndex * width * dpr);
+      const sw = Math.floor(width * dpr);
+      const sh = Math.floor(height * dpr);
+      ctx.drawImage(tempCanvas, sx, 0, sw, sh, 0, 0, width, height);
+      
+      // Reset composite operation
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    
+    this.textures.addCanvas(textureKey, canvas);
+    return textureKey;
+  }
+
+  createGradientTexture(colorType, width = 100, height = 100) {
+    const dpr =
+      (this.game && this.game.renderer && typeof this.game.renderer.resolution === "number"
+        ? this.game.renderer.resolution
+        : window.devicePixelRatio || 1) || 1;
+    const textureKey = `gradient_${colorType}_${width}_${height}_dpr${dpr}`;
+    
+    // Check if texture already exists
+    if (this.textures.exists(textureKey)) {
+      return textureKey;
+    }
+    
+    // Create canvas element for better gradient control
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
+    const ctx = canvas.getContext('2d');
+    if (ctx && dpr !== 1) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    
+    // Enable image smoothing for high-quality rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    if (colorType === "gold-gradient") {
+      // Vertical gradient from gold to orange
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, '#FFD700');
+      gradient.addColorStop(0.5, '#FFD700');
+      gradient.addColorStop(0.5, '#FFA500');
+      gradient.addColorStop(1, '#FFA500');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+    } else if (colorType === "cyan-white-cyan-gradient") {
+      // Horizontal gradient from cyan to white to cyan
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, '#00FFFF');
+      gradient.addColorStop(0.5, '#FFFFFF');
+      gradient.addColorStop(1, '#00FFFF');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+    } else if (colorType === "rainbow") {
+      // Create rainbow with horizontal stripes
+      const stripeHeight = Math.max(1, Math.floor(height / 7));
+      const colors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+      
+      for (let i = 0; i < 7; i++) {
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(0, i * stripeHeight, width, stripeHeight);
+      }
+    } else {
+      // Single color
+      ctx.fillStyle = colorType;
+      ctx.fillRect(0, 0, width, height);
+    }
+    
+    // Create texture from canvas
+    this.textures.addCanvas(textureKey, canvas);
+    
+    return textureKey;
+  }
+
+  
   colorForRating(value) {
-    if (value >= 2000) return "#7cc7ff";
-    if (value >= 1500) return "#c3ff7c";
-    if (value >= 1000) return "#ffd37c";
-    if (value >= 500) return "#ff9f7c";
+    if (value >= 15000) return "rainbow";
+    if (value >= 14500) return "gold-gradient";
+    if (value >= 14000) return "#FFD700"; // gold
+    if (value >= 13000) return "#C0C0C0"; // silver
+    if (value >= 12000) return "#CD7F32"; // bronze
+    if (value >= 10000) return "#9B59B6"; // purple
+    if (value >= 7000) return "#FF0000"; // red
+    if (value >= 4000) return "#FFFF00"; // yellow
+    if (value >= 2000) return "#90EE90"; // light green
+    if (value >= 1000) return "#00FFFF"; // cyan
+    if (value >= 0) return "cyan-white-cyan-gradient";
     return "#bbbbbb";
+  }
+
+  getRatingColor(value) {
+    const colorType = this.colorForRating(value);
+    return colorType;
   }
 
   renderTexts() {
@@ -505,6 +878,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.fallbackCache?.rating?.value;
     const ratingText = ratingVal != null ? Math.round(ratingVal).toString() : "—";
     const ratingColor = ratingVal != null ? this.colorForRating(ratingVal) : "#bbbbbb";
+    
     const rankVal = this.userDoc?.rating?.absoluteRank ?? this.userDoc?.rating?.rank ?? null;
     const bannerUrl = this.userDoc?.profile?.bannerUrl || this.currentBannerUrl;
     this.nameText?.setText(name);
@@ -538,7 +912,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.hideTooltip();
     }
     [this.card, this.nameText, this.avatarCircle, this.avatarImage, this.tooltip, this.tooltipDim].forEach((obj) => {
-      if (obj) obj.setVisible(show && (obj !== this.tooltip && obj !== this.tooltipDim ? true : this.tooltipVisible));
+      if (obj) obj.setVisible(show && (obj !== this.tooltip && obj !== this.tooltipDim ? true : this.tooltipVisible) && (obj === this.avatarCircle || obj === this.avatarImage ? this.currentUser : true));
     });
     // Hide rating while tooltip is open so the grey backdrop sits above it
     // Keep rating visible on card even when tooltip is open
@@ -562,7 +936,7 @@ class ProfileOverlayScene extends Phaser.Scene {
         this.tooltipAvatarMask.destroy();
         this.tooltipAvatarMask = null;
       }
-      if (textureKey && this.tooltip) {
+      if (textureKey && this.tooltip && this.currentUser) {
         this.tooltipAvatarImage = this.add
           .image(this.tooltipAvatarCircle.x, this.tooltipAvatarCircle.y, textureKey)
           .setDisplaySize(this.tooltipAvatarCircle.radius * 2, this.tooltipAvatarCircle.radius * 2)
@@ -577,10 +951,10 @@ class ProfileOverlayScene extends Phaser.Scene {
         this.tooltipAvatarMask = maskGfx.createGeometryMask();
         this.tooltipAvatarImage.setMask(this.tooltipAvatarMask);
       }
-      this.tooltipAvatarCircle?.setVisible(!textureKey);
+      this.tooltipAvatarCircle?.setVisible(!textureKey && this.currentUser);
     };
 
-    if (!url) {
+    if (!url || !this.currentUser) {
       if (this.avatarImage) {
         this.avatarImage.destroy();
         this.avatarImage = null;
@@ -589,7 +963,7 @@ class ProfileOverlayScene extends Phaser.Scene {
         this.avatarMask.destroy();
         this.avatarMask = null;
       }
-      this.avatarCircle?.setVisible(true);
+      this.avatarCircle?.setVisible(this.currentUser ? true : false);
       setTooltipAvatar(null);
       return;
     }
@@ -644,6 +1018,8 @@ class ProfileOverlayScene extends Phaser.Scene {
       fontFamily: "Courier New, monospace",
       fontSize: "18px",
       color: "#ffffff",
+      antialias: true,
+      smooth: false,
     }).setOrigin(0, 0);
     // Banner background (under text but above modal bg)
     this.tooltipBannerRect = this.add
@@ -661,6 +1037,8 @@ class ProfileOverlayScene extends Phaser.Scene {
         fontFamily: "Courier New, monospace",
         fontSize: "14px",
         color: "#ff9999",
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
@@ -669,12 +1047,16 @@ class ProfileOverlayScene extends Phaser.Scene {
       fontFamily: "Courier New, monospace",
       fontSize: "16px",
       color: "#ffffff",
+      antialias: true,
+      smooth: false,
     }).setOrigin(0, 0);
     this.tooltipBodyRating = this.add
       .text(-modalW / 2 + 16 + avatarR * 2 + 10, -modalH / 2 + 68, "Rating: —", {
         fontFamily: "Courier New, monospace",
         fontSize: "14px",
         color: "#bbbbbb",
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(0, 0);
     this.tooltipRatingPos = {
@@ -691,6 +1073,8 @@ class ProfileOverlayScene extends Phaser.Scene {
           fontFamily: "Courier New, monospace",
           fontSize: "16px",
           color,
+          antialias: true,
+          smooth: false,
         })
         .setOrigin(0.5);
       const bg = this.add
@@ -723,7 +1107,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       const { width: nameW } = nameBtn.bg;
       const { width: avatarW } = avatarBtn.bg;
       bannerBtn.container.setX(bannerX);
-      signOutBtn.container.setX(bannerX + bannerW / 2 + gap + signW / 2);
+      signOutBtn.container.setX(bannerX + bannerW / 2 + gap + signW / 2 - 45);
       nameBtn.container.setX(bannerX - (bannerW / 2 + gap + nameW / 2));
       avatarBtn.container.setX(nameBtn.container.x - (nameW / 2 + gap + avatarW / 2));
       signOutBtn.container.setY(signOutBtn.container.y - 5);
@@ -740,6 +1124,8 @@ class ProfileOverlayScene extends Phaser.Scene {
         fontFamily: "Courier New, monospace",
         fontSize: "40px",
         color: "#ffffff",
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(1, 0);
 
@@ -879,14 +1265,14 @@ class ProfileOverlayScene extends Phaser.Scene {
     const overlay = this.add
       .rectangle(cam.width / 2, cam.height / 2, cam.width, cam.height, 0x000000, 0.65)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 50)
+      .setDepth(this.baseDepth + 1250)
       .setVisible(true)
       .setInteractive();
     const bg = this.add
       .rectangle(cam.width / 2, cam.height / 2, w, h, 0x111111, 0.95)
       .setStrokeStyle(1, 0x666666)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 51)
+      .setDepth(this.baseDepth + 1251)
       .setVisible(true);
     const title = this.add
       .text(bg.x, bg.y - h / 2 + 12, "Change Name", {
@@ -896,7 +1282,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 52);
+      .setDepth(this.baseDepth + 1252);
     const name = this.add.dom(bg.x, bg.y - 20, "input", "width:240px;height:24px;font-size:13px;", this.currentUser?.displayName || "");
     name.node.placeholder = "New display name (3-20)";
     name.node.maxLength = 20;
@@ -913,7 +1299,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 52);
+      .setDepth(this.baseDepth + 1252);
     const saveBtn = this.add
       .text(bg.x - 60, bg.y + 35, "[Save]", {
         fontFamily: "Courier New, monospace",
@@ -922,7 +1308,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 52)
+      .setDepth(this.baseDepth + 1252)
       .setInteractive({ useHandCursor: true });
     const cancelBtn = this.add
       .text(bg.x + 60, bg.y + 35, "[Cancel]", {
@@ -932,7 +1318,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(this.baseDepth + 52)
+      .setDepth(this.baseDepth + 1252)
       .setInteractive({ useHandCursor: true });
 
     const hideModal = () => {

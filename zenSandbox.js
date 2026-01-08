@@ -146,6 +146,8 @@
       fill: "#ffff00",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      antialias: true,
+      smooth: false,
     });
     group.add(labelText);
     const rowSpacing = 20;
@@ -156,11 +158,15 @@
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Courier New",
+        antialias: true,
+        smooth: false,
       });
       const text = scene.add.text(48, optY, opt.label, {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Courier New",
+        antialias: true,
+        smooth: false,
       });
       radio.setInteractive();
       text.setInteractive();
@@ -183,6 +189,8 @@
       fill: "#00ff88",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      antialias: true,
+      smooth: false,
     });
     badge.setVisible(false);
     group.add(badge);
@@ -207,6 +215,8 @@
       fill: "#ffff00",
       fontFamily: "Courier New",
       fontStyle: "bold",
+      antialias: true,
+      smooth: false,
     });
     group.add(labelText);
 
@@ -220,6 +230,8 @@
         fontSize: "14px",
         fill: "#ffffff",
         fontFamily: "Courier New",
+        antialias: true,
+        smooth: false,
       })
       .setOrigin(0.5);
     group.add(inputText);
@@ -324,6 +336,8 @@
       fontSize: "12px",
       fill: "#ffcc00",
       fontFamily: "Courier New",
+      antialias: true,
+      smooth: false,
     });
     bagNotice.setVisible(!!cfg.bagChanged);
     group.add(bagNotice);
@@ -564,6 +578,8 @@
             fontSize: "20px",
             fill: "#ffff00",
             fontFamily: "Courier New",
+            antialias: true,
+            smooth: false,
           })
           .setOrigin(0.5);
 
@@ -573,6 +589,8 @@
           fill: "#ffff00",
           fontFamily: "Courier New",
           fontStyle: "bold",
+          antialias: true,
+          smooth: false,
         });
         group.add(labelText);
         const rowSpacing = 20;
@@ -584,11 +602,15 @@
             fontSize: "16px",
             fill: "#ffffff",
             fontFamily: "Courier New",
+            antialias: true,
+            smooth: false,
           });
           const text = scene.add.text(48, optY, opt.label, {
             fontSize: "16px",
             fill: "#ffffff",
             fontFamily: "Courier New",
+            antialias: true,
+            smooth: false,
           });
           radio.setInteractive();
           text.setInteractive();
@@ -635,6 +657,8 @@
           fontSize: "12px",
           fill: "#ffcc00",
           fontFamily: "Courier New",
+          antialias: true,
+          smooth: false,
         })
         .setOrigin(0, 0);
       bagNotice.setVisible(false);

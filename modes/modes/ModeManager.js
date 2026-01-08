@@ -94,11 +94,14 @@ class ModeManager {
             'tgm3_easy': { modeClass: 'TGM3EasyMode', config: { difficulty: 'easy', description: 'TGM3 Easy with Hanabi scoring and credit roll' } },
             'tgm3_sakura': { modeClass: 'TGM3SakuraMode', config: { difficulty: 'puzzle', description: 'Puzzle-style Sakura jewel-clearing' } },
             'shirase': { modeClass: 'TGM3ShiraseMode', config: { difficulty: '20g', description: 'Shirase 20G speed attack to 1300' } },
-            'tgm4': { modeClass: 'TGM4Mode', config: { difficulty: 'master', description: 'Patience is key...' } },
+            'tgm4': { modeClass: 'TGM4NormalMode', config: { difficulty: 'master', description: 'TGM4 Normal - 999 levels with A of B grading' } },
 
             // 20G modes
             '20g': { modeClass: 'Mode20G', config: { difficulty: '20g', description: 'Maximum gravity from the start! Good luck!' } },
             'tadeath': { modeClass: 'TADeathMode', config: { difficulty: '20g', description: 'Extreme 20G mode with torikan time limit. The ultimate test!' } },
+            'tgm4_1_1': { modeClass: 'TGM4_1_1Mode', config: { difficulty: '20g', description: 'TGM4 1.1 - TGM1 Normal recreation' } },
+            'tgm4_2_1': { modeClass: 'TGM4_2_1Mode', config: { difficulty: '20g', description: 'TGM4 2.1 - T.A. Death recreation' } },
+            'tgm4_3_1': { modeClass: 'TGM4_3_1Mode', config: { difficulty: '20g', description: 'TGM4 3.1 - Shirase recreation to 2000' } },
             'master20g': { modeClass: 'MasterTGM4Mode', config: { difficulty: '20g', description: 'Brand new, unique game mechanics. Can you handle them?' } },
 
             // RACE modes
@@ -251,11 +254,38 @@ class ModeManager {
                     }
                     break;
 
-                case 'TGM3ShiraseMode':
-                    if (typeof TGM3ShiraseMode !== 'undefined') {
-                        modeInstance = new TGM3ShiraseMode();
+                case 'TGM4NormalMode':
+                    if (typeof TGM4NormalMode !== 'undefined') {
+                        modeInstance = new TGM4NormalMode();
                     } else {
-                        console.warn('TGM3ShiraseMode not loaded, using BaseMode fallback');
+                        console.warn('TGM4NormalMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM4_1_1Mode':
+                    if (typeof TGM4_1_1Mode !== 'undefined') {
+                        modeInstance = new TGM4_1_1Mode();
+                    } else {
+                        console.warn('TGM4_1_1Mode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM4_2_1Mode':
+                    if (typeof TGM4_2_1Mode !== 'undefined') {
+                        modeInstance = new TGM4_2_1Mode();
+                    } else {
+                        console.warn('TGM4_2_1Mode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
+                case 'TGM4_3_1Mode':
+                    if (typeof TGM4_3_1Mode !== 'undefined') {
+                        modeInstance = new TGM4_3_1Mode();
+                    } else {
+                        console.warn('TGM4_3_1Mode not loaded, using BaseMode fallback');
                         modeInstance = new BaseMode();
                     }
                     break;

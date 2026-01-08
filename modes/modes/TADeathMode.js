@@ -15,7 +15,7 @@ class TADeathMode extends BaseMode {
             ghostEnabled: true,             // Ghost piece enabled
             levelUpType: 'piece',           // Level up per piece
             lineClearBonus: 1,
-            lowestGrade: '1',
+            lowestGrade: ' ',
             gravityLevelCap: 999,
             specialMechanics: {
                 fixed20G: true,             // Fixed 20G gravity throughout
@@ -27,7 +27,7 @@ class TADeathMode extends BaseMode {
         };
         
         // T.A. Death grading (minimal - only M and GM)
-        this.displayedGrade = '1'; // Start at grade 1 (hidden until UI shows)
+        this.displayedGrade = ' '; // Start with no grade (hidden)
         this.internalGrade = 31;   // Start at 31 (9.5 grade level)
         this.isMGrade = false;
         this.isGMGrade = false;
@@ -158,11 +158,11 @@ class TADeathMode extends BaseMode {
     // Initialize mode for game scene
     initializeForGameScene(gameScene) {
         super.initializeForGameScene(gameScene);
-        // Ensure grade starts at baseline (grade 1)
-        this.displayedGrade = '1';
+        // Ensure grade starts at baseline (no grade)
+        this.displayedGrade = ' ';
         this.internalGrade = 31;
         if (gameScene) {
-            gameScene.grade = '1';
+            gameScene.grade = ' ';
         }
         if (gameScene && gameScene.gradeText) {
             gameScene.gradeText.setText(this.displayedGrade);
@@ -504,7 +504,7 @@ class TADeathMode extends BaseMode {
         super.reset();
         
         // Reset T.A. Death specific variables
-        this.displayedGrade = '1';
+        this.displayedGrade = ' ';
 
         this.internalGrade = 31;
         this.isMGrade = false;
