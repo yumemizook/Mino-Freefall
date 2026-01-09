@@ -1,7 +1,7 @@
 // TGM4 3.1 Mode Implementation
 // Recreation of Shirase mode - 20G with 2000 levels and SX grading
 
-class TGM4_3_1Mode extends BaseMode {
+class TGM4_3_1Mode extends TGM4BaseMode {
     constructor() {
         super();
         this.modeName = 'TGM4 3.1';
@@ -37,33 +37,28 @@ class TGM4_3_1Mode extends BaseMode {
 
     getModeConfig() {
         return {
+            ...this.getDefaultConfig(),
             gravity: {
                 type: 'fixed_20g', // Fixed 20G gravity
                 value: 5120,    // 20G value
                 curve: null
             },
-            das: 10/60,      // 2 frames shorter than Ti
+            das: 8/60,       // 2 frames shorter than Ti (10f)
             arr: 1/60,       // Fast ARR
             are: 12/60,      // Fast ARE
             lineAre: 8/60,   // Fast Line ARE
             lockDelay: 18/60, // Fast lock delay
             lineClearDelay: 6/60, // Fast line clear
-
             nextPieces: 6,   // TGM4 shows 6 pieces
             holdEnabled: true, // TGM4 has hold
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
             gravityLevelCap: 2000, // Extended to 2000 levels
-            
             specialMechanics: {
-                movementLimitation: true,
-                maxMoveResets: 8,
-                maxRotationResets: 2,
-                diagonalInput: false,
-                extraButton: true,
-                irs180: true,
-                gradingSystem: 'shirase', // Shirase-style grading
+                ...this.getDefaultConfig().specialMechanics,
+                fixed20G: true,
+                shiraseTimings: true, // 8 timing phases
                 garbageSystem: true, // Enable garbage system
                 torikans: true, // Enable multiple torikans
                 bgmSystem: true, // Enable BGM system
@@ -72,33 +67,41 @@ class TGM4_3_1Mode extends BaseMode {
                     level1000_1299: 'bgm/tm2_3.mp3',
                     level1300_plus: 'bgm/tm3_6.mp3'
                 },
-                bgmStopThresholds: [999, 1299, 1999] // Stop BGM at these levels
+                bgmStopThresholds: [999, 1299, 1999], // Stop BGM at these levels
+                torikans: [
+                    { level: 1000, time: 241, grade: 'S10' },  // 4:01
+                    { level: 1300, time: 270, grade: 'S13' },  // 4:30
+                    { level: 2000, time: 406, grade: 'S20' }   // 6:46
+                ],
+                gmRequirements: {
+                    level2000: { time: 406, rollPoints: 21 } // 6:46, 21 roll points for GM
+                }
             }
         };
     }
 
     // Get garbage quota for current section
     getGarbageQuota(section) {
-        // Garbage quotas by section (simplified version)
+        // Official TGM4 3.1 garbage quotas
         const quotas = {
-            5: 4,   // 500-599
-            6: 4,   // 600-699
-            7: 5,   // 700-799
-            8: 5,   // 800-899
-            9: 6,   // 900-999
-            10: 6,  // 1000-1099
-            11: 7,  // 1100-1199
-            12: 7,  // 1200-1299
-            13: 8,  // 1300-1399
+            5: 20,  // 500-599
+            6: 18,  // 600-699
+            7: 10,  // 700-799
+            8: 9,   // 800-899
+            9: 8,   // 900-999
+            10: 20, // 1000-1099
+            11: 18, // 1100-1199
+            12: 10, // 1200-1299
+            13: 9,  // 1300-1399
             14: 8,  // 1400-1499
-            15: 9,  // 1500-1599
-            16: 9,  // 1600-1699
+            15: 20, // 1500-1599
+            16: 18, // 1600-1699
             17: 10, // 1700-1799
-            18: 10, // 1800-1899
-            19: 11, // 1900-1999
-            20: 11  // 2000+
+            18: 9,  // 1800-1899
+            19: 8,  // 1900-1999
+            20: 2   // 2000+
         };
-        return quotas[section] || 4;
+        return quotas[section] || 20;
     }
 
     // Handle garbage system
@@ -106,11 +109,14 @@ class TGM4_3_1Mode extends BaseMode {
         // Increment garbage counter for each piece
         this.garbageCounter++;
         
-        // Add garbage after level 500
-        if (game.level >= 500 && this.garbageCounter >= 4) {
+        // Check if garbage should be sent during ARE
+        const section = Math.floor(game.level / 100);
+        const quota = this.getGarbageQuota(section);
+        
+        if (game.level >= 500 && this.garbageCounter >= quota) {
             this.garbageCounter = 0;
             // Add garbage line logic would go here
-            console.log('TGM4 3.1: Adding garbage line');
+            console.log(`TGM4 3.1: Sending garbage line (quota: ${quota})`);
         }
         
         return piece;
@@ -153,19 +159,28 @@ class TGM4_3_1Mode extends BaseMode {
 
     // Check torikans
     checkTorikans(level, elapsedTime) {
-        for (const torikan of this.torikans) {
-            if (level >= torikan.level && elapsedTime > torikan.time) {
+        const config = this.getModeConfig();
+        const torikans = config.specialMechanics.torikans;
+        
+        for (const torikan of torikans) {
+            if (level >= torikan.level && elapsedTime > torikan.time * 1000) {
                 return torikan.grade;
             }
         }
         return null;
     }
 
-    // Calculate SX grade
-    calculateSXGrade(level) {
-        // When the game ends, the player is awarded SX, where X is the number of sections passed
-        const sectionsPassed = Math.floor(level / 100);
-        return `S${sectionsPassed}`;
+    // Check GM requirements at level 2000
+    checkGMRequirements(level, score, elapsedTime, rollPoints) {
+        const config = this.getModeConfig();
+        const gmReq = config.specialMechanics.gmRequirements;
+        
+        if (level >= 2000 && 
+            elapsedTime <= gmReq.level2000.time * 1000 && 
+            rollPoints >= gmReq.level2000.rollPoints) {
+            return true;
+        }
+        return false;
     }
 
     // Get current grade
@@ -180,7 +195,14 @@ class TGM4_3_1Mode extends BaseMode {
         return this.calculateSXGrade(level);
     }
 
-    // Shirase scoring system (same as TGM3)
+    // Calculate SX grade
+    calculateSXGrade(level) {
+        // When the game ends, the player is awarded SX, where X is the number of sections passed
+        const sectionsPassed = Math.floor(level / 100);
+        return `S${sectionsPassed}`;
+    }
+
+    // TAP/Shirase scoring system
     calculateScore(baseScore, lines, piece, game) {
         if (lines === 0) return baseScore;
 
@@ -215,7 +237,19 @@ class TGM4_3_1Mode extends BaseMode {
             score += game.hardDropPoints * 2;
         }
 
-        return Math.floor(score);
+        // Apply combo and bravo multipliers
+        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
+        const bravo = this.checkBravo(game) ? 4 : 1;
+        
+        return Math.floor(score * combo * bravo);
+    }
+
+    // Check for bravo (perfect clear)
+    checkBravo(game) {
+        if (!game || !game.board || !game.board.grid) return false;
+        
+        // Bravo occurs when board is completely full before clearing
+        return game.board.grid.every(row => row.every(cell => cell !== 0));
     }
 
     // Initialize for game scene
@@ -285,6 +319,7 @@ class TGM4_3_1Mode extends BaseMode {
         }
         
         // Check for garbage send during ARE
+        const elapsedTime = Date.now() - this.startTime;
         if (this.checkGarbageSend(level)) {
             // This would be called during ARE in the actual game
             console.log(`TGM4 3.1: Sending garbage at level ${level}`);
@@ -351,9 +386,10 @@ class TGM4_3_1Mode extends BaseMode {
 
     // Handle game over
     onGameOver(gameScene) {
-        if (gameScene.game) {
-            const elapsedTime = Date.now() - this.startTime;
-            console.log(`TGM4 3.1 Game Over - Time: ${Math.floor(elapsedTime / 1000)}s`);
+        if (gameScene && gameScene.game) {
+            const elapsedTime = gameScene.game.startTime ? Date.now() - gameScene.game.startTime : 0;
+            const finalGrade = this.getCurrentGrade(gameScene.game.level, elapsedTime);
+            console.log(`TGM4 3.1 Game Over - Final Grade: ${finalGrade}`);
             console.log(`Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount}`);
         }
     }
@@ -365,13 +401,13 @@ class TGM4_3_1Mode extends BaseMode {
     
     // Reset mode state
     reset() {
+        super.reset();
         this.startTime = null;
         this.garbageCounter = 0;
         this.currentSection = 0;
         this.currentBGMTrack = null;
         this.gameScene = null;
-        this.tetrisCount = 0;
-        this.allClearCount = 0;
+        this.displayedGrade = ' ';
     }
     
     // Get line clear bonus

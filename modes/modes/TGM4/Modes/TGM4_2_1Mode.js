@@ -1,7 +1,7 @@
 // TGM4 2.1 Mode Implementation
 // Recreation of T.A. Death mode - 20G fixed with M and GM grades
 
-class TGM4_2_1Mode extends BaseMode {
+class TGM4_2_1Mode extends TGM4BaseMode {
     constructor() {
         super();
         this.modeName = 'TGM4 2.1';
@@ -32,6 +32,7 @@ class TGM4_2_1Mode extends BaseMode {
 
     getModeConfig() {
         return {
+            ...this.getDefaultConfig(),
             gravity: {
                 type: 'fixed_20g', // Fixed 20G gravity
                 value: 5120,
@@ -45,11 +46,16 @@ class TGM4_2_1Mode extends BaseMode {
             gravityLevelCap: 999,
             lowestGrade: ' ',
             specialMechanics: {
+                ...this.getDefaultConfig().specialMechanics,
                 fixed20G: true,
                 progressiveTimings: true, // 5 timing phases
                 torikanLimit: true, // Time limit at level 500
                 minimalGrading: true, // Only M and GM grades
-                deathMechanics: true
+                deathMechanics: true,
+                gmRequirements: {
+                    level500: { time: 192 }, // 3:20 torikan
+                    level999: { score: 260000, time: 300, tetris: 8 } // 5:00, 260k score, 8 tetrises
+                }
             }
         };
     }
@@ -92,11 +98,12 @@ class TGM4_2_1Mode extends BaseMode {
         ) || this.timingPhases[0];
     }
 
-    // T.A. Death scoring system
+    // TAP scoring system - official formula
     calculateScore(baseScore, lines, piece, game) {
         if (lines === 0) return baseScore;
 
-        // Official TGM2 (TAP) scoring formula: Score = (⌈(Level + Lines) / 4⌉ + Soft + (2 × Sonic)) × Lines × Combo × Bravo + ⌈(Level After Clear) / 2⌉ + (Speed × 7)
+        // Official TGM2 (TAP) scoring formula: 
+        // Score = (⌈(Level + Lines) / 4⌉ + Soft + (2 × Sonic)) × Lines × Combo × Bravo + ⌈(Level After Clear) / 2⌉ + (Speed × 7)
         const levelBeforeClear = game.level || 1;
         const levelAfterClear = game.level || 1; // Simplified - would need proper tracking
         const base = Math.ceil((levelBeforeClear + lines) / 4);
@@ -106,8 +113,8 @@ class TGM4_2_1Mode extends BaseMode {
         const bravo = this.checkBravo(game) ? 4 : 1; // Bravo = 4x multiplier for all clear
         const levelBonus = Math.ceil(levelAfterClear / 2);
         
-        // Speed bonus calculation (simplified)
-        const lockDelay = 15/60; // Would need actual active time tracking
+        // Speed bonus calculation (simplified - would need actual active time tracking)
+        const lockDelay = 15/60; // Would need actual active time
         const activeTime = 0; // Would need actual piece active time
         const speed = Math.max(0, lockDelay - activeTime);
         const speedBonus = speed * 7;
@@ -117,10 +124,21 @@ class TGM4_2_1Mode extends BaseMode {
         return Math.floor(totalScore);
     }
 
+    // Check for bravo (perfect clear)
+    checkBravo(game) {
+        if (!game || !game.board || !game.board.grid) return false;
+        
+        // Bravo occurs when board is completely full before clearing
+        return game.board.grid.every(row => row.every(cell => cell !== 0));
+    }
+
     // Check torikan at level 500
     checkTorikan(level, elapsedTime) {
+        const config = this.getModeConfig();
+        const gmReq = config.specialMechanics.gmRequirements;
+        
         if (level >= 500 && !this.gradeAchieved) {
-            if (elapsedTime > this.torikanTime) {
+            if (elapsedTime > gmReq.level500.time * 1000) {
                 return 'torikan'; // Failed torikan
             } else {
                 this.gradeAchieved = true;
@@ -132,10 +150,13 @@ class TGM4_2_1Mode extends BaseMode {
 
     // Check GM requirements at level 999
     checkGMRequirements(level, score, elapsedTime, tetrisCount) {
+        const config = this.getModeConfig();
+        const gmReq = config.specialMechanics.gmRequirements;
+        
         if (level >= 999 && 
-            score >= this.gmScoreRequirement && 
-            elapsedTime <= this.gmTimeLimit && 
-            tetrisCount >= this.gmTetrisRequirement) {
+            score >= gmReq.level999.score && 
+            elapsedTime <= gmReq.level999.time * 1000 && 
+            tetrisCount >= gmReq.level999.tetris) {
             return true;
         }
         return false;
@@ -147,9 +168,10 @@ class TGM4_2_1Mode extends BaseMode {
         
         // Check torikan at level 500
         if (level >= 500 && !this.gradeAchieved) {
-            if (elapsedTime > this.torikanTime) {
+            const torikanResult = this.checkTorikan(level, elapsedTime);
+            if (torikanResult === 'torikan') {
                 return ''; // Failed torikan - no grade
-            } else {
+            } else if (torikanResult === 'master') {
                 this.gradeAchieved = true;
                 // Continue to level 999, will get M grade
             }
@@ -223,9 +245,11 @@ class TGM4_2_1Mode extends BaseMode {
 
     // Handle game over
     onGameOver(gameScene) {
-        if (gameScene.game) {
-            const elapsedTime = Date.now() - this.startTime;
-            console.log(`TGM4 2.1 Game Over - Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount}`);
+        if (gameScene && gameScene.game) {
+            const elapsedTime = gameScene.game.startTime ? Date.now() - gameScene.game.startTime : 0;
+            const finalGrade = this.getCurrentGrade(gameScene.game.level, gameScene.game.score, elapsedTime);
+            console.log(`TGM4 2.1 Game Over - Final Grade: ${finalGrade}`);
+            console.log(`Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount}`);
         }
     }
 
@@ -236,10 +260,10 @@ class TGM4_2_1Mode extends BaseMode {
     
     // Reset mode state
     reset() {
+        super.reset();
         this.startTime = null;
         this.gradeAchieved = false;
-        this.tetrisCount = 0;
-        this.allClearCount = 0;
+        this.displayedGrade = '';
     }
     
     // Get line clear bonus

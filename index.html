@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tetris the Grand Master clone idk</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+    <link rel="preload" href="font/Hatsukoi-Friends.otf" as="font" type="font/otf" crossorigin>
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     <style>
         @font-face {
@@ -191,6 +192,15 @@
     </style>
 </head>
 <body>
+    <script>
+        // Warm up custom font ASAP to reduce first-render delay.
+        // This is a no-op in older browsers.
+        try {
+            if (document && document.fonts && typeof document.fonts.load === 'function') {
+                document.fonts.load('16px "Hatsukoi Friends"');
+            }
+        } catch (e) {}
+    </script>
     <!-- Mobile Device Warning -->
     <div id="mobile-warning">
         <div class="warning-icon">⚠️</div>

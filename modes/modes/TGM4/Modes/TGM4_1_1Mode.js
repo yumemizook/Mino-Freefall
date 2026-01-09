@@ -1,7 +1,7 @@
 // TGM4 1.1 Mode Implementation
 // Recreation of TGM1 Normal mode
 
-class TGM4_1_1Mode extends BaseMode {
+class TGM4_1_1Mode extends TGM4BaseMode {
     constructor() {
         super();
         this.modeName = 'TGM4 1.1';
@@ -15,6 +15,7 @@ class TGM4_1_1Mode extends BaseMode {
 
     getModeConfig() {
         return {
+            ...this.getDefaultConfig(),
             gravity: {
                 type: 'tgm1', // Use TGM1 gravity curve
                 value: 0,
@@ -26,25 +27,32 @@ class TGM4_1_1Mode extends BaseMode {
             lineAre: 27/60,  // TGM1: 27 frames Line ARE
             lockDelay: 30/60,  // TGM1: 30 frames lock delay
             lineClearDelay: 40/60, // TGM1: 40 frames line clear
-
             nextPieces: 6,   // TGM4 shows 6 pieces
             holdEnabled: true, // TGM4 has hold
             ghostEnabled: true, // TGM4 has ghost piece
             levelUpType: 'piece',
             lineClearBonus: 1,
             gravityLevelCap: 999,
-            
+            lowestGrade: '9',
             specialMechanics: {
+                ...this.getDefaultConfig().specialMechanics,
                 movementLimitation: false, // TGM1 has no movement limitation
-                diagonalInput: false,
                 extraButton: false, // TGM1 has no EXTRA button
                 irs180: false, // TGM1 has no 180° IRS
-                gradingSystem: 'tgm1' // TGM1-style grading
+                gradingSystem: 'tgm1', // TGM1-style grading
+                gradeThresholds: {
+                    '9': 0, '8': 400, '7': 800, '6': 1400, '5': 2000, '4': 3500, '3': 5500, '2': 8000, '1': 12000,
+                    'S1': 16000, 'S2': 22000, 'S3': 30000, 'S4': 40000, 'S5': 52000, 'S6': 66000, 'S7': 82000, 'S8': 100000, 'S9': 120000,
+                    'GM': 126000
+                },
+                gmRequirements: {
+                    level999: { score: 280000, time: 535 } // 8:55 for GM
+                }
             }
         };
     }
 
-    // TGM1 scoring system
+    // TGM1 scoring system - using official formula
     calculateScore(baseScore, lines, piece, game) {
         if (lines === 0) return baseScore;
 
@@ -79,46 +87,51 @@ class TGM4_1_1Mode extends BaseMode {
             score += game.hardDropPoints * 2;
         }
 
-        return Math.floor(score);
+        // Apply combo and bravo multipliers
+        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
+        const bravo = this.checkBravo(game) ? 4 : 1;
+        
+        return Math.floor(score * combo * bravo);
+    }
+
+    // Check for bravo (perfect clear)
+    checkBravo(game) {
+        if (!game || !game.board || !game.board.grid) return false;
+        
+        // Bravo occurs when board is completely full before clearing
+        return game.board.grid.every(row => row.every(cell => cell !== 0));
     }
 
     // TGM1 grade calculation based on score
-    calculateTGM1Grade(score, level) {
-        if (score >= 126000) return 'GM';
-        if (score >= 112000) return 'S9';
-        if (score >= 98000) return 'S8';
-        if (score >= 84000) return 'S7';
-        if (score >= 70000) return 'S6';
-        if (score >= 56000) return 'S5';
-        if (score >= 42000) return 'S4';
-        if (score >= 28000) return 'S3';
-        if (score >= 14000) return 'S2';
-        if (score >= 7000) return 'S1';
-        if (score >= 5600) return '1';
-        if (score >= 4200) return '2';
-        if (score >= 2800) return '3';
-        if (score >= 1400) return '4';
-        if (score >= 700) return '5';
-        if (score >= 350) return '6';
-        if (score >= 120) return '7';
-        if (score >= 50) return '8';
-        return '9';
+    getCurrentGrade(score, level) {
+        const config = this.getModeConfig();
+        const thresholds = config.specialMechanics.gradeThresholds;
+        
+        // Find highest grade achieved
+        for (const [grade, threshold] of Object.entries(thresholds)) {
+            if (score >= threshold) {
+                return grade;
+            }
+        }
+        
+        return '9'; // Default grade
     }
 
     // Check for GM requirements
-    checkGMRequirements(level, score, tetrisCount) {
-        if (level >= 999 && score >= 126000 && tetrisCount >= 6) {
+    checkGMRequirements(level, score, elapsedTime, tetrisCount) {
+        const config = this.getModeConfig();
+        const gmReq = config.specialMechanics.gmRequirements;
+        
+        if (level >= 999 && 
+            score >= gmReq.level999.score && 
+            elapsedTime <= gmReq.level999.time && 
+            tetrisCount >= 6) {
             return true;
         }
         return false;
     }
 
-    // Get current grade
-    getCurrentGrade(score, level) {
-        // In 1.1, grade is entirely determined by score
-        return this.calculateTGM1Grade(score, level);
-    }
-
+    
     // Initialize for game scene
     initializeForGameScene(gameScene) {
         // Set up TGM1-style UI (grade moved down to TGM3 position)
@@ -156,9 +169,11 @@ class TGM4_1_1Mode extends BaseMode {
 
     // Handle game over
     onGameOver(gameScene) {
-        if (gameScene.game) {
-            const finalGrade = this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
+        if (gameScene && gameScene.game) {
+            const elapsedTime = gameScene.game.startTime ? Date.now() - gameScene.game.startTime : 0;
+            const finalGrade = this.checkGMRequirements(gameScene.game.level, gameScene.game.score, elapsedTime, this.tetrisCount) ? 'GM' : this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
             console.log(`TGM4 1.1 Game Over - Final Grade: ${finalGrade}`);
+            console.log(`Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount}`);
         }
     }
 

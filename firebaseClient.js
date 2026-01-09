@@ -164,12 +164,54 @@ function getModeConfig(modeId) {
 }
 
 function normalizeModeId(modeId) {
-  const id = (modeId || "").toLowerCase();
-  if (id === "tgm3_master") return "tgm3";
-  if (id === "tgm3_shirase") return "shirase";
-  if (id === "ta_death" || id === "t.a. death") return "tadeath";
-  if (id === "tgm+") return "tgm_plus";
-  return modeId;
+  const raw = String(modeId || "");
+  const canonical = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-]+/g, "_")
+    .replace(/\./g, "")
+    .replace(/__+/g, "_");
+
+  const aliases = {
+    // TGM3 naming
+    tgm3_master: "tgm3",
+    tgm3_shirase: "shirase",
+
+    // TGM2 shortcuts
+    tgm2: "tgm2_master",
+
+    // TA Death spellings
+    ta_death: "tadeath",
+    tadeath: "tadeath",
+    tadeathmode: "tadeath",
+    ta_deathmode: "tadeath",
+    ta_death_mode: "tadeath",
+    tad: "tadeath",
+    tada: "tadeath",
+
+    // Plus mode
+    "tgm+": "tgm_plus",
+    tgmplus: "tgm_plus",
+    tgm_plus: "tgm_plus",
+
+    // 20G formatting
+    "20_g": "20g",
+    "20g": "20g",
+
+    // Easy mode tabs in UI map to rating targets
+    easy_normal: "tgm2_normal",
+    easy_easy: "tgm3_easy",
+
+    // TGM4 variants all share the same rating bucket
+    tgm4_1_1: "tgm4",
+    tgm4_2_1: "tgm4",
+    tgm4_3_1: "tgm4",
+
+    // Common display-name-like shortcuts
+    master: "master20g",
+  };
+
+  return aliases[canonical] || canonical;
 }
 
 function gradeToValue(grade) {
@@ -194,6 +236,11 @@ async function updateUserScoreAndRating(modeId, entry) {
   const auth = getAuth();
   const db = getFirestore();
   const fallbackKey = "mino_rating_fallback";
+  try {
+    if (window.RatingEngine?.MODE_TARGETS && !window.RatingEngine.MODE_TARGETS[modeId]) {
+      console.warn("[Rating] Submitting score for unknown/unrated modeId:", modeId);
+    }
+  } catch (_) {}
   if (!auth || !db) {
     // offline/local fallback
     try {

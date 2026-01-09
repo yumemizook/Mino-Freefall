@@ -1,7 +1,7 @@
 // TGM4 Normal Mode Implementation
 // 999-level mode with A of B grading system
 
-class TGM4NormalMode extends BaseMode {
+class TGM4NormalMode extends TGM4BaseMode {
     constructor() {
         super();
         this.modeName = 'TGM4 Normal';
@@ -21,6 +21,7 @@ class TGM4NormalMode extends BaseMode {
 
     getModeConfig() {
         return {
+            ...this.getDefaultConfig(),
             gravity: {
                 type: 'tgm1', // Use TGM1 gravity curve
                 value: 0,
@@ -28,23 +29,21 @@ class TGM4NormalMode extends BaseMode {
             },
             das: 16/60,      // TGM1-style DAS
             arr: 1/60,       // TGM1-style ARR
-            are: 30/60,      // TGM1-style ARE
-            lineAre: 30/60,  // TGM1-style Line ARE
-            lockDelay: 0.5,  // TGM1-style lock delay
-            lineClearDelay: 41/60, // TGM1-style line clear
-
+            are: 32/60,      // TGM1-style ARE (32 frames)
+            lineAre: 32/60,  // TGM1-style Line ARE (32 frames)
+            lockDelay: 30/60,  // TGM1-style lock delay (30 frames)
+            lineClearDelay: 40/60, // TGM1-style line clear (40 frames)
             nextPieces: 6,   // TGM4 shows 6 pieces
             holdEnabled: true, // TGM4 has hold
             ghostEnabled: true,
             levelUpType: 'piece',
             lineClearBonus: 1,
             gravityLevelCap: 999,
-            
             specialMechanics: {
+                ...this.getDefaultConfig().specialMechanics,
                 movementLimitation: true,
                 maxMoveResets: 8,
                 maxRotationResets: 2,
-                diagonalInput: false,
                 extraButton: true, // Enable EXTRA button for TGM Type
                 irs180: true,      // Enable 180° IRS
                 gradingSystem: 'normal', // TGM4 Normal grading
@@ -56,9 +55,11 @@ class TGM4NormalMode extends BaseMode {
 
     // Override to use TGM1 scoring
     calculateScore(baseScore, lines, piece, game) {
-        // Use TGM1 scoring system
-        let score = 0;
+        if (lines === 0) return baseScore;
+
+        // TGM1 official scoring: 40/100/300/1200 × level
         const level = game.level || 1;
+        let score = 0;
 
         switch (lines) {
             case 1:
@@ -77,12 +78,29 @@ class TGM4NormalMode extends BaseMode {
                 score = baseScore * this.getLineClearBonus();
         }
 
-        // Add soft drop points
+        // Add soft drop points (1 point per cell)
         if (game.softDropPoints) {
             score += game.softDropPoints;
         }
 
-        return Math.floor(score);
+        // Add hard drop points (2 points per cell)
+        if (game.hardDropPoints) {
+            score += game.hardDropPoints * 2;
+        }
+
+        // Apply combo and bravo multipliers
+        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
+        const bravo = this.checkBravo(game) ? 4 : 1;
+        
+        return Math.floor(score * combo * bravo);
+    }
+
+    // Check for bravo (perfect clear)
+    checkBravo(game) {
+        if (!game || !game.board || !game.board.grid) return false;
+        
+        // Bravo occurs when board is completely full before clearing
+        return game.board.grid.every(row => row.every(cell => cell !== 0));
     }
 
     // Handle level updates with section tracking
@@ -105,12 +123,21 @@ class TGM4NormalMode extends BaseMode {
 
     // Calculate TGM4 Normal mode grade based on score and level
     calculateNormalModeGrade(level, score) {
-        // TGM4 Normal uses A part grading system
-        // Display A grades if achieved, otherwise show "Zero of Zero"
-        if (this.aGradeCount > 0) {
-            return `A${this.aGradeCount}`;
+        // TGM4 Normal uses A of B grading system
+        // B part: based on level progression (every 111 levels = 1 B grade)
+        let bPart = Math.floor(level / 111);
+        if (level >= 999) {
+            bPart = 10; // Ten if credits are passed
+        } else if (bPart > 9) {
+            bPart = 9;
         }
-        return 'Zero of Zero';
+
+        // A part: based on section performance (6 tetrises = 1 point, all clear = -1 point)
+        let aPart = Math.floor(this.tetrisCount / 6) - this.allClearCount;
+        aPart = Math.max(0, Math.min(10, aPart)); // Clamp between 0-10
+
+        const gradeNames = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+        return `${gradeNames[aPart]} of ${gradeNames[bPart]}`;
     }
 
     // Check for level stop requirements (every xx99 needs line clear, except first section 099)
@@ -234,7 +261,7 @@ class TGM4NormalMode extends BaseMode {
 
     // Handle game over
     onGameOver(gameScene) {
-        if (gameScene.game) {
+        if (gameScene && gameScene.game) {
             const finalGrade = this.getCurrentGrade(gameScene.game.level, gameScene.game.score);
             console.log(`TGM4 Normal Game Over - Final Grade: ${finalGrade}`);
             console.log(`Tetris: ${this.tetrisCount}, All Clear: ${this.allClearCount}`);
@@ -248,12 +275,11 @@ class TGM4NormalMode extends BaseMode {
     
     // Reset mode state
     reset() {
+        super.reset();
         this.aPartPoints = 0;
         this.aGradeCount = 0;
         this.currentSectionPoints = 0;
         this.sectionAPoints = [];
-        this.tetrisCount = 0;
-        this.allClearCount = 0;
     }
     
     // Get line clear bonus

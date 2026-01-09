@@ -57,6 +57,20 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.lastNameChangeAt = null;
     this.nameTooltip = null;
     this.nameChangeModal = null;
+    this.profileTab = "best";
+    this.profileTabButtons = {};
+    this.profileTabButtonItems = [];
+    this.profileTabContentRoot = null;
+    this.profileTabContentMask = null;
+    this.profileTabContentMaskGfx = null;
+    this.profileTabContentContainer = null;
+    this.profileTabContentViewport = { x: 0, y: 0, w: 0, h: 0 };
+    this.profileTabScrollY = 0;
+    this.profileTabContentHeight = 0;
+    this.bestScoresTab = "Easy";
+    this.bestScoresTabButtons = {};
+    this.bestScoresTabButtonItems = [];
+    this.bestScoresTabRowY = 0;
   }
 
   updateBanner(url) {
@@ -1178,6 +1192,150 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.tooltipSignOutButton = signOutBtn.container;
     buttons.push(avatarBtn.container, nameBtn.container, bannerBtn.container, signOutBtn.container);
 
+    const makeTabButton = (label, x, handler) => {
+      const paddingX = 10;
+      const paddingY = 6;
+      const txt = this.add
+        .text(0, 0, label, {
+          fontFamily: "Hatsukoi Friends, monospace",
+          fontSize: "14px",
+          color: "#ffffff",
+          antialias: true,
+          smooth: false,
+        })
+        .setOrigin(0.5);
+      const bg = this.add
+        .rectangle(0, 0, txt.width + paddingX * 2, txt.height + paddingY * 2, 0x111111, 0.9)
+        .setStrokeStyle(1, 0x666666)
+        .setOrigin(0.5);
+      const container = this.add
+        .container(x, 0, [bg, txt])
+        .setDepth(this.baseDepth + 2)
+        .setScrollFactor(0)
+        .setSize(bg.width, bg.height)
+        .setInteractive(new Phaser.Geom.Rectangle(-bg.width / 2, -bg.height / 2, bg.width, bg.height), Phaser.Geom.Rectangle.Contains)
+        .on("pointerup", handler)
+        .on("pointerover", () => bg.setStrokeStyle(1, 0xffffff))
+        .on("pointerout", () => bg.setStrokeStyle(1, 0x666666));
+      if (container.input) container.input.cursor = "pointer";
+      return { container, bg, txt };
+    };
+
+    const tabY = -modalH / 2 + this.bannerHeight + 62;
+    const tabDefs = [
+      { id: "best", label: "Best Scores" },
+      { id: "illustrations", label: "Illustrations" },
+      { id: "achievements", label: "Achievements" },
+    ];
+
+    // Clear any existing tab UI (safety if buildTooltip is called again)
+    if (this.profileTabButtonItems?.length) {
+      this.profileTabButtonItems.forEach((t) => t?.destroy?.());
+    }
+    this.profileTabButtons = {};
+    this.profileTabButtonItems = [];
+
+    // Create tab buttons and then pack them so they never go out-of-bounds.
+    let currentX = -modalW / 2 + 16;
+    const tabButtonMetas = [];
+    tabDefs.forEach((t) => {
+      const btn = makeTabButton(t.label, 0, () => this.setProfileTab(t.id));
+      btn.container.setY(tabY);
+      tabButtonMetas.push({ id: t.id, btn });
+      this.profileTabButtons[t.id] = btn;
+      this.profileTabButtonItems.push(btn.container);
+      currentX += btn.bg.width + 10;
+    });
+
+    const totalWidth = tabButtonMetas.reduce((acc, m) => acc + m.btn.bg.width, 0) + (tabButtonMetas.length - 1) * 10;
+    const availableWidth = modalW - 32;
+    const scale = totalWidth > availableWidth && totalWidth > 0 ? availableWidth / totalWidth : 1;
+    const startX = -modalW / 2 + 16;
+    let xPos = startX;
+    tabButtonMetas.forEach((m) => {
+      m.btn.container.setScale(scale);
+      // Set positions using unscaled widths; scale applied to container.
+      m.btn.container.setX(xPos + (m.btn.bg.width * scale) / 2);
+      xPos += m.btn.bg.width * scale + 10;
+    });
+
+    // Content viewport and root
+    const viewportX = -modalW / 2 + 16;
+    const viewportY = tabY + 28;
+    const viewportW = modalW - 32;
+    const viewportH = modalH - (this.bannerHeight + 110);
+    this.profileTabContentViewport = { x: viewportX, y: viewportY, w: viewportW, h: viewportH };
+
+    // Best-scores sub-tabs (mode type)
+    this.bestScoresTabRowY = viewportY;
+    if (this.bestScoresTabButtonItems?.length) {
+      this.bestScoresTabButtonItems.forEach((t) => t?.destroy?.());
+    }
+    this.bestScoresTabButtons = {};
+    this.bestScoresTabButtonItems = [];
+    const bestTabDefs = [
+      { id: "Easy", label: "Easy" },
+      { id: "Standard", label: "Standard" },
+      { id: "Master", label: "Master" },
+      { id: "20G", label: "20G" },
+      { id: "Race", label: "Race" },
+      { id: "All Clear", label: "All Clear" },
+      { id: "Puzzle", label: "Puzzle" },
+      { id: "Extra", label: "Extra" },
+    ];
+
+    const bestButtonMetas = [];
+    bestTabDefs.forEach((t) => {
+      const btn = makeTabButton(t.label, 0, () => this.setBestScoresTab(t.id));
+      btn.container.setY(this.bestScoresTabRowY);
+      bestButtonMetas.push({ id: t.id, btn });
+      this.bestScoresTabButtons[t.id] = btn;
+      this.bestScoresTabButtonItems.push(btn.container);
+    });
+
+    const bestTotalWidth =
+      bestButtonMetas.reduce((acc, m) => acc + (m.btn.bg?.width || 0), 0) +
+      Math.max(0, bestButtonMetas.length - 1) * 8;
+    const bestAvailable = modalW - 32;
+    const bestScale = bestTotalWidth > bestAvailable && bestTotalWidth > 0 ? bestAvailable / bestTotalWidth : 1;
+    let bx = -modalW / 2 + 16;
+    bestButtonMetas.forEach((m) => {
+      m.btn.container.setScale(bestScale);
+      m.btn.container.setX(bx + ((m.btn.bg.width || 0) * bestScale) / 2);
+      bx += (m.btn.bg.width || 0) * bestScale + 8;
+    });
+
+    // Dedicated overlay container for tab content + mask.
+    // Keeping it out of the tooltip container avoids Phaser container/mask coordinate issues.
+    if (this.profileTabContentContainer) {
+      this.profileTabContentContainer.destroy(true);
+      this.profileTabContentContainer = null;
+    }
+    this.profileTabContentContainer = this.add
+      .container(cam.width / 2, cam.height / 2)
+      .setDepth(this.baseDepth + 1205)
+      .setVisible(false)
+      .setScrollFactor(0);
+
+    this.profileTabContentRoot = this.add.container(0, 0).setScrollFactor(0);
+
+    // IMPORTANT: GeometryMask + Container transforms are easy to get wrong.
+    // Build the mask in world space so it clips the overlay content reliably.
+    if (this.profileTabContentMaskGfx) {
+      this.profileTabContentMaskGfx.destroy();
+      this.profileTabContentMaskGfx = null;
+    }
+    this.profileTabContentMaskGfx = this.make.graphics({ x: 0, y: 0, add: false });
+    this.profileTabContentMaskGfx.clear();
+    this.profileTabContentMaskGfx.fillStyle(0xffffff);
+    this.profileTabContentMaskGfx.fillRect(cam.width / 2 + viewportX, cam.height / 2 + viewportY, viewportW, viewportH);
+    this.profileTabContentMask = this.profileTabContentMaskGfx.createGeometryMask();
+    this.profileTabContentRoot.setMask(this.profileTabContentMask);
+    this.profileTabContentContainer.add([this.profileTabContentRoot]);
+
+    // Ensure the initial tab is rendered
+    this.setProfileTab(this.profileTab || "best");
+
     
     // Best score cards container (above tooltip background)
     this.bestRowsContainer = this.add
@@ -1195,6 +1353,8 @@ class ProfileOverlayScene extends Phaser.Scene {
       this.tooltipBodyName,
       this.tooltipBodyRating,
       ...buttons,
+      ...this.profileTabButtonItems,
+      ...this.bestScoresTabButtonItems,
       this.tooltipRankText,
     ];
     
@@ -1216,6 +1376,9 @@ class ProfileOverlayScene extends Phaser.Scene {
     const centerY = height / 2;
     this.tooltipDim.setPosition(width / 2, height / 2).setSize(width, height);
     this.tooltip.setPosition(width / 2, height / 2);
+    if (this.profileTabContentContainer) {
+      this.profileTabContentContainer.setPosition(width / 2, height / 2);
+    }
     const bg = this.tooltipBg;
     if (bg) {
       bg.setSize(modalW, modalH);
@@ -1265,6 +1428,69 @@ class ProfileOverlayScene extends Phaser.Scene {
     };
     // Re-render tooltip rating digits at new position
     this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
+
+    // Re-layout tabs + content viewport/mask
+    if (this.profileTabButtonItems?.length) {
+      const tabY = -modalH / 2 + this.bannerHeight + 62;
+      const availableWidth = modalW - 32;
+      // Buttons are scaled by buildTooltip; recompute packing on resize.
+      const metas = Object.keys(this.profileTabButtons || {})
+        .map((id) => ({ id, btn: this.profileTabButtons[id] }))
+        .filter((m) => m.btn && m.btn.bg && m.btn.container);
+
+      const totalWidth =
+        metas.reduce((acc, m) => acc + (m.btn.bg?.width || 0), 0) +
+        Math.max(0, metas.length - 1) * 10;
+      const scale = totalWidth > availableWidth && totalWidth > 0 ? availableWidth / totalWidth : 1;
+      const startX = -modalW / 2 + 16;
+      let xPos = startX;
+      metas.forEach((m) => {
+        m.btn.container.setScale(scale);
+        m.btn.container.setY(tabY);
+        m.btn.container.setX(xPos + ((m.btn.bg.width || 0) * scale) / 2);
+        xPos += (m.btn.bg.width || 0) * scale + 10;
+      });
+
+      const viewportX = -modalW / 2 + 16;
+      const viewportY = tabY + 28;
+      const viewportW = modalW - 32;
+      const viewportH = modalH - (this.bannerHeight + 110);
+      this.profileTabContentViewport = { x: viewportX, y: viewportY, w: viewportW, h: viewportH };
+
+      // Re-layout best-scores sub-tabs (mode type)
+      if (this.bestScoresTabButtonItems?.length) {
+        this.bestScoresTabRowY = viewportY;
+        const bestMetas = Object.keys(this.bestScoresTabButtons || {})
+          .map((id) => ({ id, btn: this.bestScoresTabButtons[id] }))
+          .filter((m) => m.btn && m.btn.bg && m.btn.container);
+        const bestTotalWidth =
+          bestMetas.reduce((acc, m) => acc + (m.btn.bg?.width || 0), 0) +
+          Math.max(0, bestMetas.length - 1) * 8;
+        const bestAvailable = modalW - 32;
+        const bestScale = bestTotalWidth > bestAvailable && bestTotalWidth > 0 ? bestAvailable / bestTotalWidth : 1;
+        let bx = -modalW / 2 + 16;
+        bestMetas.forEach((m) => {
+          m.btn.container.setScale(bestScale);
+          m.btn.container.setY(this.bestScoresTabRowY);
+          m.btn.container.setX(bx + ((m.btn.bg.width || 0) * bestScale) / 2);
+          bx += (m.btn.bg.width || 0) * bestScale + 8;
+        });
+      }
+
+      if (this.profileTabContentMaskGfx) {
+        this.profileTabContentMaskGfx.clear();
+        this.profileTabContentMaskGfx.fillStyle(0xffffff);
+        this.profileTabContentMaskGfx.fillRect(width / 2 + viewportX, height / 2 + viewportY, viewportW, viewportH);
+        if (this.profileTabContentMask) {
+          // Geometry mask reads from the graphics, so updating it is enough.
+          this.profileTabContentRoot?.setMask(this.profileTabContentMask);
+        }
+      }
+
+      if (this.tooltipVisible) {
+        this.renderProfileTabContent();
+      }
+    }
     if (this.bestRowsContainer) {
       this.bestRowsContainer.setPosition(width / 2, height / 2);
       this.bestRowsLayout = {
@@ -1282,13 +1508,14 @@ class ProfileOverlayScene extends Phaser.Scene {
     this.tooltipVisible = !this.tooltipVisible;
     if (this.tooltip) this.tooltip.setVisible(this.tooltipVisible);
     if (this.tooltipDim) this.tooltipDim.setVisible(this.tooltipVisible);
-    if (this.bestRowsContainer) this.bestRowsContainer.setVisible(this.tooltipVisible);
+    if (this.bestRowsContainer) this.bestRowsContainer.setVisible(false);
+    if (this.profileTabContentContainer) this.profileTabContentContainer.setVisible(this.tooltipVisible);
     this.tooltipBodyGroups?.forEach((t) => t.setVisible(this.tooltipVisible));
     this.setTooltipRatingVisible(this.tooltipVisible);
     if (this.tooltipVisible) {
       this.layoutTooltip(this.scale.width, this.scale.height);
       this.updateTooltipRatingDigits(this.ratingString, this.ratingColor);
-      this.populateTooltipBestScores();
+      this.renderProfileTabContent();
     }
   }
 
@@ -1297,8 +1524,417 @@ class ProfileOverlayScene extends Phaser.Scene {
     if (this.tooltip) this.tooltip.setVisible(false);
     if (this.tooltipDim) this.tooltipDim.setVisible(false);
     if (this.bestRowsContainer) this.bestRowsContainer.setVisible(false);
+    if (this.profileTabContentContainer) this.profileTabContentContainer.setVisible(false);
     this.tooltipBodyGroups?.forEach((t) => t.setVisible(false));
     this.setTooltipRatingVisible(false);
+  }
+
+  setProfileTab(tabId) {
+    const next = tabId || "best";
+    this.profileTab = next;
+    Object.keys(this.profileTabButtons || {}).forEach((k) => {
+      const btn = this.profileTabButtons[k];
+      if (!btn || !btn.bg || !btn.txt) return;
+      const active = k === next;
+      btn.bg.setFillStyle(active ? 0x222222 : 0x111111, 0.9);
+      btn.bg.setStrokeStyle(1, active ? 0xffffff : 0x666666);
+      btn.txt.setColor(active ? "#ffff00" : "#ffffff");
+    });
+    this.profileTabScrollY = 0;
+    if (this.bestScoresTabButtonItems?.length) {
+      this.bestScoresTabButtonItems.forEach((b) => b?.setVisible?.(next === "best"));
+    }
+    if (this.tooltipVisible) {
+      this.renderProfileTabContent();
+    }
+  }
+
+  setBestScoresTab(tabId) {
+    const next = tabId || "Easy";
+    this.bestScoresTab = next;
+    this.updateBestScoresTabButtonStyles();
+    this.profileTabScrollY = 0;
+    if (this.tooltipVisible && this.profileTab === "best") {
+      this.renderProfileTabContent();
+    }
+  }
+
+  updateBestScoresTabButtonStyles() {
+    const activeTab = this.bestScoresTab || "Easy";
+    Object.keys(this.bestScoresTabButtons || {}).forEach((k) => {
+      const btn = this.bestScoresTabButtons[k];
+      if (!btn || !btn.bg || !btn.txt) return;
+      const active = k === activeTab;
+      btn.bg.setFillStyle(active ? 0x222222 : 0x111111, 0.9);
+      btn.bg.setStrokeStyle(1, active ? 0xffffff : 0x666666);
+      btn.txt.setColor(active ? "#ffff00" : "#ffffff");
+    });
+  }
+
+  installProfileScrollHandlers() {
+    if (this.__profileScrollHandlersInstalled) return;
+    this.__profileScrollHandlersInstalled = true;
+    this.input.on("wheel", (_pointer, _go, _dx, dy) => {
+      if (!this.tooltipVisible) return;
+      if (!this.profileTabContentRoot || !this.profileTabContentViewport) return;
+      if (this.profileTab !== "best") return;
+      const maxScroll = Math.max(0, (this.profileTabContentHeight || 0) - (this.profileTabContentViewport.h || 0));
+      if (maxScroll <= 0) return;
+      const step = Math.sign(dy) * 26;
+      this.profileTabScrollY = Math.max(0, Math.min(maxScroll, (this.profileTabScrollY || 0) + step));
+      this.profileTabContentRoot.setY(-(this.profileTabScrollY || 0));
+    });
+  }
+
+  renderProfileTabContent() {
+    if (!this.profileTabContentRoot) return;
+    this.installProfileScrollHandlers();
+
+    // Debug escape hatch: in DevTools console run `window.__debugProfileNoMask = true`
+    // to verify whether content is being clipped by the mask.
+    if (typeof window !== "undefined" && window.__debugProfileNoMask) {
+      this.profileTabContentRoot.setMask(null);
+    } else if (this.profileTabContentMask) {
+      this.profileTabContentRoot.setMask(this.profileTabContentMask);
+    }
+
+    // Clear previous tab content
+    this.profileTabContentRoot.removeAll(true);
+    this.profileTabContentHeight = 0;
+    this.profileTabContentRoot.setPosition(0, 0);
+
+    const { x, y, w } = this.profileTabContentViewport || { x: 0, y: 0, w: 0, h: 0 };
+    // Leave space for best-scores mode tabs.
+    let cursorY = this.profileTab === "best" ? y + 30 : y;
+
+    const addHeading = (text, color) => {
+      const heading = this.add
+        .text(x, cursorY, text, {
+          fontFamily: "Hatsukoi Friends, monospace",
+          fontSize: "13px",
+          color: color || "#ffffff",
+        })
+        .setOrigin(0, 0)
+        .setScrollFactor(0);
+      this.profileTabContentRoot.add(heading);
+      cursorY += 20;
+    };
+
+    const addRow = (leftText, rightText, colorLeft, colorRight) => {
+      const left = this.add
+        .text(x, cursorY, leftText, {
+          fontFamily: "Hatsukoi Friends, monospace",
+          fontSize: "12px",
+          color: colorLeft || "#cfcfcf",
+        })
+        .setOrigin(0, 0)
+        .setScrollFactor(0);
+      const right = this.add
+        .text(x + w, cursorY, rightText, {
+          fontFamily: "Hatsukoi Friends, monospace",
+          fontSize: "12px",
+          color: colorRight || "#aaaaaa",
+        })
+        .setOrigin(1, 0)
+        .setScrollFactor(0);
+      this.profileTabContentRoot.add([left, right]);
+      cursorY += 18;
+    };
+
+    if (this.profileTab === "best") {
+      if (this.bestScoresTabButtonItems?.length) {
+        this.bestScoresTabButtonItems.forEach((b) => b?.setVisible?.(true));
+      }
+      // Do NOT call setBestScoresTab() here (it triggers a render); just ensure styles are correct.
+      this.bestScoresTab = this.bestScoresTab || "Easy";
+      this.updateBestScoresTabButtonStyles();
+      const best =
+        this.userDoc?.scores ||
+        this.userDoc?.bestScores ||
+        this.userDoc?.modes ||
+        this.fallbackCache?.scores ||
+        {};
+
+      const targets = window.RatingEngine?.MODE_TARGETS || {};
+      const bestKeys = Object.keys(best || {});
+      const targetKeys = Object.keys(targets || {});
+      const allKeys = new Set([...targetKeys, ...bestKeys]);
+      console.info("[Profile] Render Best Scores", {
+        bestScoresTab: this.bestScoresTab,
+        bestKeys: bestKeys.length,
+        targetKeys: targetKeys.length,
+        allKeys: allKeys.size,
+      });
+
+      const isExtraMode = (modeId) => {
+        const id = String(modeId || "");
+        return /_\d_1$/i.test(id) || /_x\.1$/i.test(id) || /_1_1$/i.test(id) || /_2_1$/i.test(id) || /_3_1$/i.test(id);
+      };
+
+      const getType = (modeId) => {
+        const id = String(modeId || "").toLowerCase();
+        // Hard overrides (these should win even if ModeManager difficulty disagrees)
+        if (id.includes("konoha")) return "All Clear";
+        if (id.includes("flashpoint")) return "Puzzle";
+
+        // Prefer authoritative difficulty mapping from ModeManager (available globally via ModeManager.js)
+        try {
+          if (typeof getModeManager !== "undefined") {
+            const mm = getModeManager();
+            const diff = mm?.modeDefinitions?.[id]?.config?.difficulty;
+            if (typeof diff === "string" && diff.trim()) {
+              const key = diff.trim().toLowerCase();
+              if (key === "easy") return "Easy";
+              if (key === "standard") return "Standard";
+              if (key === "master") return "Master";
+              if (key === "20g") return "20G";
+              if (key === "race") return "Race";
+              if (key === "all clear") return "All Clear";
+              if (key === "puzzle") return "Puzzle";
+              return diff;
+            }
+          }
+        } catch (_e) {
+          // ignore
+        }
+
+        // Fallback heuristic for known ids
+        if (id.includes("sakura")) return "Puzzle";
+        if (id.includes("asuka")) return "Race";
+        if (id.includes("shirase") || id.includes("death") || id === "20g" || id.includes("20g")) return "20G";
+        if (id.includes("easy")) return "Easy";
+        if (id.includes("marathon") || id.includes("sprint") || id.includes("ultra") || id.includes("zen")) return "Standard";
+        if (id.includes("tgm")) return "Master";
+        return "";
+      };
+
+      const typeOrder = ["Easy", "Standard", "Master", "20G", "Race", "All Clear", "Puzzle", "Extra"];
+      const grouped = {};
+      allKeys.forEach((k) => {
+        const typeName = isExtraMode(k) ? "Extra" : (getType(k) || "Other");
+        if (!grouped[typeName]) grouped[typeName] = [];
+        grouped[typeName].push(k);
+      });
+
+      const byName = (a, b) => this.formatModeName(a).localeCompare(this.formatModeName(b));
+      const orderForType = {
+        Standard: ["sprint_40", "sprint_100", "ultra", "marathon", "zen"],
+        Master: ["tgm1", "tgm2", "tgm_plus", "tgm3", "tgm4"],
+        "20G": ["20g", "ta_death", "tgm3_shirase", "master20g"],
+        Race: ["asuka_easy", "asuka", "asuka_hard"],
+      };
+      const compareWithOrder = (typeName) => (a, b) => {
+        const order = orderForType[typeName] || null;
+        const normalizeForOrder = (id) => {
+          const s = String(id || "").toLowerCase();
+          if (s === "tgm2_master") return "tgm2";
+          return s;
+        };
+        const isXPointOneMode = (modeId) => {
+          const id = String(modeId || "");
+          return /_x\.1$/i.test(id) || /_\d_1$/i.test(id) || /_\d\.1$/i.test(id);
+        };
+
+        if (typeName === "Extra") {
+          const ax = isXPointOneMode(a);
+          const bx = isXPointOneMode(b);
+          if (ax !== bx) return ax ? 1 : -1; // append x.1 modes at the end
+          return byName(a, b);
+        }
+        if (order) {
+          const ia = order.indexOf(normalizeForOrder(a));
+          const ib = order.indexOf(normalizeForOrder(b));
+          if (ia !== -1 || ib !== -1) {
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+          }
+        }
+        return byName(a, b);
+      };
+      Object.keys(grouped).forEach((t) => grouped[t].sort(compareWithOrder(t)));
+
+      const typeColor = {
+        Easy: "#00ff00",
+        Standard: "#0088ff",
+        Master: "#888888",
+        "20G": "#ff0000",
+        Race: "#ff8800",
+        "All Clear": "#ff69b4",
+        Puzzle: "#8800ff",
+        Extra: "#ffff00",
+        Other: "#ffffff",
+      };
+
+      const selected = this.bestScoresTab || "Easy";
+      const keys = grouped[selected] || [];
+      if (!keys.length) {
+        addRow("No scores in this category yet.", "", "#aaaaaa", "#aaaaaa");
+      } else {
+        addHeading(selected.toUpperCase(), typeColor[selected] || "#ffffff");
+
+        const cardW = 320;
+        const cardH = 120;
+        const gapX = 14;
+        const gapY = 14;
+        const cols = Math.max(1, Math.floor((w + gapX) / (cardW + gapX)));
+        const startY = cursorY;
+
+        const isXPointOneMode = (modeId) => {
+          const id = String(modeId || "");
+          return /_x\.1$/i.test(id) || /_\d_1$/i.test(id) || /_\d\.1$/i.test(id);
+        };
+
+        keys.forEach((modeId, idx) => {
+          const entry = best?.[modeId];
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const cx = x + col * (cardW + gapX);
+          const cy = startY + row * (cardH + gapY);
+
+          const modeColor =
+            selected === "Extra" && isXPointOneMode(modeId)
+              ? "#8b0000"
+              : typeColor[selected] || "#ffffff";
+
+          const card = this.add.container(cx, cy).setScrollFactor(0);
+          const bg = this.add
+            .rectangle(0, 0, cardW, cardH, 0x222222, 0.9)
+            .setOrigin(0, 0)
+            .setStrokeStyle(1, 0x555555)
+            .setScrollFactor(0);
+
+          const title = this.add
+            .text(12, 10, this.formatModeName(modeId), {
+              fontFamily: "Hatsukoi Friends, monospace",
+              fontSize: "14px",
+              color: modeColor,
+            })
+            .setOrigin(0, 0)
+            .setScrollFactor(0);
+
+          const main = this.formatScore(entry, modeId);
+          const rank = entry?.rank ?? entry?.position ?? "—";
+          const rankText = this.add
+            .text(cardW - 12, 10, `#${rank}`, {
+              fontFamily: "Hatsukoi Friends, monospace",
+              fontSize: "13px",
+              color: "#aaaaaa",
+            })
+            .setOrigin(1, 0)
+            .setScrollFactor(0);
+
+          const big = this.add
+            .text(cardW / 2, cardH / 2 - 6, main, {
+              fontFamily: "Hatsukoi Friends, monospace",
+              fontSize: "22px",
+              color: "#ffffff",
+              align: "center",
+            })
+            .setOrigin(0.5)
+            .setScrollFactor(0);
+
+          // Bottom metrics: PPS | Score | Time (only show if present)
+          const parts = [];
+          const pps = entry?.pps ?? entry?.piecesPerSecond;
+          if (pps != null && Number.isFinite(Number(pps))) {
+            parts.push(`PPS: ${Number(pps).toFixed(2)}`);
+          }
+          if (entry?.score != null) {
+            parts.push(`Score: ${entry.score}`);
+          }
+          if (entry?.timeSeconds != null) {
+            parts.push(`Time: ${this.formatTime(entry.timeSeconds)}`);
+          }
+          const metricsText = parts.length ? parts.join(" | ") : "";
+          const metrics = this.add
+            .text(cardW / 2, cardH - 18, metricsText, {
+              fontFamily: "Hatsukoi Friends, monospace",
+              fontSize: "12px",
+              color: "#aaaaaa",
+              align: "center",
+            })
+            .setOrigin(0.5)
+            .setScrollFactor(0);
+
+          // Keep text from overflowing card bounds.
+          title.setCrop(0, 0, cardW - 90, 22);
+          metrics.setWordWrapWidth(cardW - 24, true);
+          metrics.setCrop(0, 0, cardW - 24, 16);
+          big.setCrop(0, 0, cardW - 24, 28);
+
+          card.add([bg, title, rankText, big, metrics]);
+          this.profileTabContentRoot.add(card);
+        });
+
+        const rowsUsed = Math.ceil(keys.length / cols);
+        cursorY = startY + rowsUsed * (cardH + gapY) + 6;
+      }
+    } else if (this.profileTab === "illustrations") {
+      if (this.bestScoresTabButtonItems?.length) {
+        this.bestScoresTabButtonItems.forEach((b) => b?.setVisible?.(false));
+      }
+      addHeading("UNLOCKED CHARACTER ILLUSTRATIONS", "#c3ff7c");
+      const slotSize = 92;
+      const cols = Math.max(1, Math.floor((w + 10) / (slotSize + 10)));
+      const totalSlots = 12;
+      for (let i = 0; i < totalSlots; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const sx = x + col * (slotSize + 10);
+        const sy = cursorY + row * (slotSize + 10);
+        const rect = this.add
+          .rectangle(sx, sy, slotSize, slotSize, 0x222222, 0.9)
+          .setOrigin(0, 0)
+          .setStrokeStyle(1, 0x555555)
+          .setScrollFactor(0);
+        const label = this.add
+          .text(sx + slotSize / 2, sy + slotSize / 2 - 8, "[Placeholder]", {
+            fontFamily: "Hatsukoi Friends, monospace",
+            fontSize: "12px",
+            color: "#aaaaaa",
+            align: "center",
+          })
+          .setOrigin(0.5)
+          .setScrollFactor(0);
+        const label2 = this.add
+          .text(sx + slotSize / 2, sy + slotSize / 2 + 12, `Slot ${i + 1}`, {
+            fontFamily: "Hatsukoi Friends, monospace",
+            fontSize: "12px",
+            color: "#666666",
+          })
+          .setOrigin(0.5)
+          .setScrollFactor(0);
+        this.profileTabContentRoot.add([rect, label, label2]);
+      }
+      const rowsUsed = Math.ceil(totalSlots / cols);
+      cursorY += rowsUsed * (slotSize + 10) + 10;
+      addRow("(Konoha unlock integration pending)", "", "#aaaaaa", "#aaaaaa");
+    } else if (this.profileTab === "achievements") {
+      if (this.bestScoresTabButtonItems?.length) {
+        this.bestScoresTabButtonItems.forEach((b) => b?.setVisible?.(false));
+      }
+      addHeading("ACHIEVEMENTS", "#7cc7ff");
+      const rect = this.add
+        .rectangle(x, cursorY, w, 220, 0x222222, 0.9)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1, 0x555555)
+        .setScrollFactor(0);
+      const text = this.add
+        .text(x + w / 2, cursorY + 110, "[Achievements Panel Placeholder]", {
+          fontFamily: "Hatsukoi Friends, monospace",
+          fontSize: "14px",
+          color: "#aaaaaa",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0);
+      this.profileTabContentRoot.add([rect, text]);
+      cursorY += 240;
+    }
+
+    this.profileTabContentHeight = Math.max(0, cursorY - (this.profileTabContentViewport?.y || 0));
+    this.profileTabScrollY = 0;
+    this.profileTabContentRoot.setY(0);
   }
 
   registerInputHandlers() {
@@ -1498,7 +2134,8 @@ class ProfileOverlayScene extends Phaser.Scene {
     const special = {
       tgm: "TGM",
       "tgm1": "TGM",
-      "tgm2_master": "TGM2 Master",
+      tgm2: "TGM2",
+      "tgm2_master": "TGM2",
       "tgm2_normal": "TGM2 Normal",
       "tgm3": "TGM3",
       "tgm3_easy": "TGM3 Easy",
@@ -1510,6 +2147,12 @@ class ProfileOverlayScene extends Phaser.Scene {
       master20g: "Master",
       sprint_40: "40L",
       sprint_100: "100L",
+      asuka_easy: "Asuka Easy",
+      asuka: "Asuka Normal",
+      asuka_hard: "Asuka Hard",
+      konoha_easy: "Konoha Easy",
+      konoha_hard: "Konoha Hard",
+      flashpoint: "Flashpoint",
     };
     if (special[raw]) return special[raw];
     return String(modeId)

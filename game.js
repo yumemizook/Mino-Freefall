@@ -2327,11 +2327,6 @@ class MenuScene extends Phaser.Scene {
     this.input.keyboard.on("keydown-ENTER", () => {
       this.startSelectedMode();
     });
-
-    // Escape for settings
-    this.input.keyboard.on("keydown-ESC", () => {
-      this.scene.start("SettingsScene");
-    });
   }
 
   navigateModeType(direction) {
@@ -3040,6 +3035,21 @@ class SettingsScene extends Phaser.Scene {
     this.zenCheeseIntervalText = null;
     this.zenSpinModeText = null;
     this.zenInfiniteResetsText = null;
+
+    // Settings tabs
+    this.settingsTab = "keybinds";
+    this.settingsTabButtons = {};
+    this.settingsTabButtonItems = [];
+    this.settingsSections = {};
+
+    // Rotation preview (7 tetrominoes)
+    this.rotationPreview = null;
+    this.rotationPreviewSystem = null;
+    this.rotationPreviewTimer = null;
+
+    this.rotationSystemButtons = null;
+    this.rotationSystemDescText = null;
+    this.uiSliderHeight = 10;
   }
 
   preload() {
@@ -3091,6 +3101,10 @@ class SettingsScene extends Phaser.Scene {
   create() {
     const centerX = this.cameras.main.width / 2;
     const centerY = this.cameras.main.height / 2;
+    const contentW = this.cameras.main.width * 0.8;
+    const contentLeftX = centerX - contentW / 2;
+    const contentRightX = centerX + contentW / 2;
+    const tabContentOffsetY = 30;
 
     this.events.once("shutdown", () => {
       if (this.input && this.input.keyboard) {
@@ -3100,82 +3114,151 @@ class SettingsScene extends Phaser.Scene {
 
     createOrUpdateGlobalOverlay(this, { modeLabel: "Mode: —", modeTypeName: "" });
 
-    // Title - moved up 50px
-    this.add
-      .text(centerX, centerY - 200, "Settings", {
+    // Title
+    const titleText = this.add
+      .text(centerX, centerY - 240, "Settings", {
         fontSize: "36px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
 
-    // Rotation system toggle - moved up 50px
-    const rotationSystem = localStorage.getItem("rotationSystem") || "SRS";
-    this.rotationText = this.add
-      .text(centerX, centerY - 130, `Rotation System: ${rotationSystem}`, {
-        fontSize: "24px",
-        fill: "#ffffff",
-        fontFamily: "Hatsukoi Friends",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
+    // Section containers (shown/hidden by tabs)
+    const makeSection = () => this.add.container(0, 0).setDepth(1);
+    this.settingsSections = {
+      keybinds: makeSection(),
+      handling: makeSection(),
+      rotation: makeSection(),
+      audio: makeSection(),
+      reset: makeSection(),
+    };
 
-    this.rotationText.on("pointerdown", () => {
-      const currentSystem = localStorage.getItem("rotationSystem") || "SRS";
-      const newSystem = currentSystem === "SRS" ? "ARS" : "SRS";
-      localStorage.setItem("rotationSystem", newSystem);
-      this.rotationSystem = newSystem;
-      this.rotationText.setText(`Rotation System: ${newSystem}`);
-      this.updateRotationSystemDisplay(newSystem);
-      this.updateArsResetModeVisibility(newSystem);
+    // Move all tab contents down a bit for readability/accessibility.
+    Object.values(this.settingsSections).forEach((c) => {
+      if (c && typeof c.setY === "function") c.setY(tabContentOffsetY);
     });
 
-    // Add T piece display under rotation system text
-    this.rotationSystem = rotationSystem;
-    this.tPieceDisplay = this.createTPieceDisplay(this.tPieceX, this.tPieceY, this.rotationSystem);
-    // Ensure initial display uses correct texture/tint for current selection
-    this.updateRotationSystemDisplay(this.rotationSystem);
+    const setSectionVisible = (tab) => {
+      this.settingsTab = tab;
+      Object.keys(this.settingsSections).forEach((k) => {
+        this.settingsSections[k].setVisible(k === tab);
+      });
+      Object.keys(this.settingsTabButtons || {}).forEach((k) => {
+        const btn = this.settingsTabButtons[k];
+        if (!btn || !btn.bg || !btn.txt) return;
+        const active = k === tab;
+        btn.bg.setStrokeStyle(2, active ? 0xffffff : 0x666666);
+        btn.bg.setFillStyle(active ? 0x222222 : 0x111111, 0.9);
+        btn.txt.setColor(active ? "#ffff00" : "#ffffff");
+      });
+    };
 
-    // ARS lock reset mode toggle (only relevant when ARS is selected)
-    const arsResetIsMove =
-      (localStorage.getItem("arsMoveReset") || "false") === "true";
-    // ARS reset label (two-line: label + value)
-    this.arsResetLabel = this.add
-      .text(centerX, centerY - 40, "ARS Lock Reset", {
-        fontSize: "18px",
-        fill: "#ffffff",
-        fontFamily: "Hatsukoi Friends",
-      })
-      .setOrigin(0.5);
-
-    this.arsResetModeText = this.add
-      .text(
-        centerX,
-        centerY - 20,
-        arsResetIsMove ? "Move (SRS-style)" : "Step (default)",
-        {
-          fontSize: "18px",
+    const makeTabButton = (label, x, handler) => {
+      const paddingX = 10;
+      const paddingY = 6;
+      const txt = this.add
+        .text(0, 0, label, {
+          fontSize: "16px",
           fill: "#ffffff",
           fontFamily: "Hatsukoi Friends",
-        },
-      )
-      .setOrigin(0.5)
-      .setInteractive();
+        })
+        .setOrigin(0.5);
+      const bg = this.add
+        .rectangle(0, 0, txt.width + paddingX * 2, txt.height + paddingY * 2, 0x111111, 0.9)
+        .setStrokeStyle(2, 0x666666)
+        .setOrigin(0.5);
+      const container = this.add
+        .container(x, 0, [bg, txt])
+        .setSize(bg.width, bg.height)
+        .setInteractive(new Phaser.Geom.Rectangle(-bg.width / 2, -bg.height / 2, bg.width, bg.height), Phaser.Geom.Rectangle.Contains)
+        .on("pointerup", handler)
+        .on("pointerover", () => bg.setStrokeStyle(2, 0xffffff))
+        .on("pointerout", () => bg.setStrokeStyle(2, 0x666666));
+      if (container.input) container.input.cursor = "pointer";
+      return { container, bg, txt };
+    };
 
-    // TGM4 Extra button activation mode toggle
+    // Tabs row
+    const tabDefs = [
+      { id: "keybinds", label: "Keybinds" },
+      { id: "handling", label: "Handling" },
+      { id: "rotation", label: "Rotation" },
+      { id: "audio", label: "Audio" },
+      { id: "reset", label: "Reset" },
+    ];
+    const tabsY = centerY - 200;
+    const tabMetas = tabDefs.map((t) => ({
+      id: t.id,
+      btn: makeTabButton(t.label, 0, () => setSectionVisible(t.id)),
+    }));
+    const totalW = tabMetas.reduce((acc, m) => acc + m.btn.bg.width, 0) + (tabMetas.length - 1) * 12;
+    const availW = this.cameras.main.width - 80;
+    const scale = totalW > availW && totalW > 0 ? availW / totalW : 1;
+    let tx = centerX - (totalW * scale) / 2;
+    tabMetas.forEach((m) => {
+      m.btn.container.setY(tabsY);
+      m.btn.container.setScale(scale);
+      m.btn.container.setX(tx + (m.btn.bg.width * scale) / 2);
+      tx += m.btn.bg.width * scale + 12;
+      this.settingsTabButtons[m.id] = m.btn;
+      this.settingsTabButtonItems.push(m.btn.container);
+    });
+
+    // Rotation system selector (Rotation tab)
+    const rotationSystem = localStorage.getItem("rotationSystem") || "SRS";
+    this.rotationSystem = rotationSystem;
+
+    const rotButtonsY = centerY - 145;
+    const rotBtnGap = 14;
+    const srsBtn = makeTabButton("SRS", 0, () => {
+      localStorage.setItem("rotationSystem", "SRS");
+      this.rotationSystem = "SRS";
+      this.updateRotationSystemDisplay("SRS");
+      this.updateArsResetModeVisibility("SRS");
+    });
+    const arsBtn = makeTabButton("ARS", 0, () => {
+      localStorage.setItem("rotationSystem", "ARS");
+      this.rotationSystem = "ARS";
+      this.updateRotationSystemDisplay("ARS");
+      this.updateArsResetModeVisibility("ARS");
+    });
+    const rotTotalW = srsBtn.bg.width + rotBtnGap + arsBtn.bg.width;
+    srsBtn.container.setPosition(centerX - rotTotalW / 2 + srsBtn.bg.width / 2, rotButtonsY);
+    arsBtn.container.setPosition(centerX + rotTotalW / 2 - arsBtn.bg.width / 2, rotButtonsY);
+
+    this.rotationSystemButtons = { srs: srsBtn, ars: arsBtn };
+    this.settingsSections.rotation.add([srsBtn.container, arsBtn.container]);
+
+    this.rotationSystemDescText = this.add
+      .text(centerX, rotButtonsY + 28, "", {
+        fontSize: "14px",
+        fill: "#888888",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(0.5);
+    this.settingsSections.rotation.add(this.rotationSystemDescText);
+
+    // Rotation preview display (7 tetrominoes)
+    this.updateRotationSystemDisplay(this.rotationSystem);
+
+    // Extra + ARS reset controls (only visible in Rotation tab when ARS is selected)
     const extraActivationMode = localStorage.getItem("extraActivationMode") || "hold";
+    const arsResetIsMove = (localStorage.getItem("arsMoveReset") || "false") === "true";
+
+    // Extra Button Mode (first)
     this.extraActivationLabel = this.add
-      .text(centerX, centerY + 20, "Extra Button Mode", {
+      .text(centerX, centerY - 40, "Extra Button Mode", {
         fontSize: "18px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
+    this.settingsSections.rotation.add(this.extraActivationLabel);
 
     this.extraActivationModeText = this.add
       .text(
         centerX,
-        centerY + 40,
+        centerY - 20,
         extraActivationMode === "hold" ? "Hold Activation" : "Toggle Activation",
         {
           fontSize: "18px",
@@ -3185,6 +3268,32 @@ class SettingsScene extends Phaser.Scene {
       )
       .setOrigin(0.5)
       .setInteractive();
+    this.settingsSections.rotation.add(this.extraActivationModeText);
+
+    // ARS Lock Reset (under Extra)
+    this.arsResetLabel = this.add
+      .text(centerX, centerY + 20, "ARS Lock Reset", {
+        fontSize: "18px",
+        fill: "#ffffff",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(0.5);
+    this.settingsSections.rotation.add(this.arsResetLabel);
+
+    this.arsResetModeText = this.add
+      .text(
+        centerX,
+        centerY + 40,
+        arsResetIsMove ? "Move (SRS-style)" : "Step (default)",
+        {
+          fontSize: "18px",
+          fill: "#ffffff",
+          fontFamily: "Hatsukoi Friends",
+        },
+      )
+      .setOrigin(0.5)
+      .setInteractive();
+    this.settingsSections.rotation.add(this.arsResetModeText);
     this.arsResetModeText.on("pointerdown", () => {
       const current = (localStorage.getItem("arsMoveReset") || "false") === "true";
       const next = !current;
@@ -3201,68 +3310,118 @@ class SettingsScene extends Phaser.Scene {
       this.extraActivationModeText.setText(next === "hold" ? "Hold Activation" : "Toggle Activation");
     });
 
-    // Keybind settings - moved to left side
-    const keybindsX = centerX - 300; // Moved to left
-    const keybindsY = centerY - 100;
-
-    this.add
-      .text(keybindsX, keybindsY - 40, "Keybinds (Click to change)", {
+    // Keybind settings (Keybinds tab)
+    const keybindsX = centerX;
+    const keybindsY = centerY - 40;
+    const keyTitle = this.add
+      .text(keybindsX, keybindsY - 120, "Keybinds (Click to change)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
       .setOrigin(0.5);
+    this.settingsSections.keybinds.add(keyTitle);
 
-    let yOffset = keybindsY;
-    const spacing = 35;
+    const rowLabelX = keybindsX - contentW * 0.28;
+    const keyPrimaryX = keybindsX - contentW * 0.08;
+    const keyAltX = keybindsX + contentW * 0.12;
+    const rowStartY = keybindsY - 80;
+    const rowSpacing = 34;
+    let rowY = rowStartY;
 
-    Object.keys(this.keybindActions).forEach((action) => {
-      // Label
-      this.keybindLabels[action] = this.add
-        .text(keybindsX - 80, yOffset, this.keybindActions[action] + ":", {
+    const addKeybindRow = (label, actionPrimary, actionAlt = null) => {
+      const lbl = this.add
+        .text(rowLabelX, rowY, `${label}:`, {
           fontSize: "18px",
           fill: "#ffffff",
           fontFamily: "Hatsukoi Friends",
         })
-        .setOrigin(1, 0.5); // Right-aligned
+        .setOrigin(1, 0.5);
 
-      // Current keybind
-      const currentKey = this.getCurrentKeybind(action);
-      this.keybindTexts[action] = this.add
-        .text(keybindsX + 80, yOffset, currentKey, {
+      const primaryKey = this.getCurrentKeybind(actionPrimary);
+      const primaryTxt = this.add
+        .text(keyPrimaryX, rowY, primaryKey, {
           fontSize: "18px",
           fill: "#00ff00",
           fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
         })
         .setOrigin(0, 0.5)
-        .setInteractive(); // Left-aligned
+        .setInteractive();
+      primaryTxt.on("pointerdown", () => this.startListeningForKey(actionPrimary));
 
-      this.keybindTexts[action].on("pointerdown", () => {
-        this.startListeningForKey(action);
-      });
+      this.keybindLabels[actionPrimary] = lbl;
+      this.keybindTexts[actionPrimary] = primaryTxt;
+      this.settingsSections.keybinds.add([lbl, primaryTxt]);
 
-      yOffset += spacing;
-    });
+      if (actionAlt) {
+        const altKey = this.getCurrentKeybind(actionAlt);
+        const altTxt = this.add
+          .text(keyAltX, rowY, altKey, {
+            fontSize: "18px",
+            fill: "#00ff00",
+            fontFamily: "Hatsukoi Friends",
+            fontStyle: "bold",
+          })
+          .setOrigin(0, 0.5)
+          .setInteractive();
+        altTxt.on("pointerdown", () => this.startListeningForKey(actionAlt));
+        this.keybindTexts[actionAlt] = altTxt;
+        this.settingsSections.keybinds.add(altTxt);
+      }
 
-    // Volume controls - moved to right side with main volume control
-    const volumeX = centerX + 300; // Moved to right
-    const volumeY = centerY - 100;
+      rowY += rowSpacing;
+    };
+
+    // Side-by-side rotate binds
+    const rotateHeader = this.add
+      .text(keybindsX + 60, rowY - 24, "Primary / Alt", {
+        fontSize: "14px",
+        fill: "#aaaaaa",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(0.5);
+    this.settingsSections.keybinds.add(rotateHeader);
+
+    addKeybindRow("Move Left", "moveLeft");
+    addKeybindRow("Move Right", "moveRight");
+    addKeybindRow("Soft Drop", "softDrop");
+    addKeybindRow("Hard Drop", "hardDrop");
+    addKeybindRow("Rotate CW", "rotateCW", "rotateCW2");
+    addKeybindRow("Rotate CCW", "rotateCCW", "rotateCCW2");
+    addKeybindRow("Rotate 180", "rotate180");
+    addKeybindRow("Hold", "hold");
+    addKeybindRow("Extra", "extra");
+    addKeybindRow("Backstep", "backstep");
+    addKeybindRow("Pause", "pause");
+    addKeybindRow("Return to Menu", "menu");
+    addKeybindRow("Restart", "restart");
+
+    // Volume controls (Audio tab)
+    const volumeX = centerX;
+    const volumeY = centerY - 140;
+
+    const sliderWidth = Math.max(380, Math.min(640, Math.floor(contentW * 0.9)));
+    const sliderHeight = 16;
+    const sliderLabelX = contentLeftX + 10;
+    const sliderValueX = contentRightX - 10;
+
+    this.uiSliderHeight = sliderHeight;
 
     // Main Volume
     this.mainVolumeLabel = this.add
-      .text(volumeX, volumeY - 60, "Master Volume", {
+      .text(sliderLabelX, volumeY - 20, "Master Volume", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+
+    this.settingsSections.audio.add(this.mainVolumeLabel);
 
     // Main Volume slider background
-    const mainSliderX = volumeX;
+    const mainSliderX = centerX;
     const mainSliderY = volumeY - 20;
-    const sliderWidth = 200;
-    const sliderHeight = 10;
 
     this.mainVolumeSlider = this.add.graphics();
     this.mainVolumeSlider.fillStyle(0x333333);
@@ -3286,25 +3445,23 @@ class SettingsScene extends Phaser.Scene {
     // Main Volume slider knob
     this.mainVolumeKnob = this.add.graphics();
     this.mainVolumeKnob.fillStyle(0xffffff);
-    this.mainVolumeKnob.fillCircle(
-      mainSliderX - sliderWidth / 2 + sliderWidth * this.getMasterVolume(),
+    const mainKnobX = mainSliderX - sliderWidth / 2 + sliderWidth * this.getMasterVolume();
+    this.mainVolumeKnob.fillTriangle(
+      mainKnobX + 10,
       mainSliderY,
-      8,
+      mainKnobX - 6,
+      mainSliderY - 8,
+      mainKnobX - 6,
+      mainSliderY + 8,
     );
 
-    // Main Volume percentage text
     this.mainVolumeText = this.add
-      .text(
-        mainSliderX,
-        mainSliderY + 30,
-        `${Math.round(this.getMasterVolume() * 100)}%`,
-        {
-          fontSize: "16px",
-          fill: "#ffffff",
-          fontFamily: "Hatsukoi Friends",
-        },
-      )
-      .setOrigin(0.5);
+      .text(sliderValueX, volumeY - 20, `${Math.round(this.getMasterVolume() * 100)}%`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
 
     // Make Main slider interactive
     this.mainVolumeSlider.setInteractive(
@@ -3337,15 +3494,17 @@ class SettingsScene extends Phaser.Scene {
 
     // BGM Volume
     this.bgmVolumeLabel = this.add
-      .text(volumeX, volumeY + 40, "BGM Volume", {
+      .text(sliderLabelX, volumeY + 80, "BGM Volume", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+
+    this.settingsSections.audio.add(this.bgmVolumeLabel);
 
     // BGM Volume slider background
-    const bgmSliderX = volumeX;
+    const bgmSliderX = centerX;
     const bgmSliderY = volumeY + 80;
 
     this.bgmVolumeSlider = this.add.graphics();
@@ -3370,25 +3529,24 @@ class SettingsScene extends Phaser.Scene {
     // BGM Volume slider knob
     this.bgmVolumeKnob = this.add.graphics();
     this.bgmVolumeKnob.fillStyle(0xffffff);
-    this.bgmVolumeKnob.fillCircle(
-      bgmSliderX - sliderWidth / 2 + sliderWidth * this.getBGMVolume(),
+    const bgmKnobX = bgmSliderX - sliderWidth / 2 + sliderWidth * this.getBGMVolume();
+    this.bgmVolumeKnob.fillTriangle(
+      bgmKnobX + 10,
       bgmSliderY,
-      8,
+      bgmKnobX - 6,
+      bgmSliderY - 8,
+      bgmKnobX - 6,
+      bgmSliderY + 8,
     );
 
     // BGM Volume percentage text
     this.bgmVolumeText = this.add
-      .text(
-        bgmSliderX,
-        bgmSliderY + 30,
-        `${Math.round(this.getBGMVolume() * 100)}%`,
-        {
-          fontSize: "16px",
-          fill: "#ffffff",
-          fontFamily: "Hatsukoi Friends",
-        },
-      )
-      .setOrigin(0.5);
+      .text(sliderValueX, volumeY + 80, `${Math.round(this.getBGMVolume() * 100)}%`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
 
     // Make BGM slider interactive
     this.bgmVolumeSlider.setInteractive(
@@ -3421,16 +3579,18 @@ class SettingsScene extends Phaser.Scene {
 
     // SFX Volume
     this.sfxVolumeLabel = this.add
-      .text(volumeX, volumeY + 160, "SFX Volume", {
+      .text(sliderLabelX, volumeY + 180, "SFX Volume", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+
+    this.settingsSections.audio.add(this.sfxVolumeLabel);
 
     // SFX Volume slider background
-    const sfxSliderX = volumeX;
-    const sfxSliderY = volumeY + 200;
+    const sfxSliderX = centerX;
+    const sfxSliderY = volumeY + 180;
 
     this.sfxVolumeSlider = this.add.graphics();
     this.sfxVolumeSlider.fillStyle(0x333333);
@@ -3454,25 +3614,24 @@ class SettingsScene extends Phaser.Scene {
     // SFX Volume slider knob
     this.sfxVolumeKnob = this.add.graphics();
     this.sfxVolumeKnob.fillStyle(0xffffff);
-    this.sfxVolumeKnob.fillCircle(
-      sfxSliderX - sliderWidth / 2 + sliderWidth * this.getSFXVolume(),
+    const sfxKnobX = sfxSliderX - sliderWidth / 2 + sliderWidth * this.getSFXVolume();
+    this.sfxVolumeKnob.fillTriangle(
+      sfxKnobX + 10,
       sfxSliderY,
-      8,
+      sfxKnobX - 6,
+      sfxSliderY - 8,
+      sfxKnobX - 6,
+      sfxSliderY + 8,
     );
 
     // SFX Volume percentage text
     this.sfxVolumeText = this.add
-      .text(
-        sfxSliderX,
-        sfxSliderY + 30,
-        `${Math.round(this.getSFXVolume() * 100)}%`,
-        {
-          fontSize: "16px",
-          fill: "#ffffff",
-          fontFamily: "Hatsukoi Friends",
-        },
-      )
-      .setOrigin(0.5);
+      .text(sliderValueX, volumeY + 180, `${Math.round(this.getSFXVolume() * 100)}%`, {
+        fontSize: "16px",
+        fill: "#ffffff",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
 
     // Make SFX slider interactive
     this.sfxVolumeSlider.setInteractive(
@@ -3508,22 +3667,23 @@ class SettingsScene extends Phaser.Scene {
       this.draggingSDF = false;
     });
 
-    // Timing sliders (right column, aligned with master volume)
-    const timingX = volumeX + 240; // move timing sliders further right of audio sliders
-    const timingY = volumeY - 50; // so DAS slider center lines up with master volume slider
-    const timingSliderWidth = 200;
-    const timingSliderHeight = 10;
+    // Handling sliders (Handling tab)
+    const timingX = centerX;
+    const timingY = centerY - 140;
+    const timingSliderWidth = sliderWidth;
+    const timingSliderHeight = sliderHeight;
 
     // DAS slider
     this.dasLabel = this.add
-      .text(timingX, timingY, "DAS (frames)", {
+      .text(sliderLabelX, timingY + 0, "DAS (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.settingsSections.handling.add(this.dasLabel);
     const dasValue = this.getTimingFrames("timing_das_frames", 10);
-    const dasSliderY = timingY + 30;
+    const dasSliderY = timingY + 0;
 
     this.dasSlider = this.add.graphics();
     this.dasSlider.fillStyle(0x333333);
@@ -3545,19 +3705,32 @@ class SettingsScene extends Phaser.Scene {
 
     this.dasSliderKnob = this.add.graphics();
     this.dasSliderKnob.fillStyle(0xffffff);
-    this.dasSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(dasValue, 1, 20),
+    const dasKnobX = timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(dasValue, 1, 20);
+    this.dasSliderKnob.fillTriangle(
+      dasKnobX + 10,
       dasSliderY,
-      8,
+      dasKnobX - 6,
+      dasSliderY - 8,
+      dasKnobX - 6,
+      dasSliderY + 8,
     );
 
     this.dasText = this.add
-      .text(timingX, dasSliderY + 25, `${dasValue.toFixed(1)}f`, {
+      .text(sliderValueX, timingY + 0, `${dasValue.toFixed(1)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(1, 0.5);
+
+    this.dasMsText = this.add
+      .text(sliderValueX, timingY + 18, `${(dasValue * (1000 / 60)).toFixed(1)}ms`, {
+        fontSize: "12px",
+        fill: "#888888",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
+    this.settingsSections.handling.add(this.dasMsText);
 
     this.dasSlider.setInteractive(
       new Phaser.Geom.Rectangle(
@@ -3588,14 +3761,15 @@ class SettingsScene extends Phaser.Scene {
 
     // ARR slider
     const arrValue = this.getTimingFrames("timing_arr_frames", 2);
-    const arrSliderY = dasSliderY + 70;
+    const arrSliderY = dasSliderY + 60;
     this.arrLabel = this.add
-      .text(timingX, arrSliderY - 30, "ARR (frames)", {
+      .text(sliderLabelX, arrSliderY + 0, "ARR (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.settingsSections.handling.add(this.arrLabel);
 
     this.arrSlider = this.add.graphics();
     this.arrSlider.fillStyle(0x333333);
@@ -3617,19 +3791,32 @@ class SettingsScene extends Phaser.Scene {
 
     this.arrSliderKnob = this.add.graphics();
     this.arrSliderKnob.fillStyle(0xffffff);
-    this.arrSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(arrValue, 0, 5),
+    const arrKnobX = timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(arrValue, 0, 5);
+    this.arrSliderKnob.fillTriangle(
+      arrKnobX + 10,
       arrSliderY,
-      8,
+      arrKnobX - 6,
+      arrSliderY - 8,
+      arrKnobX - 6,
+      arrSliderY + 8,
     );
 
     this.arrText = this.add
-      .text(timingX, arrSliderY + 25, `${arrValue.toFixed(1)}f`, {
+      .text(sliderValueX, arrSliderY + 0, `${arrValue.toFixed(1)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(1, 0.5);
+
+    this.arrMsText = this.add
+      .text(sliderValueX, arrSliderY + 18, `${(arrValue * (1000 / 60)).toFixed(1)}ms`, {
+        fontSize: "12px",
+        fill: "#888888",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
+    this.settingsSections.handling.add(this.arrMsText);
 
     this.arrSlider.setInteractive(
       new Phaser.Geom.Rectangle(
@@ -3659,14 +3846,15 @@ class SettingsScene extends Phaser.Scene {
 
     // ARE slider
     const areValue = this.getTimingFrames("timing_are_frames", 7);
-    const areSliderY = arrSliderY + 70;
+    const areSliderY = arrSliderY + 60;
     this.areLabel = this.add
-      .text(timingX, areSliderY - 30, "ARE (frames)", {
+      .text(sliderLabelX, areSliderY + 0, "ARE (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.settingsSections.handling.add(this.areLabel);
 
     this.areSlider = this.add.graphics();
     this.areSlider.fillStyle(0x333333);
@@ -3688,19 +3876,32 @@ class SettingsScene extends Phaser.Scene {
 
     this.areSliderKnob = this.add.graphics();
     this.areSliderKnob.fillStyle(0xffffff);
-    this.areSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(areValue, 0, 60),
+    const areKnobX = timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(areValue, 0, 60);
+    this.areSliderKnob.fillTriangle(
+      areKnobX + 10,
       areSliderY,
-      8,
+      areKnobX - 6,
+      areSliderY - 8,
+      areKnobX - 6,
+      areSliderY + 8,
     );
 
     this.areText = this.add
-      .text(timingX, areSliderY + 25, `${areValue.toFixed(0)}f`, {
+      .text(sliderValueX, areSliderY + 0, `${areValue.toFixed(0)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(1, 0.5);
+
+    this.areMsText = this.add
+      .text(sliderValueX, areSliderY + 18, `${(areValue * (1000 / 60)).toFixed(1)}ms`, {
+        fontSize: "12px",
+        fill: "#888888",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
+    this.settingsSections.handling.add(this.areMsText);
 
     this.areSlider.setInteractive(
       new Phaser.Geom.Rectangle(
@@ -3730,14 +3931,15 @@ class SettingsScene extends Phaser.Scene {
 
     // Line ARE / Line Clear Delay slider
     const lineAreValue = this.getTimingFrames("timing_line_are_frames", 7);
-    const lineAreSliderY = areSliderY + 70;
+    const lineAreSliderY = areSliderY + 60;
     this.lineAreLabel = this.add
-      .text(timingX, lineAreSliderY - 30, "Line ARE / LCD (frames)", {
+      .text(sliderLabelX, lineAreSliderY + 0, "Line ARE / LCD (frames)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.settingsSections.handling.add(this.lineAreLabel);
 
     this.lineAreSlider = this.add.graphics();
     this.lineAreSlider.fillStyle(0x333333);
@@ -3759,19 +3961,32 @@ class SettingsScene extends Phaser.Scene {
 
     this.lineAreSliderKnob = this.add.graphics();
     this.lineAreSliderKnob.fillStyle(0xffffff);
-    this.lineAreSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(lineAreValue, 0, 60),
+    const lineAreKnobX = timingX - timingSliderWidth / 2 + timingSliderWidth * this.timingToPct(lineAreValue, 0, 60);
+    this.lineAreSliderKnob.fillTriangle(
+      lineAreKnobX + 10,
       lineAreSliderY,
-      8,
+      lineAreKnobX - 6,
+      lineAreSliderY - 8,
+      lineAreKnobX - 6,
+      lineAreSliderY + 8,
     );
 
     this.lineAreText = this.add
-      .text(timingX, lineAreSliderY + 25, `${lineAreValue.toFixed(0)}f`, {
+      .text(sliderValueX, lineAreSliderY + 0, `${lineAreValue.toFixed(0)}f`, {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(1, 0.5);
+
+    this.lineAreMsText = this.add
+      .text(sliderValueX, lineAreSliderY + 18, `${(lineAreValue * (1000 / 60)).toFixed(1)}ms`, {
+        fontSize: "12px",
+        fill: "#888888",
+        fontFamily: "Hatsukoi Friends",
+      })
+      .setOrigin(1, 0.5);
+    this.settingsSections.handling.add(this.lineAreMsText);
 
     this.lineAreSlider.setInteractive(
       new Phaser.Geom.Rectangle(
@@ -3818,14 +4033,15 @@ class SettingsScene extends Phaser.Scene {
     // SDF slider (5x–40x and 20G)
     const sdfDefault = 6; // 6x default
     const sdfValue = this.normalizeSdfValue(this.getStoredTiming("timing_sdf_mult", sdfDefault));
-    const sdfSliderY = lineAreSliderY + 70;
+    const sdfSliderY = lineAreSliderY + 60;
     this.sdfLabel = this.add
-      .text(timingX, sdfSliderY - 30, "SDF (x speed)", {
+      .text(sliderLabelX, sdfSliderY + 0, "SDF (x speed)", {
         fontSize: "20px",
         fill: "#ffff00",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.settingsSections.handling.add(this.sdfLabel);
 
     this.sdfSlider = this.add.graphics();
     this.sdfSlider.fillStyle(0x333333);
@@ -3847,20 +4063,23 @@ class SettingsScene extends Phaser.Scene {
 
     this.sdfSliderKnob = this.add.graphics();
     this.sdfSliderKnob.fillStyle(0xffffff);
-    this.sdfSliderKnob.fillCircle(
-      timingX - timingSliderWidth / 2 + timingSliderWidth * this.sdfValueToPct(sdfValue),
+    const sdfKnobX = timingX - timingSliderWidth / 2 + timingSliderWidth * this.sdfValueToPct(sdfValue);
+    this.sdfSliderKnob.fillTriangle(
+      sdfKnobX + 10,
       sdfSliderY,
-      8,
+      sdfKnobX - 6,
+      sdfSliderY - 8,
+      sdfKnobX - 6,
+      sdfSliderY + 8,
     );
 
-    const sdfDisplay = this.formatSDFDisplay(sdfValue);
     this.sdfText = this.add
-      .text(timingX, sdfSliderY + 25, sdfDisplay, {
+      .text(sliderValueX, sdfSliderY + 0, this.formatSDFDisplay(sdfValue), {
         fontSize: "16px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
-      .setOrigin(0.5);
+      .setOrigin(1, 0.5);
 
     this.sdfSlider.setInteractive(
       new Phaser.Geom.Rectangle(
@@ -3888,7 +4107,7 @@ class SettingsScene extends Phaser.Scene {
     });
     this.updateSDFDisplay(sdfValue, { x: timingX, width: timingSliderWidth, y: sdfSliderY });
 
-    // Reset to defaults button - moved down 70px
+    // Reset tab actions
     this.resetButton = this.add
       .text(centerX, centerY + 190, "Reset to Defaults", {
         fontSize: "18px",
@@ -3897,6 +4116,8 @@ class SettingsScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setInteractive();
+
+    this.settingsSections.reset.add(this.resetButton);
 
     this.resetButton.on("pointerdown", () => {
       this.resetKeybindsToDefaults();
@@ -3912,14 +4133,17 @@ class SettingsScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive();
 
+    this.settingsSections.reset.add(this.resetScoresButton);
+
     this.resetScoresButton.on("pointerdown", () => {
       this.resetHighScores();
     });
 
-    // Back to menu - moved down 70px
+    // Back to menu footer (always visible)
+    const footerY = this.cameras.main.height - 56;
     this.backButton = this.add
-      .text(centerX, centerY + 270, "Back to Menu", {
-        fontSize: "24px",
+      .text(centerX, footerY, "Back to Menu", {
+        fontSize: "22px",
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
       })
@@ -3932,6 +4156,60 @@ class SettingsScene extends Phaser.Scene {
 
     // Setup keyboard input for keybind changes
     this.input.keyboard.on("keydown", this.onKeyDown, this);
+
+    // Ensure all UI elements live inside their section containers so tab switching works.
+    // (Some objects are created as standalone and then attached here.)
+    if (this.settingsSections?.audio) {
+      this.settingsSections.audio.add([
+        this.mainVolumeSlider,
+        this.mainVolumeSliderFill,
+        this.mainVolumeKnob,
+        this.mainVolumeText,
+        this.bgmVolumeSlider,
+        this.bgmVolumeSliderFill,
+        this.bgmVolumeKnob,
+        this.bgmVolumeText,
+        this.sfxVolumeSlider,
+        this.sfxVolumeSliderFill,
+        this.sfxVolumeKnob,
+        this.sfxVolumeText,
+      ].filter(Boolean));
+    }
+
+    if (this.settingsSections?.handling) {
+      this.settingsSections.handling.add([
+        this.dasSlider,
+        this.dasSliderFill,
+        this.dasSliderKnob,
+        this.dasText,
+        this.arrSlider,
+        this.arrSliderFill,
+        this.arrSliderKnob,
+        this.arrText,
+        this.areSlider,
+        this.areSliderFill,
+        this.areSliderKnob,
+        this.areText,
+        this.lineAreSlider,
+        this.lineAreSliderFill,
+        this.lineAreSliderKnob,
+        this.lineAreText,
+        this.sdfSlider,
+        this.sdfSliderFill,
+        this.sdfSliderKnob,
+        this.sdfText,
+      ].filter(Boolean));
+    }
+
+    if (this.settingsSections?.reset) {
+      this.settingsSections.reset.add([
+        this.resetButton,
+        this.resetScoresButton,
+      ].filter(Boolean));
+    }
+
+    // Initial tab state
+    setSectionVisible(this.settingsTab);
   }
 
   getCurrentKeybind(action) {
@@ -4663,18 +4941,25 @@ class SettingsScene extends Phaser.Scene {
     if (!slider) return;
     const { x, width, y } = slider;
     const pct = this.timingToPct(value, 1, 20);
+    const h = this.uiSliderHeight || 10;
     if (this.dasSliderFill) {
       this.dasSliderFill.clear();
       this.dasSliderFill.fillStyle(0x00ff00);
-      this.dasSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+      this.dasSliderFill.fillRect(x - width / 2, y - h / 2, width * pct, h);
     }
     if (this.dasSliderKnob) {
       this.dasSliderKnob.clear();
       this.dasSliderKnob.fillStyle(0xffffff);
-      this.dasSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+      const knobX = x - width / 2 + width * pct;
+      const leftX = knobX - (h / 2 - 2);
+      const rightX = knobX + (h / 2 + 2);
+      this.dasSliderKnob.fillTriangle(rightX, y, leftX, y - 8, leftX, y + 8);
     }
     if (this.dasText) {
       this.dasText.setText(`${value.toFixed(1)}f`);
+    }
+    if (this.dasMsText) {
+      this.dasMsText.setText(`${(value * (1000 / 60)).toFixed(1)}ms`);
     }
   }
 
@@ -4696,18 +4981,25 @@ class SettingsScene extends Phaser.Scene {
     if (!slider) return;
     const { x, width, y } = slider;
     const pct = this.timingToPct(value, 0, 5);
+    const h = this.uiSliderHeight || 10;
     if (this.arrSliderFill) {
       this.arrSliderFill.clear();
       this.arrSliderFill.fillStyle(0x00ff00);
-      this.arrSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+      this.arrSliderFill.fillRect(x - width / 2, y - h / 2, width * pct, h);
     }
     if (this.arrSliderKnob) {
       this.arrSliderKnob.clear();
       this.arrSliderKnob.fillStyle(0xffffff);
-      this.arrSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+      const knobX = x - width / 2 + width * pct;
+      const leftX = knobX - (h / 2 - 2);
+      const rightX = knobX + (h / 2 + 2);
+      this.arrSliderKnob.fillTriangle(rightX, y, leftX, y - 8, leftX, y + 8);
     }
     if (this.arrText) {
       this.arrText.setText(`${value.toFixed(1)}f`);
+    }
+    if (this.arrMsText) {
+      this.arrMsText.setText(`${(value * (1000 / 60)).toFixed(1)}ms`);
     }
   }
 
@@ -4729,18 +5021,25 @@ class SettingsScene extends Phaser.Scene {
     if (!slider) return;
     const { x, width, y } = slider;
     const pct = this.timingToPct(value, 0, 60);
+    const h = this.uiSliderHeight || 10;
     if (this.areSliderFill) {
       this.areSliderFill.clear();
       this.areSliderFill.fillStyle(0x00ff00);
-      this.areSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+      this.areSliderFill.fillRect(x - width / 2, y - h / 2, width * pct, h);
     }
     if (this.areSliderKnob) {
       this.areSliderKnob.clear();
       this.areSliderKnob.fillStyle(0xffffff);
-      this.areSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+      const knobX = x - width / 2 + width * pct;
+      const leftX = knobX - (h / 2 - 2);
+      const rightX = knobX + (h / 2 + 2);
+      this.areSliderKnob.fillTriangle(rightX, y, leftX, y - 8, leftX, y + 8);
     }
     if (this.areText) {
       this.areText.setText(`${value.toFixed(0)}f`);
+    }
+    if (this.areMsText) {
+      this.areMsText.setText(`${(value * (1000 / 60)).toFixed(1)}ms`);
     }
   }
 
@@ -4762,18 +5061,25 @@ class SettingsScene extends Phaser.Scene {
     if (!slider) return;
     const { x, width, y } = slider;
     const pct = this.timingToPct(value, 0, 60);
+    const h = this.uiSliderHeight || 10;
     if (this.lineAreSliderFill) {
       this.lineAreSliderFill.clear();
       this.lineAreSliderFill.fillStyle(0x00ff00);
-      this.lineAreSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+      this.lineAreSliderFill.fillRect(x - width / 2, y - h / 2, width * pct, h);
     }
     if (this.lineAreSliderKnob) {
       this.lineAreSliderKnob.clear();
       this.lineAreSliderKnob.fillStyle(0xffffff);
-      this.lineAreSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+      const knobX = x - width / 2 + width * pct;
+      const leftX = knobX - (h / 2 - 2);
+      const rightX = knobX + (h / 2 + 2);
+      this.lineAreSliderKnob.fillTriangle(rightX, y, leftX, y - 8, leftX, y + 8);
     }
     if (this.lineAreText) {
       this.lineAreText.setText(`${value.toFixed(0)}f`);
+    }
+    if (this.lineAreMsText) {
+      this.lineAreMsText.setText(`${(value * (1000 / 60)).toFixed(1)}ms`);
     }
   }
 
@@ -4798,15 +5104,19 @@ class SettingsScene extends Phaser.Scene {
     if (!slider) return;
     const { x, width, y } = slider;
     const pct = this.sdfValueToPct(value);
+    const h = this.uiSliderHeight || 10;
     if (this.sdfSliderFill) {
       this.sdfSliderFill.clear();
       this.sdfSliderFill.fillStyle(0x00ff00);
-      this.sdfSliderFill.fillRect(x - width / 2, y - 5, width * pct, 10);
+      this.sdfSliderFill.fillRect(x - width / 2, y - h / 2, width * pct, h);
     }
     if (this.sdfSliderKnob) {
       this.sdfSliderKnob.clear();
       this.sdfSliderKnob.fillStyle(0xffffff);
-      this.sdfSliderKnob.fillCircle(x - width / 2 + width * pct, y, 8);
+      const knobX = x - width / 2 + width * pct;
+      const leftX = knobX - (h / 2 - 2);
+      const rightX = knobX + (h / 2 + 2);
+      this.sdfSliderKnob.fillTriangle(rightX, y, leftX, y - 8, leftX, y + 8);
     }
     if (this.sdfText) {
       this.sdfText.setText(this.formatSDFDisplay(value));
@@ -4815,11 +5125,12 @@ class SettingsScene extends Phaser.Scene {
 
   updateMainVolumeDisplay() {
     const volume = this.getMasterVolume();
-    const centerX = this.cameras.main.width / 2;
-    const centerY = this.cameras.main.height / 2;
-    const sliderX = centerX + 300;
-    const sliderWidth = 200;
-    const sliderY = centerY - 120;
+    if (!this.mainVolumeSlider) return;
+    const bounds = this.mainVolumeSlider.getBounds();
+    const sliderX = bounds.centerX;
+    const sliderY = bounds.centerY;
+    const sliderWidth = bounds.width;
+    const sliderHeight = bounds.height;
 
     // Update slider fill
     if (this.mainVolumeSliderFill) {
@@ -4827,9 +5138,9 @@ class SettingsScene extends Phaser.Scene {
       this.mainVolumeSliderFill.fillStyle(0x00ff00);
       this.mainVolumeSliderFill.fillRect(
         sliderX - sliderWidth / 2,
-        sliderY - 5,
+        sliderY - sliderHeight / 2,
         sliderWidth * volume,
-        10,
+        sliderHeight,
       );
     }
 
@@ -4837,11 +5148,10 @@ class SettingsScene extends Phaser.Scene {
     if (this.mainVolumeKnob) {
       this.mainVolumeKnob.clear();
       this.mainVolumeKnob.fillStyle(0xffffff);
-      this.mainVolumeKnob.fillCircle(
-        sliderX - sliderWidth / 2 + sliderWidth * volume,
-        sliderY,
-        8,
-      );
+      const knobX = sliderX - sliderWidth / 2 + sliderWidth * volume;
+      const leftX = knobX - (sliderHeight / 2 - 2);
+      const rightX = knobX + (sliderHeight / 2 + 2);
+      this.mainVolumeKnob.fillTriangle(rightX, sliderY, leftX, sliderY - 8, leftX, sliderY + 8);
     }
 
     // Update text
@@ -4852,11 +5162,12 @@ class SettingsScene extends Phaser.Scene {
 
   updateBGMVolumeDisplay() {
     const volume = this.getBGMVolume();
-    const centerX = this.cameras.main.width / 2;
-    const centerY = this.cameras.main.height / 2;
-    const sliderX = centerX + 300;
-    const sliderWidth = 200;
-    const sliderY = centerY - 20;
+    if (!this.bgmVolumeSlider) return;
+    const bounds = this.bgmVolumeSlider.getBounds();
+    const sliderX = bounds.centerX;
+    const sliderY = bounds.centerY;
+    const sliderWidth = bounds.width;
+    const sliderHeight = bounds.height;
 
     // Update slider fill
     if (this.bgmVolumeSliderFill) {
@@ -4864,9 +5175,9 @@ class SettingsScene extends Phaser.Scene {
       this.bgmVolumeSliderFill.fillStyle(0x00ff00);
       this.bgmVolumeSliderFill.fillRect(
         sliderX - sliderWidth / 2,
-        sliderY - 5,
+        sliderY - sliderHeight / 2,
         sliderWidth * volume,
-        10,
+        sliderHeight,
       );
     }
 
@@ -4874,11 +5185,10 @@ class SettingsScene extends Phaser.Scene {
     if (this.bgmVolumeKnob) {
       this.bgmVolumeKnob.clear();
       this.bgmVolumeKnob.fillStyle(0xffffff);
-      this.bgmVolumeKnob.fillCircle(
-        sliderX - sliderWidth / 2 + sliderWidth * volume,
-        sliderY,
-        8,
-      );
+      const knobX = sliderX - sliderWidth / 2 + sliderWidth * volume;
+      const leftX = knobX - (sliderHeight / 2 - 2);
+      const rightX = knobX + (sliderHeight / 2 + 2);
+      this.bgmVolumeKnob.fillTriangle(rightX, sliderY, leftX, sliderY - 8, leftX, sliderY + 8);
     }
 
     // Update text
@@ -4889,11 +5199,12 @@ class SettingsScene extends Phaser.Scene {
 
   updateSFXVolumeDisplay() {
     const volume = this.getSFXVolume();
-    const centerX = this.cameras.main.width / 2;
-    const centerY = this.cameras.main.height / 2;
-    const sliderX = centerX + 300;
-    const sliderWidth = 200;
-    const sliderY = centerY + 100;
+    if (!this.sfxVolumeSlider) return;
+    const bounds = this.sfxVolumeSlider.getBounds();
+    const sliderX = bounds.centerX;
+    const sliderY = bounds.centerY;
+    const sliderWidth = bounds.width;
+    const sliderHeight = bounds.height;
 
     // Update slider fill
     if (this.sfxVolumeSliderFill) {
@@ -4901,9 +5212,9 @@ class SettingsScene extends Phaser.Scene {
       this.sfxVolumeSliderFill.fillStyle(0x00ff00);
       this.sfxVolumeSliderFill.fillRect(
         sliderX - sliderWidth / 2,
-        sliderY - 5,
+        sliderY - sliderHeight / 2,
         sliderWidth * volume,
-        10,
+        sliderHeight,
       );
     }
 
@@ -4911,11 +5222,10 @@ class SettingsScene extends Phaser.Scene {
     if (this.sfxVolumeKnob) {
       this.sfxVolumeKnob.clear();
       this.sfxVolumeKnob.fillStyle(0xffffff);
-      this.sfxVolumeKnob.fillCircle(
-        sliderX - sliderWidth / 2 + sliderWidth * volume,
-        sliderY,
-        8,
-      );
+      const knobX = sliderX - sliderWidth / 2 + sliderWidth * volume;
+      const leftX = knobX - (sliderHeight / 2 - 2);
+      const rightX = knobX + (sliderHeight / 2 + 2);
+      this.sfxVolumeKnob.fillTriangle(rightX, sliderY, leftX, sliderY - 8, leftX, sliderY + 8);
     }
 
     // Update text
@@ -5182,24 +5492,137 @@ class SettingsScene extends Phaser.Scene {
   updateRotationSystemDisplay(newSystem) {
     this.rotationSystem = newSystem;
 
-    // Rebuild T piece display to ensure correct texture/color
-    if (this.tPieceDisplay && this.tPieceDisplay.container) {
-      this.tPieceDisplay.container.destroy(true);
+    if (this.rotationSystemButtons) {
+      const activeSrs = newSystem === "SRS";
+      const activeArs = newSystem === "ARS";
+      const srs = this.rotationSystemButtons.srs;
+      const ars = this.rotationSystemButtons.ars;
+      if (srs?.bg) {
+        srs.bg.setStrokeStyle(2, activeSrs ? 0xffffff : 0x666666);
+        srs.bg.setFillStyle(activeSrs ? 0x222222 : 0x111111, 0.9);
+      }
+      if (srs?.txt) srs.txt.setColor(activeSrs ? "#ffff00" : "#ffffff");
+      if (ars?.bg) {
+        ars.bg.setStrokeStyle(2, activeArs ? 0xffffff : 0x666666);
+        ars.bg.setFillStyle(activeArs ? 0x222222 : 0x111111, 0.9);
+      }
+      if (ars?.txt) ars.txt.setColor(activeArs ? "#ffff00" : "#ffffff");
     }
-    const centerX = this.tPieceX || this.cameras.main.width / 2;
-    const centerY = this.tPieceY || this.cameras.main.height / 2 - 90;
-    this.tPieceDisplay = this.createTPieceDisplay(centerX, centerY, newSystem);
 
-    // Animate 360-degree rotation with the new shape/color
-    this.tweens.add({
-      targets: this.tPieceDisplay.container,
-      angle: 360,
-      duration: 600,
-      ease: "Power2",
-      onComplete: () => {
-        // Reset angle to 0
-        this.tPieceDisplay.container.angle = 0;
-      },
+    if (this.rotationSystemDescText) {
+      this.rotationSystemDescText.setText(
+        newSystem === "ARS"
+          ? "ARS: classic Arika-style rotations (TGM feel)."
+          : "SRS: modern guideline rotation system.",
+      );
+    }
+
+    // Stop any existing preview timer
+    if (this.rotationPreviewTimer) {
+      this.rotationPreviewTimer.remove(false);
+      this.rotationPreviewTimer = null;
+    }
+
+    // Rebuild preview container
+    if (this.rotationPreview && this.rotationPreview.container) {
+      this.rotationPreview.container.destroy(true);
+    }
+    this.rotationPreviewSystem = newSystem;
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2 - 80;
+    this.rotationPreview = this.createRotationPreview(centerX, centerY, newSystem);
+    if (this.rotationPreview?.container && this.settingsSections?.rotation) {
+      this.settingsSections.rotation.add(this.rotationPreview.container);
+    }
+
+    // Periodic clockwise rotation (every 1.2s)
+    this.rotationPreviewTimer = this.time.addEvent({
+      delay: 1200,
+      loop: true,
+      callback: () => this.stepRotationPreviewClockwise(),
+    });
+  }
+
+  createRotationPreview(centerX, centerY, system = this.rotationSystem) {
+    const container = this.add.container(centerX, centerY);
+    const types = ["I", "O", "T", "J", "L", "S", "Z"];
+    const cellW = 70;
+    const startX = -((types.length - 1) * cellW) / 2;
+    const startY = 0;
+    const pieces = [];
+
+    types.forEach((type, idx) => {
+      const cx = startX + idx * cellW;
+      const cy = startY;
+      const piece = this.createTetrominoMiniDisplay(cx, cy, type, 0, system);
+      pieces.push({ type, rotation: 0, x: cx, y: cy, ...piece });
+      container.add(piece.container);
+    });
+
+    return { container, pieces, system };
+  }
+
+  createTetrominoMiniDisplay(x, y, type, rotationIndex, system) {
+    const container = this.add.container(x, y);
+    const minoSize = 14;
+
+    const rotations =
+      system === "ARS" ? SEGA_ROTATIONS[type].rotations : TETROMINOES[type].rotations;
+    const color = system === "ARS" ? (ARS_COLORS[type] ?? 0xffffff) : (TETROMINOES[type]?.color ?? 0xffffff);
+    const textureKey = system === "ARS" ? "mino_ars" : "mino_srs";
+    const shape = rotations[rotationIndex] || rotations[0];
+    const n = Array.isArray(shape) ? shape.length : 4;
+    const origin = (n - 1) / 2;
+
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (!shape[r] || !shape[r][c]) continue;
+        const ox = (c - origin) * minoSize;
+        const oy = (r - origin) * minoSize;
+
+        const texture = this.textures ? this.textures.get(textureKey) : null;
+        const textureSource = texture && texture.source ? texture.source[0] : null;
+        const hasValidTextureSource = !!texture && !!textureSource && !!textureSource.image;
+        if (hasValidTextureSource) {
+          const sprite = this.add.sprite(ox, oy, textureKey);
+          sprite.setDisplaySize(minoSize, minoSize);
+          sprite.setTint(color);
+          container.add(sprite);
+        } else {
+          const graphics = this.add.graphics();
+          graphics.fillStyle(color);
+          graphics.fillRect(ox - minoSize / 2, oy - minoSize / 2, minoSize, minoSize);
+          container.add(graphics);
+        }
+      }
+    }
+
+    return { container };
+  }
+
+  stepRotationPreviewClockwise() {
+    const preview = this.rotationPreview;
+    if (!preview || !preview.pieces || !preview.container) return;
+    const system = this.rotationPreviewSystem || this.rotationSystem || "SRS";
+
+    // Detach current children without destroying them (we will destroy per-piece explicitly).
+    preview.container.removeAll(false);
+
+    preview.pieces.forEach((p) => {
+      const rotations =
+        system === "ARS" ? SEGA_ROTATIONS[p.type].rotations : TETROMINOES[p.type].rotations;
+      const count = Array.isArray(rotations) && rotations.length ? rotations.length : 4;
+      p.rotation = (p.rotation + 1) % count;
+
+      const oldX = Number.isFinite(p.x) ? p.x : 0;
+      const oldY = Number.isFinite(p.y) ? p.y : 0;
+      if (p.container) {
+        p.container.destroy(true);
+      }
+
+      const rebuilt = this.createTetrominoMiniDisplay(oldX, oldY, p.type, p.rotation, system);
+      p.container = rebuilt.container;
+      preview.container.add(p.container);
     });
   }
 
@@ -5263,6 +5686,8 @@ class SettingsScene extends Phaser.Scene {
     const visible = rotationSystem === "ARS";
     if (this.arsResetModeText) this.arsResetModeText.setVisible(visible);
     if (this.arsResetLabel) this.arsResetLabel.setVisible(visible);
+    if (this.extraActivationModeText) this.extraActivationModeText.setVisible(visible);
+    if (this.extraActivationLabel) this.extraActivationLabel.setVisible(visible);
   }
 }
 
@@ -14636,6 +15061,50 @@ class GameScene extends Phaser.Scene {
       (this.selectedMode === "sprint_40" || this.selectedMode === "sprint_100") &&
       !this.sprintCompleted
     ) {
+      return;
+    }
+
+    // Konoha (All Clear): store all-clears and submit as bravos for rating
+    if ((this.selectedMode === "konoha_easy" || this.selectedMode === "konoha_hard") && this.gameMode) {
+      const allClears =
+        typeof this.gameMode.allClearsAchieved === "number"
+          ? this.gameMode.allClearsAchieved
+          : typeof this.gameMode.allClears === "number"
+            ? this.gameMode.allClears
+            : 0;
+      const entry = {
+        allClears,
+        level: this.level,
+        lines: this.lines,
+        time:
+          this.currentTime !== undefined && this.currentTime !== null
+            ? `${Math.floor(this.currentTime / 60)
+                .toString()
+                .padStart(2, "0")}:${Math.floor(this.currentTime % 60)
+                .toString()
+                .padStart(2, "0")}.${Math.floor((this.currentTime % 1) * 100)
+                .toString()
+                .padStart(2, "0")}`
+            : undefined,
+        pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
+      };
+
+      this.saveLeaderboardEntry(this.selectedMode, entry);
+      this.leaderboardSaved = true;
+
+      try {
+        const submitScore = window.FirebaseClient?.submitScore;
+        if (submitScore) {
+          submitScore(this.selectedMode, {
+            bravos: allClears,
+            level: this.level,
+            lines: this.lines,
+            timeSeconds: this.currentTime != null ? Number(this.currentTime) : null,
+          });
+        }
+      } catch (err) {
+        console.warn("Rating submit failed (konoha)", err);
+      }
       return;
     }
 
