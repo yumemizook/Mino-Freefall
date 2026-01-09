@@ -206,6 +206,10 @@ function normalizeModeId(modeId) {
     tgm4_1_1: "tgm4",
     tgm4_2_1: "tgm4",
     tgm4_3_1: "tgm4",
+    // Some inputs include dots (e.g. "tgm4_1.1" / "TGM4 1.1") which become "tgm4_11"
+    tgm4_11: "tgm4",
+    tgm4_21: "tgm4",
+    tgm4_31: "tgm4",
 
     // Common display-name-like shortcuts
     master: "master20g",
