@@ -4303,6 +4303,232 @@ class SettingsScene extends Phaser.Scene {
     return isZen;
   }
 
+  getZenBoardSnapshotStorageKey() {
+    return "zen_board_state_v1";
+  }
+
+  encodeZenCell(cell) {
+    if (!cell) return ".";
+    if (typeof cell === "number") {
+      return cell.toString(36);
+    }
+    if (typeof cell === "object") {
+      const color =
+        typeof cell.color === "number"
+          ? cell.color
+          : typeof cell.originalColor === "number"
+            ? cell.originalColor
+            : 0;
+      const textureKey = typeof cell.textureKey === "string" ? cell.textureKey : null;
+      const texId = textureKey === "mono" ? 1 : textureKey === "mono_ars" ? 2 : 0;
+      const packed = ((texId & 0xff) << 24) | (color & 0xffffff);
+      return packed.toString(36);
+    }
+    return ".";
+  }
+
+  decodeZenCell(token) {
+    if (!token || token === ".") return 0;
+    const num = Number.parseInt(token, 36);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    const texId = (num >>> 24) & 0xff;
+    const color = num & 0xffffff;
+    if (!texId) return color;
+    const textureKey = texId === 1 ? "mono" : texId === 2 ? "mono_ars" : null;
+    return textureKey ? { color, textureKey } : color;
+  }
+
+  encodeZenGrid(grid) {
+    const rows = Array.isArray(grid) ? grid : [];
+    return rows
+      .map((row) => {
+        const r = Array.isArray(row) ? row : [];
+        let out = "";
+        let last = null;
+        let run = 0;
+        for (let i = 0; i < r.length; i++) {
+          const tok = this.encodeZenCell(r[i]);
+          if (last === null) {
+            last = tok;
+            run = 1;
+          } else if (tok === last) {
+            run++;
+          } else {
+            out += (out ? "|" : "") + `${run}x${last}`;
+            last = tok;
+            run = 1;
+          }
+        }
+        if (last !== null) {
+          out += (out ? "|" : "") + `${run}x${last}`;
+        }
+        return out;
+      })
+      .join("\n");
+  }
+
+  decodeZenGrid(encoded, rows, cols) {
+    const safeRows = Number.isFinite(rows) && rows > 0 ? rows : 22;
+    const safeCols = Number.isFinite(cols) && cols > 0 ? cols : 10;
+    const lines = typeof encoded === "string" ? encoded.split("\n") : [];
+    const grid = Array.from({ length: safeRows }, () => Array(safeCols).fill(0));
+    for (let r = 0; r < safeRows; r++) {
+      const line = lines[r] || "";
+      const parts = line ? line.split("|") : [];
+      let c = 0;
+      for (const part of parts) {
+        const m = /^([0-9]+)x(.*)$/.exec(part);
+        if (!m) continue;
+        const count = Number.parseInt(m[1], 10);
+        const tok = m[2];
+        const cell = this.decodeZenCell(tok);
+        const n = Number.isFinite(count) ? count : 0;
+        for (let i = 0; i < n && c < safeCols; i++) {
+          grid[r][c] = cell;
+          c++;
+        }
+        if (c >= safeCols) break;
+      }
+    }
+    return grid;
+  }
+
+  buildZenSnapshot() {
+    if (!this.board) return null;
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    return {
+      v: 1,
+      mode: modeId,
+      rows: this.board.rows,
+      cols: this.board.cols,
+      grid: this.encodeZenGrid(this.board.grid),
+      score: this.score,
+      level: this.level,
+      totalLines: this.totalLines,
+      piecesPlaced: this.piecesPlaced,
+      totalPiecesPlaced: this.totalPiecesPlaced,
+      hold: this.holdPiece
+        ? {
+            type: typeof this.holdPiece === "string" ? this.holdPiece : this.holdPiece.type,
+            textureKey:
+              typeof this.holdPiece === "object" && this.holdPiece && this.holdPiece.textureKey
+                ? this.holdPiece.textureKey
+                : null,
+          }
+        : null,
+      nextPieces: Array.isArray(this.nextPieces) ? this.nextPieces : [],
+      zenSandboxRuntime: this.zenSandboxRuntime || null,
+      lastClassicPiece: this.lastClassicPiece || null,
+      pairsQueue: this.pairsQueue || null,
+    };
+  }
+
+  applyZenSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object" || !this.board) return false;
+    const rows = Number(snapshot.rows);
+    const cols = Number(snapshot.cols);
+    if (!Number.isFinite(rows) || !Number.isFinite(cols) || rows <= 0 || cols <= 0) return false;
+    const grid = this.decodeZenGrid(snapshot.grid, rows, cols);
+    this.board.rows = rows;
+    this.board.cols = cols;
+    this.board.grid = grid;
+    this.board.fadeGrid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    this.score = typeof snapshot.score === "number" ? snapshot.score : this.score;
+    this.level = typeof snapshot.level === "number" ? snapshot.level : this.level;
+    this.totalLines = typeof snapshot.totalLines === "number" ? snapshot.totalLines : this.totalLines;
+    this.piecesPlaced = typeof snapshot.piecesPlaced === "number" ? snapshot.piecesPlaced : this.piecesPlaced;
+    this.totalPiecesPlaced =
+      typeof snapshot.totalPiecesPlaced === "number" ? snapshot.totalPiecesPlaced : this.totalPiecesPlaced;
+    this.holdPiece = snapshot.hold && snapshot.hold.type ? new Piece(snapshot.hold.type, this.rotationSystem, 0) : null;
+    if (this.holdPiece && snapshot.hold && snapshot.hold.textureKey) {
+      this.holdPiece.textureKey = snapshot.hold.textureKey;
+    }
+    this.nextPieces = Array.isArray(snapshot.nextPieces) ? snapshot.nextPieces : [];
+    this.zenSandboxRuntime = snapshot.zenSandboxRuntime || this.zenSandboxRuntime;
+    this.lastClassicPiece = snapshot.lastClassicPiece || this.lastClassicPiece;
+    this.pairsQueue = snapshot.pairsQueue || this.pairsQueue;
+
+    this.currentPiece = null;
+    this.areActive = false;
+    this.lineClearDelayActive = false;
+    this.isClearingLines = false;
+    this.clearedLines = [];
+    this.lockDelay = 0;
+    this.isGrounded = false;
+    this.lockDelayBufferedStart = false;
+    return true;
+  }
+
+  saveZenSnapshotToStorage(snapshot) {
+    if (typeof localStorage === "undefined") return;
+    if (!snapshot) return;
+    try {
+      localStorage.setItem(this.getZenBoardSnapshotStorageKey(), JSON.stringify(snapshot));
+    } catch {}
+  }
+
+  loadZenSnapshotFromStorage() {
+    if (typeof localStorage === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(this.getZenBoardSnapshotStorageKey());
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  recordZenPostLockSnapshot() {
+    if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
+    const snap = this.buildZenSnapshot();
+    if (!snap) return;
+    const maxDepth = 50;
+    this.zenUndoStack = Array.isArray(this.zenUndoStack) ? this.zenUndoStack : [];
+    this.zenRedoStack = Array.isArray(this.zenRedoStack) ? this.zenRedoStack : [];
+    this.zenUndoStack.push(snap);
+    if (this.zenUndoStack.length > maxDepth) {
+      this.zenUndoStack.splice(0, this.zenUndoStack.length - maxDepth);
+    }
+    this.zenRedoStack.length = 0;
+    this.saveZenSnapshotToStorage(snap);
+  }
+
+  zenUndo() {
+    if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return false;
+    if (!Array.isArray(this.zenUndoStack) || this.zenUndoStack.length < 2) return false;
+    const current = this.zenUndoStack.pop();
+    const prev = this.zenUndoStack[this.zenUndoStack.length - 1];
+    if (current) {
+      this.zenRedoStack = Array.isArray(this.zenRedoStack) ? this.zenRedoStack : [];
+      this.zenRedoStack.push(current);
+    }
+    const applied = this.applyZenSnapshot(prev);
+    if (applied) {
+      this.saveZenSnapshotToStorage(prev);
+      this.spawnPiece();
+    }
+    return applied;
+  }
+
+  zenRedo() {
+    if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return false;
+    if (!Array.isArray(this.zenRedoStack) || this.zenRedoStack.length < 1) return false;
+    const next = this.zenRedoStack.pop();
+    if (!next) return false;
+    this.zenUndoStack = Array.isArray(this.zenUndoStack) ? this.zenUndoStack : [];
+    this.zenUndoStack.push(next);
+    const applied = this.applyZenSnapshot(next);
+    if (applied) {
+      this.saveZenSnapshotToStorage(next);
+      this.spawnPiece();
+    }
+    return applied;
+  }
+
   tickZenCheese(deltaSeconds = 0) {
     if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
     if (!this.zenSandboxConfig) return;
@@ -5888,6 +6114,9 @@ class GameScene extends Phaser.Scene {
     this.canHold = true;
     this.holdRequest = false;
     this.nextPieces = []; // Initialize next pieces array
+    this.zenUndoStack = [];
+    this.zenRedoStack = [];
+    this.zenPendingSnapshotAfterClear = false;
     this.gravityTimer = 0.0;
     this.gravityAccum = 0.0;
     // lockDelay is a timer; lockDelayMax is the per-mode limit
@@ -6297,6 +6526,23 @@ class GameScene extends Phaser.Scene {
     this.loadZenSandboxConfig();
     if (typeof this.updateZenSandboxDisplay === "function") {
       this.updateZenSandboxDisplay();
+    }
+
+    // Zen: restore last saved placed-board snapshot (if any) and seed undo history.
+    if (this.isZenSandboxActive && this.isZenSandboxActive()) {
+      const saved = this.loadZenSnapshotFromStorage?.();
+      if (saved) {
+        const applied = this.applyZenSnapshot?.(saved);
+        if (applied) {
+          this.zenUndoStack = [saved];
+          this.zenRedoStack = [];
+        }
+      }
+    } else {
+      // Non-Zen runs should not carry Zen board state across sessions.
+      try {
+        localStorage.removeItem(this.getZenBoardSnapshotStorageKey?.() || "zen_board_state_v1");
+      } catch {}
     }
 
     // Line clear animation tracking
@@ -8988,6 +9234,10 @@ class GameScene extends Phaser.Scene {
     // Start with an empty preview queue; generateNextPieces will fill using the active randomizer
     this.nextPieces = [];
 
+    this.zenUndoStack = [];
+    this.zenRedoStack = [];
+    this.zenPendingSnapshotAfterClear = false;
+
     // Reset stack/credits/fade systems
     this.invisibleStackActive = false;
     this.fadingRollActive = false;
@@ -9025,10 +9275,38 @@ class GameScene extends Phaser.Scene {
     // Ensure layout values are correct for UI drawing (level bar, border, etc.)
     this.calculateLayout();
 
+    if (this.input && this.input.keyboard) {
+      if (this._zenUndoRedoKeyHandler) {
+        try {
+          this.input.keyboard.off("keydown", this._zenUndoRedoKeyHandler);
+        } catch {}
+      }
+      this._zenUndoRedoKeyHandler = (event) => {
+        if (!event || !event.ctrlKey) return;
+        if (!this.isZenSandboxActive || !this.isZenSandboxActive()) return;
+        if (this.isPaused || this.loadingPhase || this.readyGoPhase || this.gameOver) return;
+        const key = typeof event.key === "string" ? event.key.toLowerCase() : "";
+        if (key === "z") {
+          event.preventDefault?.();
+          this.zenUndo();
+        } else if (key === "y") {
+          event.preventDefault?.();
+          this.zenRedo();
+        }
+      };
+      this.input.keyboard.on("keydown", this._zenUndoRedoKeyHandler);
+    }
+
     this.events.once("shutdown", () => {
       if (this.bgmLoopTimer) {
         this.bgmLoopTimer.remove(false);
         this.bgmLoopTimer = null;
+      }
+      if (this.input && this.input.keyboard && this._zenUndoRedoKeyHandler) {
+        try {
+          this.input.keyboard.off("keydown", this._zenUndoRedoKeyHandler);
+        } catch {}
+        this._zenUndoRedoKeyHandler = null;
       }
       if (this.currentBGM) {
         this.currentBGM.stop();
@@ -12200,6 +12478,17 @@ class GameScene extends Phaser.Scene {
     // Store cleared lines for animation
     this.clearedLines = linesToClear;
 
+    // Zen snapshots are only recorded after a piece is placed.
+    // If line clears are pending, delay snapshot until after clearStoredLines() runs.
+    if (this.isZenSandboxActive && this.isZenSandboxActive()) {
+      if (linesToClear.length > 0) {
+        this.zenPendingSnapshotAfterClear = true;
+      } else {
+        this.zenPendingSnapshotAfterClear = false;
+        this.recordZenPostLockSnapshot?.();
+      }
+    }
+
     // Track pending powerup activation if any part of the powerup piece is cleared
     this.pendingPowerup = null;
     if (
@@ -12615,6 +12904,12 @@ class GameScene extends Phaser.Scene {
       this.powerupCells.delete(this.pendingPowerup.type);
       if (this.powerupStatusText) this.powerupStatusText.setText("");
       this.pendingPowerup = null;
+    }
+
+    // If Zen had a line-clear, record the post-lock snapshot after the clear has been applied.
+    if (this.zenPendingSnapshotAfterClear && this.isZenSandboxActive && this.isZenSandboxActive()) {
+      this.zenPendingSnapshotAfterClear = false;
+      this.recordZenPostLockSnapshot?.();
     }
 
     // Extra-line pass for certain modes (e.g., 2P garbage handling) - kept for compatibility
