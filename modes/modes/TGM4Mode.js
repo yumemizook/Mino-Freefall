@@ -79,12 +79,30 @@ class TGM4Mode extends BaseMode {
         this.sectionAPoints[currentSection] = this.currentSectionPoints;
     }
     
-    // Update grade display to show A grades
+    // Update grade display to show A of B grading
     updateGradeDisplay(gameScene) {
-        const gradeDisplay = this.aGradeCount > 0 ? `A${this.aGradeCount}` : 'Zero of Zero';
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setText(`Grade: ${gradeDisplay}`);
+        if (gameScene.gradeText && gameScene.game) {
+            const grade = this.calculateNormalModeGrade(gameScene.game.level, gameScene.game.score);
+            gameScene.gradeText.setText(`Grade: ${grade}`);
         }
+    }
+    
+    // Calculate TGM4 Normal mode grade (A of B format)
+    calculateNormalModeGrade(level, score) {
+        // B part: based on level progression
+        let bPart = Math.floor(level / 111);
+        if (level >= 999) {
+            bPart = 10; // Ten if credits are passed
+        } else if (bPart > 9) {
+            bPart = 9;
+        }
+
+        // A part: 6 tetris = 1 point, each all clear = -1 point
+        let aPart = Math.floor(this.tetrisCount / 6) - this.allClearCount;
+        aPart = Math.max(0, Math.min(10, aPart)); // Clamp between 0-10
+
+        const gradeNames = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+        return `${gradeNames[aPart]} of ${gradeNames[bPart]}`;
     }
     
     // Check for all clear

@@ -205,7 +205,7 @@ const MODE_TYPE_BY_ID = {
   "20g": "20G",
   tadeath: "20G",
   shirase: "20G",
-  master20g: "20G",
+  tgm4_rounds: "20G",
   asuka_easy: "RACE",
   asuka_normal: "RACE",
   asuka_hard: "RACE",
@@ -1932,10 +1932,10 @@ class MenuScene extends Phaser.Scene {
             description: "Shirase recreation to 2000",
           },
           {
-            id: "master20g",
-            name: "Master",
+            id: "tgm4_rounds",
+            name: "Rounds",
             description:
-              "Brand new, unique game mechanics. Can you handle them?",
+              "The ultimate test of Tetris skill. What's waiting after level 1300..?",
           },
         ],
       },
@@ -2776,7 +2776,7 @@ class MenuScene extends Phaser.Scene {
       case "tgm3":
       case "tgm4":
       case "20g":
-      case "master20g":
+      case "tgm4_rounds":
       case "asuka_easy":
       case "asuka_normal":
       case "asuka_hard": // Master, 20G, Race
@@ -2865,7 +2865,7 @@ class MenuScene extends Phaser.Scene {
       case "20g":
       case "tadeath":
       case "shirase":
-      case "master20g":
+      case "tgm4_rounds":
       case "asuka_easy":
       case "asuka_normal":
       case "asuka_hard": // Master, 20G, Race
@@ -5576,10 +5576,10 @@ class SettingsScene extends Phaser.Scene {
             description: "Shirase recreation to 2000",
           },
           {
-            id: "master20g",
-            name: "Master",
+            id: "tgm4_rounds",
+            name: "Rounds",
             description:
-              "Brand new, unique game mechanics. Can you handle them?",
+              "TGM4 Master - The ultimate test of Tetris skill",
           },
         ],
       },
@@ -7252,7 +7252,7 @@ class GameScene extends Phaser.Scene {
       case "tgm3":
       case "tgm4":
       case "20g":
-      case "master20g":
+      case "tgm4_rounds":
       case "asuka_easy":
       case "asuka_normal":
       case "asuka_hard": // Master, 20G, Race
@@ -8229,7 +8229,9 @@ class GameScene extends Phaser.Scene {
       modeId !== "tgm3_master" &&
       modeId !== "tgm3" &&
       modeId !== "tgm3_shirase" &&
-      modeId !== "shirase";
+      modeId !== "shirase" &&
+      modeId !== "tgm4" &&
+      modeId !== "tgm4_rounds";
 
     if (hasGrading) {
       const gradeX = uiX + 25;
@@ -12014,7 +12016,7 @@ class GameScene extends Phaser.Scene {
         modeIdLower.includes("shirase") ||
         modeIdLower.includes("death") ||
         modeIdLower.includes("plus") ||
-        modeIdLower.includes("master20g") ||
+        modeIdLower.includes("tgm4_rounds") ||
         modeIdLower === "20g");
     const isShiraseMode =
       modeId === "tgm3_shirase" || modeId === "shirase" || modeId === "tgm3_shirase_mode";

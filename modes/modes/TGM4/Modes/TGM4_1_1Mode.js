@@ -1,53 +1,34 @@
 // TGM4 1.1 Mode Implementation
-// Recreation of TGM1 Normal mode
+// Recreation of TGM1 Normal mode - extends TGM1Mode with TGM4 features
 
-class TGM4_1_1Mode extends TGM4BaseMode {
+class TGM4_1_1Mode extends TGM1Mode {
     constructor() {
         super();
         this.modeName = 'TGM4 1.1';
+        this.modeId = 'tgm4_1_1';
         this.description = 'TGM4 1.1 mode - TGM1 Normal recreation';
-        this.gradePoints = 0;
         
-        // Initialize tracking variables
-        this.tetrisCount = 0;
-        this.allClearCount = 0;
+        // TGM4 specific overrides
+        this.gravityLevelCap = 999; // TGM1 goes to 999
     }
 
     getModeConfig() {
+        // Start with TGM1 config and override with TGM4 1.1 specifics
+        const baseConfig = super.getModeConfig();
+        
         return {
-            ...this.getDefaultConfig(),
-            gravity: {
-                type: 'tgm1', // Use TGM1 gravity curve
-                value: 0,
-                curve: null
-            },
-            das: 14/60,      // TGM1: 14 frames DAS
-            arr: 1/60,       // TGM1: 1 frame ARR
-            are: 27/60,      // TGM1: 27 frames ARE
-            lineAre: 27/60,  // TGM1: 27 frames Line ARE
-            lockDelay: 30/60,  // TGM1: 30 frames lock delay
-            lineClearDelay: 40/60, // TGM1: 40 frames line clear
-            nextPieces: 6,   // TGM4 shows 6 pieces
-            holdEnabled: true, // TGM4 has hold
-            ghostEnabled: true, // TGM4 has ghost piece
-            levelUpType: 'piece',
-            lineClearBonus: 1,
-            gravityLevelCap: 999,
-            lowestGrade: '9',
+            ...baseConfig,
+            // TGM4 specific overrides
+            nextPieces: 6, // TGM4 shows 6 pieces (vs TGM1's 3)
+            description: 'TGM4 1.1 - TGM1 Normal recreation with TGM4 features',
             specialMechanics: {
-                ...this.getDefaultConfig().specialMechanics,
-                movementLimitation: false, // TGM1 has no movement limitation
-                extraButton: false, // TGM1 has no EXTRA button
-                irs180: false, // TGM1 has no 180° IRS
-                gradingSystem: 'tgm1', // TGM1-style grading
-                gradeThresholds: {
-                    '9': 0, '8': 400, '7': 800, '6': 1400, '5': 2000, '4': 3500, '3': 5500, '2': 8000, '1': 12000,
-                    'S1': 16000, 'S2': 22000, 'S3': 30000, 'S4': 40000, 'S5': 52000, 'S6': 66000, 'S7': 82000, 'S8': 100000, 'S9': 120000,
-                    'GM': 126000
-                },
+                ...baseConfig.specialMechanics,
+                // TGM4 specific mechanics
+                tgm4Features: true,
+                extendedNextPieces: true
                 gmRequirements: {
                     level999: { score: 280000, time: 535 } // 8:55 for GM
-                }
+                },
             }
         };
     }

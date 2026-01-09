@@ -212,7 +212,7 @@ function normalizeModeId(modeId) {
     tgm4_31: "tgm4",
 
     // Common display-name-like shortcuts
-    master: "master20g",
+    master: "tgm4_rounds",
   };
 
   return aliases[canonical] || canonical;

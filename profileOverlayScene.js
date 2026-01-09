@@ -1720,7 +1720,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       const orderForType = {
         Standard: ["sprint_40", "sprint_100", "ultra", "marathon", "zen"],
         Master: ["tgm1", "tgm2", "tgm_plus", "tgm3", "tgm4"],
-        "20G": ["20g", "ta_death", "tgm3_shirase", "master20g"],
+        "20G": ["20g", "ta_death", "tgm3_shirase", "tgm4_rounds"],
         Race: ["asuka_easy", "asuka", "asuka_hard"],
       };
       const compareWithOrder = (typeName) => (a, b) => {
@@ -2059,7 +2059,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       { title: "Easy", keys: ["tgm2_normal", "tgm3_easy"] },
       { title: "Standard", keys: ["marathon", "ultra", "sprint_40", "sprint_100"] },
       { title: "Master", keys: ["tgm1", "tgm2_master", "tgm3", "tgm_plus", "tgm4"] },
-      { title: "20G", keys: ["20g", "ta_death", "shirase", "master20g"] },
+      { title: "20G", keys: ["20g", "ta_death", "shirase", "tgm4_rounds"] },
       { title: "Race", keys: ["asuka_easy", "asuka", "asuka_hard"] },
     ];
     const best =
@@ -2144,7 +2144,7 @@ class ProfileOverlayScene extends Phaser.Scene {
       "20g": "20G",
       ta_death: "T.A.Death",
       "tgm3_shirase": "Shirase",
-      master20g: "Master",
+      tgm4_rounds: "Rounds",
       sprint_40: "40L",
       sprint_100: "100L",
       asuka_easy: "Asuka Easy",

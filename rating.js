@@ -22,7 +22,7 @@
     konoha_hard: { weight: 1.2, targetBravos: 110, type: "all_clears", cap: 1400 },
     // Additional TGM modes
     tgm4: { weight: 1.7, targetGrade: "10/10", type: "grade_spec", cap: 1600 },
-    master20g: { weight: 1.8, targetLevel: 2600, type: "level", cap: 2800 },
+    tgm4_rounds: { weight: 1.8, targetLevel: 2600, type: "level", cap: 2800 },
     // Zen mode (excluded from rating as per game.js logic)
     zen: { weight: 0, targetScore: 0, type: "score", cap: 0 },
     // Sakura modes (excluded from rating as per game.js logic)
@@ -388,7 +388,7 @@
     "tgm+": "tgm_plus",
     // Additional aliases for consistency
     tgm2: "tgm2_master",
-    master: "master20g",
+    master: "tgm4_rounds",
     // Merge easy modes with TGM modes
     easy_normal: "tgm2_normal",
     easy_easy: "tgm3_easy",

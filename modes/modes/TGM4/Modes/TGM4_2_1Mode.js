@@ -1,60 +1,38 @@
 // TGM4 2.1 Mode Implementation
-// Recreation of T.A. Death mode - 20G fixed with M and GM grades
+// Recreation of T.A. Death mode - extends TADeathMode with TGM4 features
 
-class TGM4_2_1Mode extends TGM4BaseMode {
+class TGM4_2_1Mode extends TADeathMode {
     constructor() {
         super();
         this.modeName = 'TGM4 2.1';
+        this.modeId = 'tgm4_2_1';
         this.description = 'TGM4 2.1 mode - T.A. Death recreation';
-        this.startTime = null;
-        this.gradeAchieved = false;
-        this.torikanTime = 192000; // 3:20 in milliseconds
-        this.gmTimeLimit = 300000; // 5:00 in milliseconds
-        this.gmScoreRequirement = 260000;
-        this.gmTetrisRequirement = 8;
         
-        // Initialize tracking variables
-        this.tetrisCount = 0;
-        this.allClearCount = 0;
-        this.displayedGrade = '';
+        // TGM4 specific overrides
+        this.gravityLevelCap = 999; // T.A. Death goes to 999
         
-        // Progressive timing system (5 phases) - TGM4 2.1 official timings
-        this.currentTimingPhase = 1; // 1-5 phases based on level
-        this.timingPhases = [
-            { minLevel: 0,   maxLevel: 99,  are: 18/60, lineAre: 14/60, das: 10/60, arr: 1/60, lock: 30/60, lineClear: 12/60 },
-            { minLevel: 100, maxLevel: 199, are: 14/60, lineAre: 8/60, das: 10/60, arr: 1/60, lock: 26/60, lineClear: 6/60 },
-            { minLevel: 200, maxLevel: 299, are: 14/60, lineAre: 8/60, das: 9/60, arr: 1/60, lock: 22/60, lineClear: 6/60 },
-            { minLevel: 300, maxLevel: 399, are: 12/60, lineAre: 8/60, das: 8/60, arr: 1/60, lock: 20/60, lineClear: 6/60 },
-            { minLevel: 400, maxLevel: 499, are: 10/60, lineAre: 6/60, das: 6/60, arr: 1/60, lock: 18/60, lineClear: 5/60 },
-            { minLevel: 500, maxLevel: 999, are: 6/60, lineAre: 5/60, das: 6/60, arr: 1/60, lock: 15/60, lineClear: 4/60 }
-        ];
+        // Override TADeath with TGM4 features
+        this.nextPieces = 6; // TGM4 shows 6 pieces (vs TADeath's 3)
     }
 
     getModeConfig() {
+        // Start with TADeath config and override with TGM4 2.1 specifics
+        const baseConfig = super.getModeConfig();
+        
         return {
-            ...this.getDefaultConfig(),
-            gravity: {
-                type: 'fixed_20g', // Fixed 20G gravity
-                value: 5120,
-                curve: null
-            },
-            nextPieces: 6,   // TGM4 shows 6 pieces
-            holdEnabled: true, // TGM4 has hold
-            ghostEnabled: true, // TGM4 has ghost piece
-            levelUpType: 'piece',
-            lineClearBonus: 1,
-            gravityLevelCap: 999,
-            lowestGrade: ' ',
+            ...baseConfig,
+            // TGM4 specific overrides
+            nextPieces: 6, // TGM4 shows 6 pieces (vs TADeath's 3)
+            description: 'TGM4 2.1 - T.A. Death recreation with TGM4 features',
             specialMechanics: {
-                ...this.getDefaultConfig().specialMechanics,
-                fixed20G: true,
-                progressiveTimings: true, // 5 timing phases
-                torikanLimit: true, // Time limit at level 500
-                minimalGrading: true, // Only M and GM grades
-                deathMechanics: true,
-                gmRequirements: {
-                    level500: { time: 192 }, // 3:20 torikan
-                    level999: { score: 260000, time: 300, tetris: 8 } // 5:00, 260k score, 8 tetrises
+                ...baseConfig.specialMechanics,
+                // TGM4 specific mechanics
+                tgm4Features: true,
+                extendedNextPieces: true,
+                // TGM4 2.1 specific torikan and GM requirements
+                torikan: {
+                    level500: { time: 192000, grade: 'M' }, // 3:20 for Master
+                    level999: { time: 300000, score: 260000, tetrises: 8, grade: 'GM' } // 5:00, 260k score, 8 tetrises for GM
                 }
             }
         };

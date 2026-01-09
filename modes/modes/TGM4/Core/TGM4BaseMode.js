@@ -24,7 +24,7 @@ class TGM4BaseMode extends BaseMode {
             // TGM4 defaults
             nextPieces: 3,
             holdEnabled: true,
-            rotationSystem: 'ARS', // Default to ARS for TGM4
+            // rotationSystem: 'ARS', // Allow user choice - don't force ARS
             gravityLevelCap: 999,
             specialMechanics: {
                 movementLimitation: true,

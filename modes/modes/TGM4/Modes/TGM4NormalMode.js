@@ -243,11 +243,11 @@ class TGM4NormalMode extends TGM4BaseMode {
         this.sectionAPoints[currentSection] = this.currentSectionPoints;
     }
     
-    // Update grade display to show A grades
+    // Update grade display to show A of B grading
     updateGradeDisplay(gameScene) {
-        const gradeDisplay = this.aGradeCount > 0 ? `A${this.aGradeCount}` : 'Zero of Zero';
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setText(`Grade: ${gradeDisplay}`);
+        if (gameScene.gradeText && gameScene.game) {
+            const grade = this.calculateNormalModeGrade(gameScene.game.level, gameScene.game.score);
+            gameScene.gradeText.setText(`Grade: ${grade}`);
         }
     }
     

@@ -30,7 +30,7 @@ class ModeManager {
             '20g': 0xff0000,       // red
             'tadeath': 0xff0000,   // red
             'shirase': 0xff0000,   // red
-            'master20g': 0xff0000, // red
+            'tgm4_rounds': 0xff0000, // red
             'marathon': 0x0088ff,  // blue
             'ultra': 0x0088ff,     // blue
             'zen': 0x0088ff,       // blue
@@ -105,7 +105,7 @@ class ModeManager {
             'tgm4_1_1': { modeClass: 'TGM4_1_1Mode', config: { difficulty: '20g', description: 'TGM4 1.1 - TGM1 Normal recreation' } },
             'tgm4_2_1': { modeClass: 'TGM4_2_1Mode', config: { difficulty: '20g', description: 'TGM4 2.1 - T.A. Death recreation' } },
             'tgm4_3_1': { modeClass: 'TGM4_3_1Mode', config: { difficulty: '20g', description: 'TGM4 3.1 - Shirase recreation to 2000' } },
-            'master20g': { modeClass: 'MasterTGM4Mode', config: { difficulty: '20g', description: 'Brand new, unique game mechanics. Can you handle them?' } },
+            'tgm4_rounds': { modeClass: 'TGM4RoundsMode', config: { difficulty: '20g', description: 'TGM4 Master - The ultimate test of Tetris skill' } },
 
             // RACE modes
             'asuka_easy': { modeClass: 'AsukaEasyMode', config: { difficulty: 'race', description: '20G Tetris stacking introduction' } },
@@ -257,6 +257,15 @@ class ModeManager {
                     }
                     break;
 
+                case 'TGM3ShiraseMode':
+                    if (typeof TGM3ShiraseMode !== 'undefined') {
+                        modeInstance = new TGM3ShiraseMode();
+                    } else {
+                        console.warn('TGM3ShiraseMode not loaded, using BaseMode fallback');
+                        modeInstance = new BaseMode();
+                    }
+                    break;
+
                 case 'TGM4NormalMode':
                     if (typeof TGM4NormalMode !== 'undefined') {
                         modeInstance = new TGM4NormalMode();
@@ -293,11 +302,11 @@ class ModeManager {
                     }
                     break;
 
-                case 'MasterTGM4Mode':
-                    if (typeof MasterTGM4Mode !== 'undefined') {
-                        modeInstance = new MasterTGM4Mode();
+                case 'TGM4RoundsMode':
+                    if (typeof TGM4RoundsMode !== 'undefined') {
+                        modeInstance = new TGM4RoundsMode();
                     } else {
-                        console.warn('MasterTGM4Mode not loaded, using BaseMode fallback');
+                        console.warn('TGM4RoundsMode not loaded, using BaseMode fallback');
                         modeInstance = new BaseMode();
                     }
                     break;
@@ -453,7 +462,7 @@ class ModeManager {
             '20g': '20G',
             'tadeath': 'T.A.Death',
             'shirase': 'Shirase',
-            'master20g': 'Master',
+            'tgm4_rounds': 'Rounds',
             'asuka_easy': 'Asuka Easy',
             'asuka_normal': 'Asuka',
             'asuka_hard': 'Asuka Hard',
