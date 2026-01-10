@@ -276,19 +276,17 @@ class AsukaHardMode extends BaseMode {
         };
     }
 
-    // Initialize for game scene
-    initializeForGameScene(gameScene) {
-        this.startTime = Date.now();
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
         
-        // Set up Asuka Hard UI
-        if (gameScene.levelText) {
-            gameScene.levelText.setText('LEVEL: 0/1300');
-        }
-        if (gameScene.timeText) {
-            gameScene.timeText.setText('TIME: 5:00');
-        }
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setText('TARGET: 1300');
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
         }
     }
 

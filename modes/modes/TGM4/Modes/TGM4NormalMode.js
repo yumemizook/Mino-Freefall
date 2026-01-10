@@ -53,46 +53,18 @@ class TGM4NormalMode extends TGM4BaseMode {
         };
     }
 
-    // Override to use TGM1 scoring
-    calculateScore(baseScore, lines, piece, game) {
-        if (lines === 0) return baseScore;
-
-        // TGM1 official scoring: 40/100/300/1200 × level
-        const level = game.level || 1;
-        let score = 0;
-
-        switch (lines) {
-            case 1:
-                score = 40 * level;
-                break;
-            case 2:
-                score = 100 * level;
-                break;
-            case 3:
-                score = 300 * level;
-                break;
-            case 4:
-                score = 1200 * level;
-                break;
-            default:
-                score = baseScore * this.getLineClearBonus();
-        }
-
-        // Add soft drop points (1 point per cell)
-        if (game.softDropPoints) {
-            score += game.softDropPoints;
-        }
-
-        // Add hard drop points (2 points per cell)
-        if (game.hardDropPoints) {
-            score += game.hardDropPoints * 2;
-        }
-
-        // Apply combo and bravo multipliers
-        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
-        const bravo = this.checkBravo(game) ? 4 : 1;
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
         
-        return Math.floor(score * combo * bravo);
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
+        }
     }
 
     // Check for bravo (perfect clear)

@@ -76,30 +76,18 @@ class TGM4_2_1Mode extends TADeathMode {
         ) || this.timingPhases[0];
     }
 
-    // TAP scoring system - official formula
-    calculateScore(baseScore, lines, piece, game) {
-        if (lines === 0) return baseScore;
-
-        // Official TGM2 (TAP) scoring formula: 
-        // Score = (⌈(Level + Lines) / 4⌉ + Soft + (2 × Sonic)) × Lines × Combo × Bravo + ⌈(Level After Clear) / 2⌉ + (Speed × 7)
-        const levelBeforeClear = game.level || 1;
-        const levelAfterClear = game.level || 1; // Simplified - would need proper tracking
-        const base = Math.ceil((levelBeforeClear + lines) / 4);
-        const soft = game.softDropPoints || 0;
-        const sonic = game.hardDropPoints || 0;
-        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
-        const bravo = this.checkBravo(game) ? 4 : 1; // Bravo = 4x multiplier for all clear
-        const levelBonus = Math.ceil(levelAfterClear / 2);
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
         
-        // Speed bonus calculation (simplified - would need actual active time tracking)
-        const lockDelay = 15/60; // Would need actual active time
-        const activeTime = 0; // Would need actual piece active time
-        const speed = Math.max(0, lockDelay - activeTime);
-        const speedBonus = speed * 7;
-        
-        const totalScore = (base + soft + (2 * sonic)) * lines * combo * bravo + levelBonus + speedBonus;
-        
-        return Math.floor(totalScore);
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
+        }
     }
 
     // Check for bravo (perfect clear)

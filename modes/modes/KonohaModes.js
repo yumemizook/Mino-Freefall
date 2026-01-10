@@ -6,55 +6,57 @@ class KonohaEasyMode extends BaseMode {
     constructor() {
         super();
         this.modeName = 'Konoha Easy';
-        this.description = 'Easy all-clear challenge with 5 pieces!';
-        this.targetLines = 150;
-        this.allClearsRequired = 10;
+        this.description = 'Timed Big all-clear challenge with 5 pieces!';
+        this.allClearsTarget = 110;
         this.allClearsAchieved = 0;
-        this.piecesAvailable = ['I', 'O', 'T', 'S', 'Z']; // 5 pieces
-        this.currentPieceIndex = 0;
+        this.piecesAvailable = ['L', 'J', 'I', 'T', 'O'];
+        this.startTime = null;
+        this.totalTime = 120;
     }
 
     getModeConfig() {
         return {
             gravity: {
-                type: 'tgm1',
-                value: 0,
-                curve: null
+                type: 'static',
+                value: 4
             },
-            das: 16/60,      // Standard DAS
-            arr: 1/60,       // Standard ARR
-            are: 30/60,      // Standard ARE
-            lineAre: 30/60,
-            lockDelay: 0.5,  // Standard lock delay
-            lineClearDelay: 41/60,
+            das: 18/60,
+            arr: 1/60,
+            are: 27/60,
+            lineAre: 27/60,
+            lockDelay: 60/60,
+            lineClearDelay: 25/60,
             
-            nextPieces: 3,   // Show 3 pieces for planning
+            nextPieces: 3,
             holdEnabled: true,
             ghostEnabled: true,
             levelUpType: 'lines',
-            lineClearBonus: 2, // Bonus for all-clears
-            gravityLevelCap: 999,
+            lineClearBonus: 1,
+            gravityLevelCap: 9999,
             
             specialMechanics: {
                 allClearChallenge: true,
-                targetAllClears: 10,
                 limitedPieces: true,
-                pieceSet: ['I', 'O', 'T', 'S', 'Z'],
-                puzzleMode: true,
-                easyDifficulty: true
+                pieceSet: ['L', 'J', 'I', 'T', 'O'],
+                easyDifficulty: true,
+                doubleSizedPieces: true,
+                boardWidth: 5,
+                boardHeight: 10,
+                countdownTimer: true
             }
         };
     }
 
-    // Generate next piece from limited set
+    // Generate next piece using TGM2 randomization with no-S/Z criteria for Easy mode
     generateNextPiece(gameScene) {
-        if (!this.piecesAvailable || this.piecesAvailable.length === 0) {
-            return 'T'; // Fallback
+        if (gameScene && typeof gameScene.generate7BagPiece === 'function') {
+            let piece;
+            do {
+                piece = gameScene.generate7BagPiece();
+            } while (!this.piecesAvailable.includes(piece));
+            return piece;
         }
-        
-        const piece = this.piecesAvailable[this.currentPieceIndex];
-        this.currentPieceIndex = (this.currentPieceIndex + 1) % this.piecesAvailable.length;
-        return piece;
+        return this.piecesAvailable[Math.floor(Math.random() * this.piecesAvailable.length)];
     }
 
     // Check for all clear
@@ -62,55 +64,127 @@ class KonohaEasyMode extends BaseMode {
         if (!gameScene || !gameScene.game || !gameScene.game.board) return false;
         
         // Check if board is completely empty after line clear
-        return gameScene.game.board.grid.every(row => row.every(cell => cell === 0));
+        const isBoardClear = gameScene.game.board.grid.every(row => row.every(cell => cell === 0));
+        
+        if (!isBoardClear) return false;
+        
+        // Enhanced All Clear logic: check if all clear solution is within available pieces
+        // Require that the exact pieces needed for solution are within Next queue + Hold (max 6 total)
+        const availablePieces = [];
+        
+        // Add held piece if available
+        if (gameScene.holdPiece) {
+            availablePieces.push(typeof gameScene.holdPiece === 'string' ? gameScene.holdPiece : gameScene.holdPiece.type);
+        }
+        
+        // Add next 6 pieces (or as many as available)
+        if (Array.isArray(gameScene.nextPieces)) {
+            for (let i = 0; i < Math.min(6, gameScene.nextPieces.length); i++) {
+                const piece = gameScene.nextPieces[i];
+                availablePieces.push(typeof piece === 'string' ? piece : piece.type || piece);
+            }
+        }
+        
+        // For a 5x10 board, we need exactly the pieces that can solve the current state
+        // Since we can't predict the exact solution, we'll check if we have enough pieces to potentially solve
+        // This is a more permissive check than requiring exact solution
+        return availablePieces.length >= 6; // Require up to 6 pieces (held + next)
     }
 
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
-        // Check for all clear
         const isAllClear = this.checkAllClear(gameScene);
-        
+
+        if (this.startTime === null && gameScene && typeof gameScene.currentTime === 'number') {
+            this.startTime = gameScene.currentTime;
+        }
+
+        const level = gameScene && typeof gameScene.level === 'number' ? gameScene.level : 0;
+        const inPost1000 = level >= 1000;
+        const bonusSeconds = this.getTimeBonusSeconds(linesCleared, isAllClear, inPost1000);
+        if (bonusSeconds > 0) {
+            this.totalTime = Math.min(300, this.totalTime + bonusSeconds);
+        }
+
         if (isAllClear) {
             this.allClearsAchieved++;
-            console.log(`Konoha Easy: All clear achieved! (${this.allClearsAchieved}/${this.allClearsRequired})`);
-            
-            // Update UI
-            if (gameScene.gradeText) {
-                gameScene.gradeText.setText(`All Clears: ${this.allClearsAchieved}/${this.allClearsRequired}`);
-            }
-            
-            // Check victory condition
-            if (this.allClearsAchieved >= this.allClearsRequired) {
-                console.log('Konoha Easy: Challenge completed!');
+            if (this.allClearsAchieved >= this.allClearsTarget) {
                 if (typeof gameScene.victory === 'function') {
                     gameScene.victory();
                 }
             }
         }
+        
+        // Update Bravo counter display (will be implemented in separate UI element)
+        if (gameScene.updateBravoCounter && typeof gameScene.updateBravoCounter === 'function') {
+            gameScene.updateBravoCounter(this.allClearsAchieved, this.allClearsTarget);
+        }
     }
 
     // Initialize for game scene
     initializeForGameScene(gameScene) {
-        // Set up Konoha UI
+        this.startTime = null;
+        const rotationSystem = gameScene && gameScene.rotationSystem ? gameScene.rotationSystem : 'srs';
+        this.totalTime = rotationSystem === 'ARS' ? 250 : 120;
         if (gameScene.levelText) {
-            gameScene.levelText.setText('LINES: 0/150');
+            gameScene.levelText.setText('LEVEL: 0');
         }
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setText('All Clears: 0/10');
-        }
+        // Grade display is handled by updateGradeUIVisibility in Konoha modes
         if (gameScene.scoreText) {
-            gameScene.scoreText.setText('PIECES: I,O,T,S,Z');
+            gameScene.scoreText.setText('');
         }
     }
 
     // Update UI elements
     update(gameScene, deltaTime) {
-        if (gameScene.game) {
-            // Update lines display
-            if (gameScene.levelText) {
-                gameScene.levelText.setText(`LINES: ${gameScene.game.lines}/150`);
+        if (!gameScene || typeof gameScene.currentTime !== 'number') return;
+        if (this.startTime === null && gameScene.currentPiece) {
+            this.startTime = gameScene.currentTime;
+        }
+        if (this.startTime !== null) {
+            const elapsed = gameScene.currentTime - this.startTime;
+            this.elapsedActiveTime = elapsed;
+            const remaining = Math.max(0, this.totalTime - elapsed);
+            if (remaining <= 0) {
+                if (typeof gameScene.showGameOverScreen === 'function') {
+                    gameScene.showGameOverScreen();
+                }
             }
         }
+    }
+
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'piece') return level + 1;
+        if (updateType !== 'lines') return oldLevel;
+        const inc = Math.min(Math.max(amount || 0, 0), 4);
+        if (inc === 1) return level + 2;
+        if (inc === 2) return level + 4;
+        if (inc === 3) return level + 6;
+        if (inc === 4) return level + 12;
+        return level;
+    }
+
+    getTimeBonusSeconds(linesCleared, isAllClear, inPost1000) {
+        const lc = Math.min(Math.max(linesCleared || 0, 0), 4);
+        if (lc <= 0) return 0;
+        if (!inPost1000) {
+            if (isAllClear) {
+                if (lc === 1) return 300 / 60;
+                if (lc === 2) return 480 / 60;
+                if (lc === 3) return 660 / 60;
+                if (lc === 4) return 900 / 60;
+            } else {
+                if (lc === 1) return 1 / 60;
+                if (lc === 2) return 2 / 60;
+                if (lc === 3) return 5 / 60;
+                if (lc === 4) return 11 / 60;
+            }
+            return 0;
+        }
+        if (lc === 4) {
+            return 60 / 60;
+        }
+        return 0;
     }
 
     // Get mode ID
@@ -121,17 +195,22 @@ class KonohaEasyMode extends BaseMode {
     // Reset mode state
     reset() {
         this.allClearsAchieved = 0;
-        this.currentPieceIndex = 0;
+        this.startTime = null;
+        this.totalTime = 120;
     }
     
     // Get line clear bonus
     getLineClearBonus() {
-        return 2; // Bonus for all-clear challenges
+        return 1;
     }
     
     // Get grade points
     getGradePoints() {
         return 0;
+    }
+
+    getDisplayedGrade() {
+        return `BRAVO: ${this.allClearsAchieved}`;
     }
 }
 
@@ -140,56 +219,74 @@ class KonohaHardMode extends BaseMode {
     constructor() {
         super();
         this.modeName = 'Konoha Hard';
-        this.description = 'Hard all-clear challenge with all 7 pieces!';
-        this.targetLines = 200;
-        this.allClearsRequired = 15;
+        this.description = 'Timed Big all-clear challenge with all 7 pieces!';
+        this.allClearsTargetForTitle = 110;
         this.allClearsAchieved = 0;
-        this.piecesAvailable = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']; // All 7 pieces
-        this.currentPieceIndex = 0;
+        this.piecesAvailable = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+        this.startTime = null;
+        this.totalTime = 120;
     }
 
     getModeConfig() {
         return {
             gravity: {
-                type: 'tgm1',
-                value: 0,
-                curve: null
+                type: 'custom',
+                value: 4,
+                curve: (level) => {
+                    if (level < 8) return 4;
+                    if (level < 19) return 5;
+                    if (level < 35) return 6;
+                    if (level < 40) return 8;
+                    if (level < 50) return 10;
+                    if (level < 60) return 12;
+                    if (level < 70) return 16;
+                    if (level < 80) return 32;
+                    if (level < 90) return 48;
+                    if (level < 101) return 64;
+                    if (level < 112) return 16;
+                    if (level < 121) return 48;
+                    if (level < 132) return 80;
+                    if (level < 144) return 128;
+                    if (level < 156) return 112;
+                    if (level < 167) return 144;
+                    if (level < 177) return 176;
+                    if (level < 200) return 192;
+                    return 5376;
+                }
             },
-            das: 12/60,      // Faster DAS for harder challenge
+            das: 18/60,
             arr: 1/60,
-            are: 25/60,      // Slightly faster ARE
-            lineAre: 20/60,
-            lockDelay: 0.4,  // Faster lock delay
-            lineClearDelay: 30/60,
+            are: 27/60,
+            lineAre: 27/60,
+            lockDelay: 60/60,
+            lineClearDelay: 25/60,
             
-            nextPieces: 5,   // Show more pieces for complex planning
+            nextPieces: 5,
             holdEnabled: true,
             ghostEnabled: true,
             levelUpType: 'lines',
-            lineClearBonus: 3, // Higher bonus for harder challenge
-            gravityLevelCap: 999,
+            lineClearBonus: 1,
+            gravityLevelCap: 9999,
             
             specialMechanics: {
                 allClearChallenge: true,
-                targetAllClears: 15,
                 limitedPieces: true,
                 pieceSet: ['I', 'O', 'T', 'S', 'Z', 'J', 'L'],
-                puzzleMode: true,
                 hardDifficulty: true,
-                advancedPlanning: true
+                doubleSizedPieces: true,
+                boardWidth: 5,
+                boardHeight: 10,
+                countdownTimer: true
             }
         };
     }
 
-    // Generate next piece from limited set
+    // Generate next piece using TGM2 randomization for Konoha modes
     generateNextPiece(gameScene) {
-        if (!this.piecesAvailable || this.piecesAvailable.length === 0) {
-            return 'T'; // Fallback
+        if (gameScene && typeof gameScene.generate7BagPiece === 'function') {
+            return gameScene.generate7BagPiece();
         }
-        
-        const piece = this.piecesAvailable[this.currentPieceIndex];
-        this.currentPieceIndex = (this.currentPieceIndex + 1) % this.piecesAvailable.length;
-        return piece;
+        return this.piecesAvailable[Math.floor(Math.random() * this.piecesAvailable.length)];
     }
 
     // Check for all clear
@@ -197,55 +294,122 @@ class KonohaHardMode extends BaseMode {
         if (!gameScene || !gameScene.game || !gameScene.game.board) return false;
         
         // Check if board is completely empty after line clear
-        return gameScene.game.board.grid.every(row => row.every(cell => cell === 0));
+        const isBoardClear = gameScene.game.board.grid.every(row => row.every(cell => cell === 0));
+        
+        if (!isBoardClear) return false;
+        
+        // Enhanced All Clear logic: check if all clear solution is within available pieces
+        // Require that the exact pieces needed for solution are within Next queue + Hold (max 6 total)
+        const availablePieces = [];
+        
+        // Add held piece if available
+        if (gameScene.holdPiece) {
+            availablePieces.push(typeof gameScene.holdPiece === 'string' ? gameScene.holdPiece : gameScene.holdPiece.type);
+        }
+        
+        // Add next 6 pieces (or as many as available)
+        if (Array.isArray(gameScene.nextPieces)) {
+            for (let i = 0; i < Math.min(6, gameScene.nextPieces.length); i++) {
+                const piece = gameScene.nextPieces[i];
+                availablePieces.push(typeof piece === 'string' ? piece : piece.type || piece);
+            }
+        }
+        
+        // For a 5x10 board, we need exactly the pieces that can solve the current state
+        // Since we can't predict the exact solution, we'll check if we have enough pieces to potentially solve
+        // This is a more permissive check than requiring exact solution
+        return availablePieces.length >= 6; // Require up to 6 pieces (held + next)
     }
 
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
-        // Check for all clear
         const isAllClear = this.checkAllClear(gameScene);
-        
+
+        if (this.startTime === null && gameScene && typeof gameScene.currentTime === 'number') {
+            this.startTime = gameScene.currentTime;
+        }
+
+        const level = gameScene && typeof gameScene.level === 'number' ? gameScene.level : 0;
+        const inPost1000 = level >= 1000;
+        const bonusSeconds = this.getTimeBonusSeconds(linesCleared, isAllClear, inPost1000);
+        if (bonusSeconds > 0) {
+            this.totalTime = Math.min(300, this.totalTime + bonusSeconds);
+        }
+
         if (isAllClear) {
             this.allClearsAchieved++;
-            console.log(`Konoha Hard: All clear achieved! (${this.allClearsAchieved}/${this.allClearsRequired})`);
-            
-            // Update UI
-            if (gameScene.gradeText) {
-                gameScene.gradeText.setText(`All Clears: ${this.allClearsAchieved}/${this.allClearsRequired}`);
-            }
-            
-            // Check victory condition
-            if (this.allClearsAchieved >= this.allClearsRequired) {
-                console.log('Konoha Hard: Challenge completed!');
-                if (typeof gameScene.victory === 'function') {
-                    gameScene.victory();
-                }
-            }
+        }
+        
+        // Update Bravo counter display (will be implemented in separate UI element)
+        if (gameScene.updateBravoCounter && typeof gameScene.updateBravoCounter === 'function') {
+            gameScene.updateBravoCounter(this.allClearsAchieved, null);
         }
     }
 
     // Initialize for game scene
     initializeForGameScene(gameScene) {
-        // Set up Konoha Hard UI
+        this.startTime = null;
+        const rotationSystem = gameScene && gameScene.rotationSystem ? gameScene.rotationSystem : 'srs';
+        this.totalTime = rotationSystem === 'ARS' ? 250 : 120;
         if (gameScene.levelText) {
-            gameScene.levelText.setText('LINES: 0/200');
+            gameScene.levelText.setText('LEVEL: 0');
         }
-        if (gameScene.gradeText) {
-            gameScene.gradeText.setText('All Clears: 0/15');
-        }
+        // Grade display is handled by updateGradeUIVisibility in Konoha modes
         if (gameScene.scoreText) {
-            gameScene.scoreText.setText('PIECES: I,O,T,S,Z,J,L');
+            gameScene.scoreText.setText('');
         }
     }
 
     // Update UI elements
     update(gameScene, deltaTime) {
-        if (gameScene.game) {
-            // Update lines display
-            if (gameScene.levelText) {
-                gameScene.levelText.setText(`LINES: ${gameScene.game.lines}/200`);
+        if (!gameScene || typeof gameScene.currentTime !== 'number') return;
+        if (this.startTime === null && gameScene.currentPiece) {
+            this.startTime = gameScene.currentTime;
+        }
+        if (this.startTime !== null) {
+            const elapsed = gameScene.currentTime - this.startTime;
+            this.elapsedActiveTime = elapsed;
+            const remaining = Math.max(0, this.totalTime - elapsed);
+            if (remaining <= 0) {
+                if (typeof gameScene.showGameOverScreen === 'function') {
+                    gameScene.showGameOverScreen();
+                }
             }
         }
+    }
+
+    onLevelUpdate(level, oldLevel, updateType, amount) {
+        if (updateType === 'piece') return level + 1;
+        if (updateType !== 'lines') return oldLevel;
+        const inc = Math.min(Math.max(amount || 0, 0), 4);
+        if (inc === 1) return level + 2;
+        if (inc === 2) return level + 4;
+        if (inc === 3) return level + 6;
+        if (inc === 4) return level + 12;
+        return level;
+    }
+
+    getTimeBonusSeconds(linesCleared, isAllClear, inPost1000) {
+        const lc = Math.min(Math.max(linesCleared || 0, 0), 4);
+        if (lc <= 0) return 0;
+        if (!inPost1000) {
+            if (isAllClear) {
+                if (lc === 1) return 300 / 60;
+                if (lc === 2) return 480 / 60;
+                if (lc === 3) return 660 / 60;
+                if (lc === 4) return 900 / 60;
+            } else {
+                if (lc === 1) return 1 / 60;
+                if (lc === 2) return 2 / 60;
+                if (lc === 3) return 5 / 60;
+                if (lc === 4) return 11 / 60;
+            }
+            return 0;
+        }
+        if (lc === 4) {
+            return 60 / 60;
+        }
+        return 0;
     }
 
     // Get mode ID
@@ -256,17 +420,22 @@ class KonohaHardMode extends BaseMode {
     // Reset mode state
     reset() {
         this.allClearsAchieved = 0;
-        this.currentPieceIndex = 0;
+        this.startTime = null;
+        this.totalTime = 120;
     }
     
     // Get line clear bonus
     getLineClearBonus() {
-        return 3; // Higher bonus for hard challenge
+        return 1;
     }
     
     // Get grade points
     getGradePoints() {
         return 0;
+    }
+
+    getDisplayedGrade() {
+        return `BRAVO: ${this.allClearsAchieved}`;
     }
 }
 

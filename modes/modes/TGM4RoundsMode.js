@@ -101,6 +101,20 @@ class TGM4RoundsMode extends TGM4BaseMode {
         return 8/60; // default
     }
 
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
+        
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
+        }
+    }
+
     getDAS() {
         const level = this.getCurrentLevel();
         if (level >= 2301) return 4/60; // TGM DAS

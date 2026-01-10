@@ -23,6 +23,11 @@
     // Additional TGM modes
     tgm4: { weight: 1.7, targetGrade: "10/10", type: "grade_spec", cap: 1600 },
     tgm4_rounds: { weight: 1.8, targetLevel: 2600, type: "level", cap: 2800 },
+    // TGM4 x.1 modes
+    tgm4_1_1: { weight: 1.3, targetGrade: "GM", type: "grade", cap: 1000 },
+    tgm4_2_1: { weight: 1.5, targetGrade: "GM", type: "grade", cap: 1900 },
+    tgm4_3_1: { weight: 1.7, targetGrade: "S20", type: "grade_ext", cap: 4500 },
+    tgm4_normal: { weight: 1.6, targetGrade: "10/10", type: "grade_spec", cap: 1200 },
     // Zen mode (excluded from rating as per game.js logic)
     zen: { weight: 0, targetScore: 0, type: "score", cap: 0 },
     // Sakura modes (excluded from rating as per game.js logic)
@@ -137,12 +142,28 @@
     if (!grade) return 0;
     
     let gradeOrder;
-    if (modeId === "tgm1" || modeId === "20g") {
+    if (modeId === "tgm1" || modeId === "20g" || modeId === "tgm4_1_1") {
       gradeOrder = TGM123_GRADE_ORDER;
     } else if (modeId === "tgm2_master" || modeId === "tgm2_normal") {
       gradeOrder = TGM2_GRADE_ORDER;
     } else if (modeId === "tgm3" || modeId === "tgm3_easy") {
       gradeOrder = TGM3_GRADE_ORDER;
+    } else if (modeId === "tgm4_3_1") {
+      // TGM4 3.1 uses S1-S20 grades
+      const tgm4_3_1_order = [];
+      for (let i = 1; i <= 20; i++) {
+        tgm4_3_1_order.push(`S${i}`);
+      }
+      const idx = tgm4_3_1_order.indexOf(String(grade).toUpperCase());
+      return idx >= 0 ? idx + 1 : 0;
+    } else if (modeId === "tgm4" || modeId === "tgm4_normal") {
+      // TGM4 Normal uses A/B/C grading (0/10 to 10/10)
+      if (typeof grade === 'string' && grade.includes('/')) {
+        const parts = grade.split('/');
+        const numerator = parseInt(parts[0]) || 0;
+        return numerator + 1; // 0/10 = 1, 10/10 = 11
+      }
+      return 1;
     } else {
       gradeOrder = GRADE_ORDER;
     }
@@ -270,6 +291,23 @@
     }
   }
 
+  function tgm4_3_1_Curve(level) {
+    if (level <= 0) return 0;
+    if (level <= 500) {
+      // Log-linear before level 500
+      const normalized = level / 500;
+      return logLinear(normalized) * 0.5; // scale down for early segment
+    } else if (level <= 1300) {
+      // Linear for 500-1300
+      const normalized = (level - 500) / 800;
+      return 250 + normalized * 750; // 250-1000 range
+    } else {
+      // Quadratic for 1300-2000
+      const normalized = (level - 1300) / 700;
+      return 1000 + normalized * normalized * 1000; // 1000-2000 range
+    }
+  }
+
   function tgm4Calculation(grade) {
     // TGM4: 40% numerator (quadratic), 60% denominator (linear)
     const gradeValue = gradeToValue(grade, "tgm4");
@@ -312,9 +350,9 @@
       const target = gradeToValue(cfg.targetGrade, modeId);
       
       // Use progressive grading for TGM modes
-      if (modeId === "tgm1" || modeId === "tgm2_master" || modeId === "tgm2_normal" || modeId === "20g") {
+      if (modeId === "tgm1" || modeId === "tgm2_master" || modeId === "tgm2_normal" || modeId === "20g" || modeId === "tgm4_1_1") {
         progress = gradeProgressiveValue(entry?.grade, cfg.targetGrade, modeId);
-      } else if (modeId === "tgm4") {
+      } else if (modeId === "tgm4" || modeId === "tgm4_normal") {
         progress = tgm4Calculation(entry?.grade) / 1600; // Normalize to cap
       } else {
         progress = target ? current / target : 0;
@@ -339,6 +377,8 @@
         progress = tadeathCurve(currentLevel) / 800; // Normalize to 0-1 (max ~800)
       } else if (modeId === "shirase") {
         progress = shiraseCurve(currentLevel) / 1500; // Normalize to 0-1 (max ~1500)
+      } else if (modeId === "tgm4_3_1") {
+        progress = tgm4_3_1_Curve(currentLevel) / 2000; // Normalize to 0-1 (max ~2000)
       } else if (modeId === "asuka_easy") {
         progress = asukaEasyCurve(currentLevel) / 800; // Normalize to 0-1 (max ~800)
       } else if (modeId === "asuka_normal") {
@@ -362,13 +402,15 @@
       scaled = tadeathCurve(entry?.level ?? 0);
     } else if (modeId === "shirase") {
       scaled = shiraseCurve(entry?.level ?? 0);
+    } else if (modeId === "tgm4_3_1") {
+      scaled = tgm4_3_1_Curve(entry?.level ?? 0);
     } else if (modeId === "asuka_easy") {
       scaled = asukaEasyCurve(entry?.level ?? 0);
     } else if (modeId === "asuka_normal") {
       scaled = asukaNormalCurve(entry?.level ?? 0);
     } else if (modeId === "asuka_hard") {
       scaled = asukaHardCurve(entry?.level ?? 0);
-    } else if (modeId === "tgm4") {
+    } else if (modeId === "tgm4" || modeId === "tgm4_normal") {
       scaled = tgm4Calculation(entry?.grade);
     } else if (cfg.type === "all_clears") {
       scaled = konohaCurve(entry?.bravos ?? 0);

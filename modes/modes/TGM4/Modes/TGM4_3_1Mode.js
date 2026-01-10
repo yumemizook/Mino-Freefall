@@ -72,6 +72,20 @@ class TGM4_3_1Mode extends TGM3ShiraseMode {
         this.currentTiming = this.getTimingForLevel(0);
     }
 
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
+        
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
+        }
+    }
+
     getModeConfig() {
         // Start with TGM3 Shirase config and override TGM4 3.1 differences
         const baseConfig = super.getModeConfig();

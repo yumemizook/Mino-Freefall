@@ -13,66 +13,60 @@ class TGM4_1_1Mode extends TGM1Mode {
     }
 
     getModeConfig() {
-        // Start with TGM1 config and override with TGM4 1.1 specifics
+        // Use TGM1 scoring system and grade thresholds from tgm4modes.md 1.1 spec
         const baseConfig = super.getModeConfig();
-        
         return {
             ...baseConfig,
-            // TGM4 specific overrides
-            nextPieces: 6, // TGM4 shows 6 pieces (vs TGM1's 3)
+            // TGM4 1.1 specific overrides
+            nextPieces: 6, // TGM4 shows 6 pieces
             description: 'TGM4 1.1 - TGM1 Normal recreation with TGM4 features',
             specialMechanics: {
                 ...baseConfig.specialMechanics,
                 // TGM4 specific mechanics
                 tgm4Features: true,
-                extendedNextPieces: true
+                extendedNextPieces: true,
+                // 1.1 grade thresholds from tgm4modes.md
+                gradeThresholds: {
+                    '9': 0,
+                    '8': 14000,
+                    '7': 28000,
+                    '6': 41000,
+                    '5': 55000,
+                    '4': 69000,
+                    '3': 83000,
+                    '2': 97000,
+                    '1': 111000,
+                    'S1': 140000,
+                    'S2': 148000,
+                    'S3': 157000,
+                    'S4': 166000,
+                    'S5': 176000,
+                    'S6': 187000,
+                    'S7': 199000,
+                    'S8': 213000,
+                    'S9': 230000,
+                    'GM': 280000
+                },
+                // GM requirements from tgm4modes.md 1.1
                 gmRequirements: {
                     level999: { score: 280000, time: 535 } // 8:55 for GM
-                },
+                }
             }
         };
     }
 
-    // TGM1 scoring system - using official formula
-    calculateScore(baseScore, lines, piece, game) {
-        if (lines === 0) return baseScore;
-
-        // TGM1 official scoring: 40/100/300/1200 × level
-        const level = game.level || 1;
-        let score = 0;
-
-        switch (lines) {
-            case 1:
-                score = 40 * level;
-                break;
-            case 2:
-                score = 100 * level;
-                break;
-            case 3:
-                score = 300 * level;
-                break;
-            case 4:
-                score = 1200 * level;
-                break;
-            default:
-                score = baseScore * this.getLineClearBonus();
-        }
-
-        // Add soft drop points (1 point per cell)
-        if (game.softDropPoints) {
-            score += game.softDropPoints;
-        }
-
-        // Add hard drop points (2 points per cell)
-        if (game.hardDropPoints) {
-            score += game.hardDropPoints * 2;
-        }
-
-        // Apply combo and bravo multipliers
-        const combo = game.comboCount > 0 ? (game.comboCount + 1) : 1;
-        const bravo = this.checkBravo(game) ? 4 : 1;
+    // Override piece generation based on rotation system
+    generateNextPiece(gameScene) {
+        // Check if game scene has rotation system preference
+        const rotationSystem = gameScene.rotationSystem || 'srs'; // Default to SRS
         
-        return Math.floor(score * combo * bravo);
+        if (rotationSystem === 'srs') {
+            // Use 7-bag randomizer with SRS
+            return gameScene.generate7BagPiece ? gameScene.generate7BagPiece() : gameScene.generateNextPiece();
+        } else {
+            // Use TGM2 randomization with ARS
+            return gameScene.generateTGM2Piece ? gameScene.generateTGM2Piece() : gameScene.generateNextPiece();
+        }
     }
 
     // Check for bravo (perfect clear)
@@ -83,7 +77,7 @@ class TGM4_1_1Mode extends TGM1Mode {
         return game.board.grid.every(row => row.every(cell => cell !== 0));
     }
 
-    // TGM1 grade calculation based on score
+    // Use TGM1 scoring system (inherited) and grade thresholds from 1.1 spec
     getCurrentGrade(score, level) {
         const config = this.getModeConfig();
         const thresholds = config.specialMechanics.gradeThresholds;
@@ -98,18 +92,39 @@ class TGM4_1_1Mode extends TGM1Mode {
         return '9'; // Default grade
     }
 
-    // Check for GM requirements
+    // Get next grade requirement for UI display
+    getNextGradeRequirement(currentGrade, currentScore) {
+        const config = this.getModeConfig();
+        const thresholds = config.specialMechanics.gradeThresholds;
+        
+        const gradeOrder = ['9', '8', '7', '6', '5', '4', '3', '2', '1', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'GM'];
+        const currentIndex = gradeOrder.indexOf(currentGrade);
+        
+        if (currentIndex === -1 || currentIndex === gradeOrder.length - 1) {
+            return null; // Already at highest grade
+        }
+        
+        const nextGrade = gradeOrder[currentIndex + 1];
+        const requiredScore = thresholds[nextGrade];
+        
+        return {
+            grade: nextGrade,
+            score: requiredScore,
+            pointsNeeded: Math.max(0, requiredScore - currentScore)
+        };
+    }
+
+    // Check for GM requirements (1.1 spec)
     checkGMRequirements(level, score, elapsedTime, tetrisCount) {
         const config = this.getModeConfig();
         const gmReq = config.specialMechanics.gmRequirements;
         
-        if (level >= 999 && 
-            score >= gmReq.level999.score && 
-            elapsedTime <= gmReq.level999.time && 
-            tetrisCount >= 6) {
-            return true;
-        }
-        return false;
+        return (
+            level >= 999 &&
+            score >= gmReq.level999.score &&
+            elapsedTime <= gmReq.level999.time &&
+            tetrisCount >= 6
+        );
     }
 
     
@@ -129,13 +144,15 @@ class TGM4_1_1Mode extends TGM1Mode {
         }
     }
 
-    // Update UI elements
+    // Update UI elements with next-grade display
     update(gameScene, deltaTime) {
         if (gameScene.game) {
             // Update grade display
             const grade = this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
             if (gameScene.gradeText) {
-                gameScene.gradeText.setText(`Grade: ${grade}`);
+                const next = this.getNextGradeRequirement(grade, gameScene.game.score);
+                const nextText = next ? ` (${next.pointsNeeded})` : '';
+                gameScene.gradeText.setText(`${grade}${nextText}`);
             }
         }
     }
@@ -148,13 +165,14 @@ class TGM4_1_1Mode extends TGM1Mode {
         }
     }
 
-    // Handle game over
+    // Handle game over with GM check
     onGameOver(gameScene) {
         if (gameScene && gameScene.game) {
             const elapsedTime = gameScene.game.startTime ? Date.now() - gameScene.game.startTime : 0;
-            const finalGrade = this.checkGMRequirements(gameScene.game.level, gameScene.game.score, elapsedTime, this.tetrisCount) ? 'GM' : this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
+            const isGM = this.checkGMRequirements(gameScene.game.level, gameScene.game.score, elapsedTime, this.tetrisCount || 0);
+            const finalGrade = isGM ? 'GM' : this.getCurrentGrade(gameScene.game.score, gameScene.game.level);
             console.log(`TGM4 1.1 Game Over - Final Grade: ${finalGrade}`);
-            console.log(`Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount}`);
+            console.log(`Time: ${Math.floor(elapsedTime / 1000)}s, Tetris: ${this.tetrisCount || 0}`);
         }
     }
 
@@ -165,25 +183,11 @@ class TGM4_1_1Mode extends TGM1Mode {
     
     // Reset mode state
     reset() {
-        this.gradePoints = 0;
+        super.reset();
+        // Reset TGM4 1.1 specific variables
         this.tetrisCount = 0;
-        this.allClearCount = 0;
     }
     
-    // Get line clear bonus
-    getLineClearBonus() {
-        return 1;
-    }
-    
-    // Get grade points
-    getGradePoints() {
-        return 0;
-    }
-
-    // Override piece generation to use TGM1 randomizer
-    generateNextPiece(gameScene) {
-        return gameScene.generateTGM1Piece();
-    }
 }
 
 // Export for use in other modules

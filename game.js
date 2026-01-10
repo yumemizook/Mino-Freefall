@@ -1207,14 +1207,14 @@ const ARS_KICKS = {
 };
 
 class Board {
-  constructor(rows = 22, cols = 10, cellSize = 24, textureKey = "mino_srs") {
-    this.rows = rows || 22;
-    this.cols = cols || 10;
+  constructor(rows = 22, cols = 10, cellSize = 24, textureKey = "mino_srs", customWidth = null, customHeight = null) {
+    this.rows = customHeight || rows || 22;
+    this.cols = customWidth || cols || 10;
     this.grid = [];
-    for (let i = 0; i < rows; i++) {
-      this.grid[i] = Array(cols).fill(0);
+    for (let i = 0; i < this.rows; i++) {
+      this.grid[i] = Array(this.cols).fill(0);
     }
-    this.fadeGrid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    this.fadeGrid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
   }
 
   applyMonochromeTextures(scene) {
@@ -1230,6 +1230,9 @@ class Board {
   }
 
   isValidPosition(piece, x, y) {
+    const konohaBigActive = !!(this.scene && this.scene.doubleSizedPiecesActive);
+    const boundCols = konohaBigActive ? Math.min(this.cols, 5) : this.cols;
+    const boundRows = konohaBigActive ? Math.min(this.rows, 12) : this.rows;
     for (let r = 0; r < piece.shape.length; r++) {
       for (let c = 0; c < piece.shape[r].length; c++) {
         if (piece.shape[r][c]) {
@@ -1237,9 +1240,9 @@ class Board {
           const newY = y + r;
           if (
             newX < 0 ||
-            newX >= this.cols ||
-            newY >= this.rows ||
-            (newY >= 0 && this.grid[newY][newX])
+            newX >= boundCols ||
+            newY >= boundRows ||
+            (newY >= 0 && this.grid[newY] && this.grid[newY][newX])
           ) {
             return false;
           }
@@ -1250,11 +1253,19 @@ class Board {
   }
 
   placePiece(piece, x, y) {
+    const konohaBigActive = !!(this.scene && this.scene.doubleSizedPiecesActive);
+    const boundCols = konohaBigActive ? Math.min(this.cols, 5) : this.cols;
+    const boundRows = konohaBigActive ? Math.min(this.rows, 12) : this.rows;
     for (let r = 0; r < piece.shape.length; r++) {
       for (let c = 0; c < piece.shape[r].length; c++) {
         if (piece.shape[r][c]) {
+          const boardX = x + c;
+          const boardY = y + r;
+          if (boardX < 0 || boardX >= boundCols || boardY < 0 || boardY >= boundRows) {
+            continue;
+          }
           if (piece.isPowerup && piece.powerupType) {
-            this.grid[y + r][x + c] = {
+            this.grid[boardY][boardX] = {
               color: piece.powerupFillColor || piece.color,
               powerupType: piece.powerupType,
               borderColor: piece.powerupColors ? piece.powerupColors[piece.powerupType] : piece.color,
@@ -1263,7 +1274,7 @@ class Board {
           } else {
             // Preserve texture key for monochrome pieces so stack keeps their texture
             const lockTextureKey = piece.textureKey || this.activeTextureKey || null;
-            this.grid[y + r][x + c] = lockTextureKey
+            this.grid[boardY][boardX] = lockTextureKey
               ? { color: piece.color, textureKey: lockTextureKey }
               : piece.color;
           }
@@ -1275,7 +1286,10 @@ class Board {
   clearLines() {
     const linesToClear = [];
     for (let r = 0; r < this.rows; r++) {
-      if (this.grid[r].every((cell) => cell !== 0)) {
+      // Check if row is completely filled (no empty cells)
+      // This should work for both normal and Konoha 5-wide boards
+      const isRowCompletelyFilled = this.grid[r].every((cell) => cell !== 0);
+      if (isRowCompletelyFilled) {
         linesToClear.push(r);
       }
     }
@@ -1373,8 +1387,8 @@ class Board {
     const startRow = 2;
     const endRow = Math.min(this.rows, startRow + scene.visibleRows);
 
-    const bigBlocks = !!(scene && scene.bigBlocksActive);
-    const drawCellSize = bigBlocks ? cellSize * 2 : cellSize;
+    const doubleSized = !!(scene && scene.doubleSizedPiecesActive);
+    const drawCellSize = doubleSized ? cellSize * 2 : cellSize;
 
     const zenActive = scene?.isZenSandboxActive && scene.isZenSandboxActive();
     for (let r = startRow; r < endRow; r++) {
@@ -1461,8 +1475,12 @@ class Board {
           const texture = scene.textures ? scene.textures.get(textureKey) : null;
           const hasValidTextureSource =
             !!textureKey && !!scene.textures && scene.textures.exists(textureKey);
-          const drawX = offsetX + c * cellSize;
-          const drawY = offsetY + (r - startRow) * cellSize;
+          const drawX = doubleSized
+            ? offsetX + (c * 2 + 1) * cellSize
+            : offsetX + c * cellSize;
+          const drawY = doubleSized
+            ? offsetY + ((r - startRow) * 2 + 1) * cellSize
+            : offsetY + (r - startRow) * cellSize;
           // X-ray effect: only render current sweep column (ghost still visible elsewhere)
           if (scene.xrayActive) {
             if (scene.xrayRevealCooldown > 0) {
@@ -1472,8 +1490,8 @@ class Board {
               continue;
             }
           }
-          const renderX = bigBlocks ? drawX - cellSize / 2 : drawX;
-          const renderY = bigBlocks ? drawY - cellSize / 2 : drawY;
+          const renderX = drawX;
+          const renderY = drawY;
 
           if (hasValidTextureSource && !isPowerObj) {
             const sprite = scene.add.sprite(renderX, renderY, textureKey);
@@ -1744,8 +1762,11 @@ class Piece {
 
   draw(scene, offsetX, offsetY, cellSize, ghost = false, alpha = 1) {
     const finalAlpha = ghost ? 0.3 : alpha;
-    const bigBlocks = !!(scene && scene.bigBlocksActive);
-    const drawCellSize = bigBlocks ? cellSize * 2 : cellSize;
+    const doubleSized =
+      !!(scene && scene.doubleSizedPiecesActive) && scene.cellSize === cellSize;
+    const bigRoll = !!(scene && scene.bigBlocksActive);
+    const rollScale = bigRoll ? 2 : 1;
+    const drawCellSize = cellSize * (doubleSized ? 2 : 1) * rollScale;
     for (let r = 0; r < this.shape.length; r++) {
       for (let c = 0; c < this.shape[r].length; c++) {
         if (this.shape[r][c]) {
@@ -1767,10 +1788,16 @@ class Piece {
             const textureSource = texture && texture.source ? texture.source[0] : null;
             const hasValidTextureSource =
               !!texture && !!textureSource && !!textureSource.image;
-            const drawX = offsetX + (this.x + c) * cellSize;
-            const drawY = offsetY + (pieceY - 2) * cellSize;
-            const renderX = bigBlocks ? drawX - cellSize / 2 : drawX;
-            const renderY = bigBlocks ? drawY - cellSize / 2 : drawY;
+            const boardX = this.x + c;
+            const boardY = pieceY - 2;
+            const drawX = doubleSized
+              ? offsetX + (boardX * 2 + 1) * cellSize
+              : offsetX + boardX * cellSize;
+            const drawY = doubleSized
+              ? offsetY + (boardY * 2 + 1) * cellSize
+              : offsetY + boardY * cellSize;
+            const renderX = drawX;
+            const renderY = drawY;
             if (hasValidTextureSource) {
               const sprite = scene.add.sprite(
                 renderX,
@@ -2629,7 +2656,9 @@ class MenuScene extends Phaser.Scene {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return [...parsed].filter(Boolean).sort((a, b) => this.compareEntries(modeId, a, b));
+        }
       } catch (e) {
         console.warn("Failed to parse leaderboard", modeId, e);
       }
@@ -6003,6 +6032,9 @@ class AssetLoaderScene extends Phaser.Scene {
         ["marathon_1", "bgm/sounds/422_m1.mp3"],
         ["marathon_2", "bgm/sounds/423_m2.mp3"],
         ["marathon_3", "bgm/sounds/424_m3.mp3"],
+        ["konoha_easy", "bgm/sounds/422_m1.mp3"],
+        ["konoha_hard_pre", "bgm/sounds/423_m2.mp3"],
+        ["konoha_hard_post", "bgm/sounds/424_m3.mp3"],
       ];
       bgmLoads.forEach(([key, path]) => {
         if (!this.cache.audio.exists(key)) {
@@ -6039,6 +6071,7 @@ class AssetLoaderScene extends Phaser.Scene {
       ["cool", "sfx/cool.wav"],
       ["jewelclear", "sfx/jewelclear.wav"],
       ["firework", "sfx/firework.wav"],
+      ["konohabravo", "sfx/konohabravo.wav"],
       ["garbage", "sfx/garbage.wav"],
       ["gameover", "sfx/gameover.wav"],
     ];
@@ -6587,6 +6620,14 @@ class GameScene extends Phaser.Scene {
     this.standardComboText = null;
     this.standardComboFadeTween = null;
     this.standardComboLastLineTime = 0;
+
+    this._konohaAllClearHintKey = null;
+    this._konohaAllClearHintPath = null;
+    this._kitaLastAchievedAt = -Infinity;
+    if (this.kitaIndicatorText) {
+      this.kitaIndicatorText.setVisible(false);
+      this.kitaIndicatorText.setText("");
+    }
     this.standardComboCount = -1;
     this.clearBannerGroup = null;
     this.clearBannerLine1 = null;
@@ -7449,8 +7490,8 @@ class GameScene extends Phaser.Scene {
       this.hanabiMaxActive - this.hanabiParticles.length,
       Math.max(2, Math.min(12, count * 3)),
     );
-    const originX = this.matrixOffsetX + (this.cellSize * this.board.cols) / 2;
-    const originY = this.matrixOffsetY + (this.cellSize * this.visibleRows) / 3;
+    const originX = this.matrixOffsetX + this.playfieldWidth / 2;
+    const originY = this.matrixOffsetY + this.playfieldHeight / 3;
     for (let i = 0; i < particlesToSpawn; i++) {
       let g = this.hanabiPool.pop();
       if (!g) {
@@ -7526,6 +7567,238 @@ class GameScene extends Phaser.Scene {
       this.readyGoPhase ||
       !this.isNormalOrEasyMode()
     ) {
+      return;
+    }
+
+    const modeId =
+      this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode;
+    const modeConfig =
+      this.gameMode && typeof this.gameMode.getConfig === "function" ? this.gameMode.getConfig() : {};
+    const specialMechanics = modeConfig && modeConfig.specialMechanics ? modeConfig.specialMechanics : {};
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    const isAllClearChallenge = !!specialMechanics.allClearChallenge;
+
+    if (!isKonohaMode || !isAllClearChallenge) {
+      if (this.kitaIndicatorText) {
+        this.kitaIndicatorText.setVisible(false);
+        this.kitaIndicatorText.setText("");
+      }
+    }
+
+    if (isKonohaMode && isAllClearChallenge) {
+      const cols = 5;
+      const rows = 12;
+      const startRow = 2;
+
+      const cloneGrid = (grid) => grid.map((row) => row.slice());
+      const normalizeCell = (v) => (v ? 1 : 0);
+      const normalizeGrid = (grid) => grid.map((row) => row.map((cell) => normalizeCell(cell)));
+      const gridIsEmpty = (grid) => grid.every((row) => row.every((cell) => !cell));
+
+      const clearLinesInGrid = (grid) => {
+        const out = [];
+        let cleared = 0;
+        for (let r = 0; r < rows; r++) {
+          const row = grid[r] || [];
+          const full = row.length >= cols && row.slice(0, cols).every((c) => c !== 0);
+          if (full) {
+            cleared++;
+          } else {
+            out.push(row.slice(0, cols));
+          }
+        }
+        while (out.length < rows) {
+          out.unshift(Array(cols).fill(0));
+        }
+        return { grid: out, cleared };
+      };
+
+      const isValidPositionOnGrid = (shape, x, y, grid) => {
+        for (let r = 0; r < shape.length; r++) {
+          for (let c = 0; c < shape[r].length; c++) {
+            if (!shape[r][c]) continue;
+            const nx = x + c;
+            const ny = y + r;
+            if (nx < 0 || nx >= cols || ny >= rows) return false;
+            if (ny >= 0 && grid[ny] && grid[ny][nx]) return false;
+          }
+        }
+        return true;
+      };
+
+      const dropYFor = (shape, x, grid) => {
+        let y = -4;
+        while (isValidPositionOnGrid(shape, x, y + 1, grid)) {
+          y += 1;
+        }
+        return y;
+      };
+
+      const applyPieceToGrid = (shape, x, y, grid) => {
+        const next = cloneGrid(grid);
+        for (let r = 0; r < shape.length; r++) {
+          for (let c = 0; c < shape[r].length; c++) {
+            if (!shape[r][c]) continue;
+            const nx = x + c;
+            const ny = y + r;
+            if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+              next[ny][nx] = 1;
+            }
+          }
+        }
+        return clearLinesInGrid(next).grid;
+      };
+
+      const uniqueRotations = (type) => {
+        const shapes = [];
+        const seen = new Set();
+        for (let rot = 0; rot < 4; rot++) {
+          const p = new Piece(type, this.rotationSystem, rot);
+          const key = JSON.stringify(p.shape);
+          if (!seen.has(key)) {
+            seen.add(key);
+            shapes.push({ rot, shape: p.shape });
+          }
+        }
+        return shapes;
+      };
+
+      const enumeratePlacements = (grid, type) => {
+        const placements = [];
+        const rots = uniqueRotations(type);
+        for (const { rot, shape } of rots) {
+          const width = shape[0]?.length || 0;
+          for (let x = -2; x < cols + 2; x++) {
+            if (x + width <= 0 || x >= cols) continue;
+            const y = dropYFor(shape, x, grid);
+            if (!isValidPositionOnGrid(shape, x, y, grid)) continue;
+            placements.push({ x, y, rot, shape });
+          }
+        }
+        return placements;
+      };
+
+      const searchAllClear = (grid, pieceTypes) => {
+        const start = normalizeGrid(grid);
+        const startKey = JSON.stringify(start);
+        const memo = new Map();
+
+        const dfs = (g, idx) => {
+          const key = `${idx}|${JSON.stringify(g)}`;
+          if (memo.has(key)) return memo.get(key);
+          if (gridIsEmpty(g)) {
+            memo.set(key, []);
+            return [];
+          }
+          if (idx >= pieceTypes.length) {
+            memo.set(key, null);
+            return null;
+          }
+          const type = pieceTypes[idx];
+          const placements = enumeratePlacements(g, type);
+          for (const pl of placements) {
+            const nextGrid = applyPieceToGrid(pl.shape, pl.x, pl.y, g);
+            const rest = dfs(nextGrid, idx + 1);
+            if (rest) {
+              const path = [{ type, ...pl }, ...rest];
+              memo.set(key, path);
+              return path;
+            }
+          }
+          memo.set(key, null);
+          return null;
+        };
+
+        memo.set(`0|${startKey}`, undefined);
+        return dfs(start, 0);
+      };
+
+      const nextCount =
+        typeof modeConfig.nextPieces === "number" ? Math.max(0, Math.floor(modeConfig.nextPieces)) : 3;
+      const queue = Array.isArray(this.nextPieces) ? this.nextPieces : [];
+      const upcoming = queue
+        .slice(0, Math.max(0, nextCount))
+        .map((p) => (typeof p === "string" ? p : p?.type || p?.piece || p))
+        .filter((p) => typeof p === "string")
+        .map((p) => p.toUpperCase());
+
+      const pieceTypes = [this.currentPiece.type, ...upcoming];
+      const gridKey = JSON.stringify(normalizeGrid(this.board.grid || []));
+      const cacheKey = `${gridKey}|${pieceTypes.join("")}`;
+      if (this._konohaAllClearHintKey !== cacheKey) {
+        this._konohaAllClearHintKey = cacheKey;
+        this._konohaAllClearHintPath = searchAllClear(this.board.grid || [], pieceTypes);
+      }
+
+      const path = this._konohaAllClearHintPath;
+      const achievable = Array.isArray(path) && path.length > 0;
+
+      // Kita indicator (fox)
+      const now = this.time?.now || Date.now();
+      if (!Number.isFinite(this._kitaLastAchievedAt)) this._kitaLastAchievedAt = -Infinity;
+      const achievedRecently = now - this._kitaLastAchievedAt < 1200;
+      const foxBase = "🦊";
+      const foxTick = "✓";
+      const foxCross = "✗";
+      if (this.kitaIndicatorText) {
+        this.kitaIndicatorText.setVisible(true);
+        if (achievedRecently) {
+          this.kitaIndicatorText.setText(`${foxBase}${foxTick}`);
+        } else if (achievable) {
+          this.kitaIndicatorText.setText(`${foxBase}`);
+        } else {
+          this.kitaIndicatorText.setText(`${foxBase}${foxCross}`);
+        }
+      }
+
+      if (!achievable) {
+        return;
+      }
+
+      const best = path[0];
+      this.hintPlacement = {
+        x: best.x,
+        y: best.y,
+        rotation: best.rot,
+        shape: best.shape,
+      };
+
+      const hintColor = this.currentPiece?.color || 0x00e0ff;
+      const cell = this.cellSize;
+      const offX = this.matrixOffsetX;
+      const offY = this.matrixOffsetY;
+      const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
+      const rectSize = cell * renderScale;
+
+      this.hintGraphics.lineStyle(2, hintColor, 0.4);
+      for (let r = 0; r < this.hintPlacement.shape.length; r++) {
+        for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
+          if (!this.hintPlacement.shape[r][c]) continue;
+          const x = this.hintPlacement.x + c;
+          const y = this.hintPlacement.y + r;
+          const drawY = y - startRow;
+          if (drawY < 0) continue;
+          const centerX = this.doubleSizedPiecesActive
+            ? offX + (x * 2 + 1) * cell
+            : offX + x * cell;
+          const centerY = this.doubleSizedPiecesActive
+            ? offY + (drawY * 2 + 1) * cell
+            : offY + drawY * cell;
+          this.hintGraphics.strokeRect(
+            centerX - rectSize / 2,
+            centerY - rectSize / 2,
+            rectSize,
+            rectSize,
+          );
+        }
+      }
+
+      const blinkSpeed = 2;
+      const t = this.time.now / 1000;
+      const alpha = 0.3 + 0.2 * (1 + Math.sin(2 * Math.PI * blinkSpeed * t));
+      this.hintGraphics.setAlpha(Math.min(1, Math.max(0, alpha)));
       return;
     }
     // Color hint based on current piece color
@@ -7765,6 +8038,26 @@ class GameScene extends Phaser.Scene {
     const storedRotation = localStorage.getItem("rotationSystem") || "SRS";
     const configRotation = config.rotationSystem || null;
     this.rotationSystem = configRotation || storedRotation;
+
+    {
+      const specialMechanics = config.specialMechanics || {};
+      const boardWidth = specialMechanics.boardWidth;
+      const boardHeight = specialMechanics.boardHeight;
+      if (boardWidth && boardHeight) {
+        // Keep the standard 2 hidden spawn rows semantics: boardHeight is the visible height.
+        const visibleHeight = Number.isFinite(boardHeight) ? boardHeight : 20;
+        const totalHeight = visibleHeight + 2;
+        this.board = new Board(22, 10, 24, "mino_srs", boardWidth, totalHeight);
+        this.board.scene = this;
+        this.visibleRows = visibleHeight;
+        this.doubleSizedPiecesActive = !!specialMechanics.doubleSizedPieces;
+      } else {
+        this.visibleRows = 20;
+        this.doubleSizedPiecesActive = false;
+      }
+      this.bigBlocksActive = false;
+      this.calculateLayout();
+    }
 
     const storedArsMoveReset =
       (localStorage.getItem("arsMoveReset") || "false") === "true";
@@ -8053,7 +8346,9 @@ class GameScene extends Phaser.Scene {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return [...parsed].filter(Boolean).sort((a, b) => this.compareEntries(modeId, a, b));
+        }
       } catch (e) {
         console.warn("Failed to parse leaderboard", modeId, e);
       }
@@ -8121,20 +8416,23 @@ class GameScene extends Phaser.Scene {
     // Leave a fixed padding so side UI and timers stay visible on narrow windows
     const paddingX = 60;
     const paddingY = 80;
+    const effectiveCols = this.doubleSizedPiecesActive ? 10 : this.board.cols;
+    const effectiveRows = this.doubleSizedPiecesActive ? 20 : this.visibleRows;
     const maxCellWidth = Math.floor(
-      Math.max(100, windowWidth - paddingX) / this.board.cols,
+      Math.max(100, windowWidth - paddingX) / effectiveCols,
     );
     const maxCellHeight = Math.floor(
-      Math.max(120, windowHeight - paddingY) / this.visibleRows,
+      Math.max(120, windowHeight - paddingY) / effectiveRows,
     );
-    this.cellSize = Math.min(maxCellWidth, maxCellHeight, 40);
+    const maxCellSize = 40;
+    this.cellSize = Math.min(maxCellWidth, maxCellHeight, maxCellSize);
 
     // Ensure minimum cell size for readability, but allow smaller than before to fit narrow windows
     this.cellSize = Math.max(this.cellSize, 16);
 
     // Calculate playfield dimensions and store as instance properties
-    this.playfieldWidth = this.cellSize * this.board.cols;
-    this.playfieldHeight = this.cellSize * this.visibleRows;
+    this.playfieldWidth = this.cellSize * effectiveCols;
+    this.playfieldHeight = this.cellSize * effectiveRows;
 
     // Center the border with better screen utilization (clamp to keep on-screen)
     this.borderOffsetX = Math.max(
@@ -8147,8 +8445,35 @@ class GameScene extends Phaser.Scene {
     );
 
     // Move the matrix to the right within the border
-    this.matrixOffsetX = this.borderOffsetX + 17; // Shifted 2px left to align with border
-    this.matrixOffsetY = this.borderOffsetY + 20;
+    this.matrixOffsetX = this.borderOffsetX + 17 - 10; // Shifted 2px left to align with border
+    this.matrixOffsetY = this.borderOffsetY + 20 - 7;
+
+    if (this.kitaIndicatorText) {
+      // Position Kita indicator above the Bravo counter
+      // Bravo counter is at ppsX, bravoY (where bravoY = ppsY - 60)
+      // Place Kita indicator 30px above Bravo counter
+      const ppsX = Math.max(
+        20,
+        Math.min(
+          windowWidth - 180,
+          this.borderOffsetX + this.playfieldWidth + 20,
+        ),
+      );
+      const ppsY = Math.max(
+        40,
+        Math.min(
+          windowHeight - 80,
+          this.borderOffsetY + this.playfieldHeight - 40,
+        ),
+      );
+      const bravoY = ppsY - 60;
+      const kitaY = bravoY - 30;
+      
+      this.kitaIndicatorText.setPosition(
+        ppsX,
+        kitaY,
+      );
+    }
 
     // Store window dimensions for UI positioning
     this.windowWidth = windowWidth;
@@ -8421,7 +8746,7 @@ class GameScene extends Phaser.Scene {
       20,
       Math.min(
         safeWindowWidth - 180,
-        this.borderOffsetX + this.cellSize * this.board.cols + 20,
+        this.borderOffsetX + this.playfieldWidth + 20,
       ),
     );
     const ppsY = Math.max(
@@ -8708,6 +9033,35 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setVisible(showPieceCount);
+
+    // Bravo counter for Konoha modes (above PPS)
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    const bravoY = ppsY - 60;
+    this.bravoLabel = this.add
+      .text(ppsX, bravoY, "BRAVO", {
+        fontSize: `${uiFontSize - 4}px`,
+        fill: "#ffdd55",
+        fontFamily: "Hatsukoi Friends",
+        fontStyle: "bold",
+      })
+      .setOrigin(0, 0)
+      .setVisible(isKonohaMode);
+    this.bravoText = this.add
+      .text(ppsX, bravoY + 15, "0", {
+        fontSize: `${largeFontSize}px`,
+        fill: "#ffffff",
+        fontFamily: "Hatsukoi Friends",
+        fontStyle: "bold",
+        align: "left",
+      })
+      .setOrigin(0, 0)
+      .setVisible(isKonohaMode);
+
+    // Add Bravo counter elements to overlay group
+    if (this.overlayGroup) {
+      this.overlayGroup.add(this.bravoLabel);
+      this.overlayGroup.add(this.bravoText);
+    }
 
     this.ppsLabel = this.add
       .text(ppsX, ppsY, "PPS", {
@@ -9125,8 +9479,8 @@ class GameScene extends Phaser.Scene {
     this.playfieldBorder.strokeRect(
       this.borderOffsetX - 4,
       this.borderOffsetY - 3,
-      this.cellSize * this.board.cols + 4,
-      this.cellSize * this.visibleRows + 5,
+      this.playfieldWidth + 4,
+      this.playfieldHeight + 5,
     ); // Height reduced by 1px, width expanded 1px left
   }
 
@@ -9139,6 +9493,28 @@ class GameScene extends Phaser.Scene {
     this.hintGraphics = this.add.graphics({
       lineStyle: { width: 2, color: 0x00e0ff, alpha: 0.5 },
     });
+
+    this._konohaAllClearHintKey = null;
+    this._konohaAllClearHintPath = null;
+    this._kitaLastAchievedAt = -Infinity;
+
+    if (!this.kitaIndicatorText) {
+      const fontSize = Math.max(14, Math.floor(this.cellSize * 0.75));
+      this.kitaIndicatorText = this.add
+        .text(this.borderOffsetX + this.playfieldWidth - 8, this.borderOffsetY - 28, "", {
+          fontSize: `${fontSize}px`,
+          fill: "#ffffff",
+          fontFamily: "Hatsukoi Friends",
+          fontStyle: "bold",
+          align: "right",
+        })
+        .setOrigin(1, 0)
+        .setDepth(9999)
+        .setVisible(false);
+      if (this.overlayGroup) {
+        this.overlayGroup.add(this.kitaIndicatorText);
+      }
+    }
     this.powerupEffectHandler =
       typeof PowerupEffectHandler !== "undefined"
         ? new PowerupEffectHandler(this)
@@ -9357,6 +9733,8 @@ class GameScene extends Phaser.Scene {
       this.gradeText = null;
       this.gradePointsText = null;
       this.nextGradeText = null;
+      this.bravoLabel = null;
+      this.bravoText = null;
       this.playfieldBorder = null;
       this.minoRowFadeAlpha = null;
       if (this.hanabiLabel) this.hanabiLabel.destroy();
@@ -9510,6 +9888,9 @@ class GameScene extends Phaser.Scene {
         marathon_1: addTrack("marathon_1", { loop: true }),
         marathon_2: addTrack("marathon_2", { loop: true }),
         marathon_3: addTrack("marathon_3", { loop: true }),
+        konoha_easy: addTrack("konoha_easy", { loop: true }),
+        konoha_hard_pre: addTrack("konoha_hard_pre", { loop: true }),
+        konoha_hard_post: addTrack("konoha_hard_post", { loop: true }),
       };
       this.stage1BGM = this.bgmTracks.tm1_1;
       this.stage2BGM = this.bgmTracks.tm1_2;
@@ -9691,7 +10072,13 @@ class GameScene extends Phaser.Scene {
     this.children.bringToTop(this.bravoText);
 
     try {
-      this.sound?.add("firework", { volume: 0.85 })?.play();
+      const modeId =
+        this.gameMode && typeof this.gameMode.getModeId === "function"
+          ? this.gameMode.getModeId()
+          : this.selectedMode;
+      const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+      const sfxKey = isKonohaMode ? "konohabravo" : "firework";
+      this.sound?.add(sfxKey, { volume: isKonohaMode ? 0.9 : 0.85 })?.play();
     } catch {}
 
     // Timeline: grow + spin in 1s, then fade and slightly shrink over 3s
@@ -9816,6 +10203,15 @@ class GameScene extends Phaser.Scene {
         ],
         credits: "tm1_endroll",
       },
+      tgm4_3_1: {
+        segments: [
+          { end: 499, key: "tm2_4" },   // Level 0-499: tm2_4.mp3
+          { end: 999, key: "tm3_4" },   // Level 500-999: tm3_4.mp3
+          { end: 1299, key: "tm1_2" },  // Level 1000-1299: tm1_2.mp3
+          { end: 1999, key: "tm3_6" },   // Level 1300-1999: tm3_6.mp3
+        ],
+        credits: "tm1_endroll",
+      },
       tgm3_sakura: { segments: [{ end: 999, key: "tm1_1" }] },
     };
     return schedules[modeId] || { segments: sharedTGM1, credits: "tm1_endroll" };
@@ -9824,20 +10220,31 @@ class GameScene extends Phaser.Scene {
   playBgmByKey(key) {
     if (!key || !this.bgmTracks || !this.bgmTracks[key]) return;
     const audio = this.bgmTracks[key];
-    if (this.currentBGM && this.currentBGM !== audio) {
-      this.currentBGM.stop();
+    try {
+      if (!audio || typeof audio.play !== "function") return;
+      if (this.currentBGM && this.currentBGM !== audio && typeof this.currentBGM.stop === "function") {
+        this.currentBGM.stop();
+      }
+      audio.play({ loop: true });
+      this.currentBGM = audio;
+      this.currentBgmKey = key;
+    } catch {
+      // If a sound object was destroyed/invalidated, skip playing rather than crashing.
+      if (this.currentBGM === audio) {
+        this.currentBGM = null;
+        this.currentBgmKey = null;
+      }
     }
-    audio.play({ loop: true });
-    this.currentBGM = audio;
-    this.currentBgmKey = key;
   }
 
   stopCurrentBGM() {
-    if (this.currentBGM) {
-      this.currentBGM.stop();
-      this.currentBGM = null;
-      this.currentBgmKey = null;
-    }
+    try {
+      if (this.currentBGM && typeof this.currentBGM.stop === "function") {
+        this.currentBGM.stop();
+      }
+    } catch {}
+    this.currentBGM = null;
+    this.currentBgmKey = null;
   }
 
   updateModeBGM() {
@@ -9886,6 +10293,28 @@ class GameScene extends Phaser.Scene {
 
     const schedule = this.getBgmSchedule(modeId);
     if (!schedule || !schedule.segments || !schedule.segments.length) return;
+
+    // Konoha modes BGM logic
+    if (modeId === "konoha_easy") {
+      // Konoha Easy: use 422_m1.mp3
+      if (this.currentBgmKey !== "422_m1") {
+        this.playBgmByKey("422_m1");
+      }
+      return;
+    }
+    
+    if (modeId === "konoha_hard") {
+      // Konoha Hard: use 423_m2.mp3 before level 1000, 424_m3.mp3 after level 1000
+      const internalLevel = this.gameMode && typeof this.gameMode.internalLevel === "number" 
+        ? this.gameMode.internalLevel 
+        : this.level;
+      const desiredKey = internalLevel >= 1000 ? "424_m3" : "423_m2";
+      
+      if (this.currentBgmKey !== desiredKey) {
+        this.playBgmByKey(desiredKey);
+      }
+      return;
+    }
 
     const maxSegment = schedule.segments[schedule.segments.length - 1];
     const internalLevel =
@@ -11500,6 +11929,15 @@ class GameScene extends Phaser.Scene {
       this.activePowerupType = null;
     }
 
+    // Adjust spawn position for custom-width boards (e.g., Konoha 5-wide)
+    if (this.currentPiece && this.board && Number.isFinite(this.board.cols)) {
+      const cols = this.doubleSizedPiecesActive ? Math.min(this.board.cols, 5) : this.board.cols;
+      let spawnX = Math.floor((cols - 4) / 2);
+      if (this.currentPiece.type === "O") spawnX += 1;
+      this.currentPiece.x = spawnX;
+      this.currentPiece.y = 1;
+    }
+
     // Shirase garbage counter increment per piece spawn (500-999)
     if (isShiraseMode && this.level >= 500 && this.level < 1000) {
       this.shiraseGarbageCounter += 1;
@@ -12553,6 +12991,17 @@ class GameScene extends Phaser.Scene {
         `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`;
       } catch {}
       this.showBravoBanner();
+
+      // Kita: mark all-clear achieved for Konoha modes (used for tick display)
+      try {
+        const modeIdNow =
+          (this.gameMode && typeof this.gameMode.getModeId === "function"
+            ? this.gameMode.getModeId()
+            : this.selectedMode) || "";
+        if (modeIdNow === "konoha_easy" || modeIdNow === "konoha_hard") {
+          this._kitaLastAchievedAt = this.time?.now || Date.now();
+        }
+      } catch {}
     }
     // Zen cheese injection on line clears when configured (only in Zen sandbox modes)
     if (this.isZenSandboxActive && this.isZenSandboxActive()) {
@@ -12783,8 +13232,16 @@ class GameScene extends Phaser.Scene {
     }
 
     // Reset position/rotation on the new current piece
-    this.currentPiece.x = 3;
-    this.currentPiece.y = 1;
+    if (this.currentPiece && this.board && Number.isFinite(this.board.cols)) {
+      const cols = this.doubleSizedPiecesActive ? Math.min(this.board.cols, 5) : this.board.cols;
+      let spawnX = Math.floor((cols - 4) / 2);
+      if (this.currentPiece.type === "O") spawnX += 1;
+      this.currentPiece.x = spawnX;
+      this.currentPiece.y = 1;
+    } else {
+      this.currentPiece.x = 3;
+      this.currentPiece.y = 1;
+    }
     this.resetPieceToDefaultRotation(this.currentPiece);
 
     this.canHold = false;
@@ -14533,17 +14990,47 @@ class GameScene extends Phaser.Scene {
     return gradeValues[grade] || 0;
   }
 
+  updateBravoCounter(bravoCount, target = null) {
+    if (this.bravoText) {
+      const displayText = target !== null ? `${bravoCount}/${target}` : bravoCount.toString();
+      this.bravoText.setText(displayText);
+    }
+  }
+
   updateGradeUIVisibility() {
     if (!this.gradeDisplay || !this.gradeText) return;
 
     const gradeValue =
       typeof this.grade === "string" ? this.grade.trim() : this.grade;
-    const hasGrade =
+    let hasGrade =
       gradeValue !== undefined &&
       gradeValue !== null &&
       gradeValue !== "" &&
       gradeValue !== " " &&
       gradeValue !== 0;
+
+    // Special handling for Konoha modes
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function"
+        ? this.gameMode.getModeId()
+        : this.selectedMode) || "";
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    
+    if (isKonohaMode) {
+      // Hide grade display in Konoha modes
+      hasGrade = false;
+      
+      // Exception: Show Km grade in Konoha Hard after 110th Bravo
+      if (modeId === "konoha_hard" && this.gameMode && typeof this.gameMode.allClearsAchieved === "number") {
+        if (this.gameMode.allClearsAchieved >= 110) {
+          // Show "Km" grade instead of hiding
+          hasGrade = true;
+          if (this.gradeText) {
+            this.gradeText.setText("Km");
+          }
+        }
+      }
+    }
 
     this.gradeDisplay.setVisible(hasGrade);
     this.gradeText.setVisible(hasGrade);
@@ -14627,7 +15114,25 @@ class GameScene extends Phaser.Scene {
     const hasGrading = modeConfig.hasGrading !== false;
 
     // Reset all game variables
-    this.board = new Board();
+    const specialMechanics = modeConfig.specialMechanics || {};
+    const boardWidth = specialMechanics.boardWidth;
+    const boardHeight = specialMechanics.boardHeight;
+    
+    if (boardWidth && boardHeight) {
+      // Keep the standard 2 hidden spawn rows semantics: boardHeight is the visible height.
+      const visibleHeight = Number.isFinite(boardHeight) ? boardHeight : 20;
+      const totalHeight = visibleHeight + 2;
+      this.board = new Board(22, 10, 24, "mino_srs", boardWidth, totalHeight);
+      this.doubleSizedPiecesActive = specialMechanics.doubleSizedPieces || false;
+      // Big roll rendering uses bigBlocksActive; Konoha Big is handled via renderScale.
+      this.bigBlocksActive = false;
+      this.visibleRows = visibleHeight;
+    } else {
+      this.board = new Board();
+      this.doubleSizedPiecesActive = false;
+      this.bigBlocksActive = false;
+      this.visibleRows = 20;
+    }
     this.board.scene = this;
     this.currentPiece = null;
     this.holdPiece = null;
@@ -14744,39 +15249,57 @@ class GameScene extends Phaser.Scene {
     // Clear game elements
     this.gameGroup.clear(true, true);
 
-    // Stop and destroy current BGM
+    // Stop current BGM
     if (this.currentBGM) {
-      this.currentBGM.stop();
+      try {
+        this.currentBGM.stop();
+      } catch {}
       this.currentBGM = null;
     }
 
-    // Clear all BGM objects to ensure clean restart
-    if (this.stage1BGM) {
-      this.stage1BGM.destroy();
-      this.stage1BGM = null;
-    }
-    if (this.stage2BGM) {
-      this.stage2BGM.destroy();
-      this.stage2BGM = null;
-    }
+    // Clear all BGM objects to ensure clean restart.
+    // Avoid manual destroy() on BaseSound while the SoundManager may still be ticking it;
+    // this can lead to Phaser internals accessing null sound sources (seek).
+    const safeStopAndRemove = (snd, key = null) => {
+      if (!snd) return;
+      try {
+        if (typeof snd.stop === "function") snd.stop();
+      } catch {}
+      try {
+        if (key && this.sound && typeof this.sound.removeByKey === "function") {
+          this.sound.removeByKey(key);
+        } else if (this.sound && typeof this.sound.remove === "function") {
+          this.sound.remove(snd);
+        }
+      } catch {}
+    };
+
+    safeStopAndRemove(this.stage1BGM, this.currentBgmKey === "tm1_1" ? "tm1_1" : null);
+    safeStopAndRemove(this.stage2BGM, this.currentBgmKey === "tm1_2" ? "tm1_2" : null);
+    this.stage1BGM = null;
+    this.stage2BGM = null;
 
     // Clear TGM2 BGM objects
     if (this.tgm2_stage1) {
-      this.tgm2_stage1.destroy();
+      safeStopAndRemove(this.tgm2_stage1);
       this.tgm2_stage1 = null;
     }
     if (this.tgm2_stage2) {
-      this.tgm2_stage2.destroy();
+      safeStopAndRemove(this.tgm2_stage2);
       this.tgm2_stage2 = null;
     }
     if (this.tgm2_stage3) {
-      this.tgm2_stage3.destroy();
+      safeStopAndRemove(this.tgm2_stage3);
       this.tgm2_stage3 = null;
     }
     if (this.tgm2_stage4) {
-      this.tgm2_stage4.destroy();
+      safeStopAndRemove(this.tgm2_stage4);
       this.tgm2_stage4 = null;
     }
+
+    // Clear cached per-key tracks so initializeBGM() can recreate them.
+    this.bgmTracks = {};
+    this.currentBgmKey = null;
 
     // Reset UI
     this.scoreText.setText("0");
@@ -15255,7 +15778,8 @@ class GameScene extends Phaser.Scene {
 
     // Build a cell-precise overlay so only occupied minos flash
     const bigBlocks = !!this.bigBlocksActive;
-    const blockSize = bigBlocks ? this.cellSize * 2 : this.cellSize;
+    const doubleSized = !!this.doubleSizedPiecesActive;
+    const blockSize = bigBlocks ? this.cellSize * 2 : doubleSized ? this.cellSize * 2 : this.cellSize;
 
     // Create a temporary flash overlay covering only the mino cells
     const flashOverlay = this.add.graphics();
@@ -15268,8 +15792,12 @@ class GameScene extends Phaser.Scene {
           const boardX = this.currentPiece.x + c;
           const boardY = this.currentPiece.y + r;
           if (boardY < 2) continue; // off-screen spawn rows
-          const drawX = this.matrixOffsetX + boardX * this.cellSize;
-          const drawY = this.matrixOffsetY + (boardY - 2) * this.cellSize;
+          const drawX = doubleSized
+            ? this.matrixOffsetX + (boardX * 2 + 1) * this.cellSize
+            : this.matrixOffsetX + boardX * this.cellSize;
+          const drawY = doubleSized
+            ? this.matrixOffsetY + ((boardY - 2) * 2 + 1) * this.cellSize
+            : this.matrixOffsetY + (boardY - 2) * this.cellSize;
           const renderX = bigBlocks ? drawX - this.cellSize / 2 : drawX;
           const renderY = bigBlocks ? drawY - this.cellSize / 2 : drawY;
           const left = renderX - blockSize / 2;
@@ -15921,12 +16449,11 @@ class GameScene extends Phaser.Scene {
       };
     });
 
-    const visibleMatrixHeight = this.cellSize * this.visibleRows; // Height of visible matrix area
+    const visibleMatrixHeight = this.playfieldHeight; // Height of visible matrix area
     const totalCreditsHeight = lines.reduce((sum, line) => sum + line.height, 0);
     const matrixBottomY = this.borderOffsetY + this.playfieldHeight;
     const matrixTopY = this.borderOffsetY;
-    const centerX =
-      this.matrixOffsetX + (this.cellSize * this.board.cols) / 2 - 5; // Center horizontally over matrix, shifted 5px left
+    const centerX = this.matrixOffsetX + this.playfieldWidth / 2 - 5; // Center horizontally over matrix, shifted 5px left
 
     // Start just below the matrix so the first line scrolls in immediately
     const firstLineHeight = lines[0]?.height || 30;
@@ -15983,7 +16510,7 @@ class GameScene extends Phaser.Scene {
           strokeThickness: 2,
           fontFamily: "Hatsukoi Friends",
           fontStyle: "bold",
-          wordWrap: { width: this.cellSize * this.board.cols - 30 },
+          wordWrap: { width: this.playfieldWidth - 30 },
           align: "center",
         })
         .setOrigin(0.5);
@@ -16176,7 +16703,9 @@ class GameScene extends Phaser.Scene {
   draw() {
     // Check if mode uses grading
     const modeConfig = this.gameMode ? this.gameMode.getConfig() : {};
+    const specialMechanics = modeConfig && modeConfig.specialMechanics ? modeConfig.specialMechanics : {};
     const hasGrading = modeConfig.hasGrading !== false;
+    const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
 
     // Capture and immediately clear one-frame render suppression so it never persists
     const suppressRender = this.suppressPieceRenderThisFrame;
@@ -16214,8 +16743,8 @@ class GameScene extends Phaser.Scene {
       this.playfieldBorder.strokeRect(
         this.borderOffsetX - 4,
         this.borderOffsetY - 3,
-        this.cellSize * this.board.cols + 4,
-        this.cellSize * this.visibleRows + 5,
+        this.playfieldWidth + 4,
+        this.playfieldHeight + 5,
       ); // Height reduced by 1px, width expanded 1px left
       this.gameGroup.add(this.playfieldBorder);
 
@@ -16257,24 +16786,31 @@ class GameScene extends Phaser.Scene {
             const cellAlpha = fadeAlpha * (this.stackAlpha || 1);
 
             if (hasValidTextureSource) {
-              const sprite = this.add.sprite(
-                this.matrixOffsetX + col * this.cellSize,
-                this.matrixOffsetY + (lineRow - 2) * this.cellSize,
-                textureKey,
-              );
-              sprite.setDisplaySize(this.cellSize, this.cellSize);
+              const drawX = this.doubleSizedPiecesActive
+                ? this.matrixOffsetX + (col * 2 + 1) * this.cellSize
+                : this.matrixOffsetX + col * this.cellSize;
+              const drawY = this.doubleSizedPiecesActive
+                ? this.matrixOffsetY + ((lineRow - 2) * 2 + 1) * this.cellSize
+                : this.matrixOffsetY + (lineRow - 2) * this.cellSize;
+              const sprite = this.add.sprite(drawX, drawY, textureKey);
+              sprite.setDisplaySize(this.cellSize * renderScale, this.cellSize * renderScale);
               sprite.setTint(0xffffff); // White for cleared lines
               sprite.setAlpha(cellAlpha);
               this.gameGroup.add(sprite);
             } else {
               const graphics = this.add.graphics();
               graphics.fillStyle(0xffffff, cellAlpha);
+              const drawX = this.doubleSizedPiecesActive
+                ? this.matrixOffsetX + (col * 2 + 1) * this.cellSize
+                : this.matrixOffsetX + col * this.cellSize;
+              const drawY = this.doubleSizedPiecesActive
+                ? this.matrixOffsetY + ((lineRow - 2) * 2 + 1) * this.cellSize
+                : this.matrixOffsetY + (lineRow - 2) * this.cellSize;
               graphics.fillRect(
-                this.matrixOffsetX + col * this.cellSize - this.cellSize / 2,
-                this.matrixOffsetY + (lineRow - 2) * this.cellSize -
-                  this.cellSize / 2,
-                this.cellSize,
-                this.cellSize,
+                drawX - (this.cellSize * renderScale) / 2,
+                drawY - (this.cellSize * renderScale) / 2,
+                this.cellSize * renderScale,
+                this.cellSize * renderScale,
               );
               this.gameGroup.add(graphics);
             }
@@ -16321,17 +16857,23 @@ class GameScene extends Phaser.Scene {
 
       // Blinking yellow border around active piece
       const blinkAlpha = 0.5 + 0.5 * Math.sin(this.time.now * 0.02);
-      const bigBlocks = !!this.bigBlocksActive;
-      const outlineCellSize = bigBlocks ? this.cellSize * 2 : this.cellSize;
+      const outlineRenderScale = (this.doubleSizedPiecesActive ? 2 : 1) * (this.bigBlocksActive ? 2 : 1);
+      const outlineCellSize = this.cellSize * outlineRenderScale;
       for (let r = 0; r < this.currentPiece.shape.length; r++) {
         for (let c = 0; c < this.currentPiece.shape[r].length; c++) {
           if (!this.currentPiece.shape[r][c]) continue;
           const pieceY = this.currentPiece.y + r;
           if (pieceY < 2) continue; // off-screen spawn rows
-          const drawX = this.matrixOffsetX + (this.currentPiece.x + c) * this.cellSize;
-          const drawY = this.matrixOffsetY + (pieceY - 2) * this.cellSize;
-          const renderX = bigBlocks ? drawX - this.cellSize / 2 : drawX;
-          const renderY = bigBlocks ? drawY - this.cellSize / 2 : drawY;
+          const boardX = this.currentPiece.x + c;
+          const boardY = pieceY - 2;
+          const drawX = this.doubleSizedPiecesActive
+            ? this.matrixOffsetX + (boardX * 2 + 1) * this.cellSize
+            : this.matrixOffsetX + boardX * this.cellSize;
+          const drawY = this.doubleSizedPiecesActive
+            ? this.matrixOffsetY + (boardY * 2 + 1) * this.cellSize
+            : this.matrixOffsetY + boardY * this.cellSize;
+          const renderX = drawX;
+          const renderY = drawY;
           const outline = this.add.graphics();
           outline.lineStyle(2, 0xffff00, blinkAlpha);
           outline.strokeRect(
@@ -16453,9 +16995,15 @@ class GameScene extends Phaser.Scene {
     const isUltraMode = this.selectedMode === "ultra";
     let timeToDisplay = this.currentTime;
 
-    if (isUltraMode) {
+    const isCountdownMode = isUltraMode || specialMechanics.countdownTimer === true;
+
+    if (isCountdownMode) {
       const timeLimit =
-        this.gameMode && this.gameMode.timeLimit ? this.gameMode.timeLimit : 120;
+        this.gameMode && typeof this.gameMode.totalTime === "number"
+          ? this.gameMode.totalTime
+          : this.gameMode && this.gameMode.timeLimit
+            ? this.gameMode.timeLimit
+            : 120;
       const elapsedActiveTime =
         this.gameMode && typeof this.gameMode.elapsedActiveTime === "number"
           ? this.gameMode.elapsedActiveTime
@@ -16637,7 +17185,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Draw NEXT label - positioned to the right of border
-    const nextX = this.borderOffsetX + this.cellSize * this.board.cols + 20;
+    const nextX = this.borderOffsetX + this.playfieldWidth + 20;
     const nextY = this.borderOffsetY;
     const nextFontSize = Math.max(
       16,
@@ -16689,7 +17237,7 @@ class GameScene extends Phaser.Scene {
       nextPiece.y = 2; // Start from the top visible row
       // Position the next piece area to the right of the playfield
       const nextAreaOffsetX =
-        this.borderOffsetX + this.cellSize * this.board.cols + 20;
+        this.borderOffsetX + this.playfieldWidth + 20;
       const nextAreaOffsetY =
         this.borderOffsetY + 30 + i * (previewCellSize * 3 + 4); // Closer spacing
       nextPiece.draw(this, nextAreaOffsetX, nextAreaOffsetY, previewCellSize);
