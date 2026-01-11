@@ -1256,6 +1256,7 @@ class Board {
     const konohaBigActive = !!(this.scene && this.scene.doubleSizedPiecesActive);
     const boundCols = konohaBigActive ? Math.min(this.cols, 5) : this.cols;
     const boundRows = konohaBigActive ? Math.min(this.rows, 12) : this.rows;
+    
     for (let r = 0; r < piece.shape.length; r++) {
       for (let c = 0; c < piece.shape[r].length; c++) {
         if (piece.shape[r][c]) {
@@ -1281,25 +1282,6 @@ class Board {
         }
       }
     }
-  }
-
-  clearLines() {
-    const linesToClear = [];
-    for (let r = 0; r < this.rows; r++) {
-      // Check if row is completely filled (no empty cells)
-      // This should work for both normal and Konoha 5-wide boards
-      const isRowCompletelyFilled = this.grid[r].every((cell) => cell !== 0);
-      if (isRowCompletelyFilled) {
-        linesToClear.push(r);
-      }
-    }
-    linesToClear.forEach((line) => {
-      this.grid.splice(line, 1);
-      this.grid.unshift(Array(this.cols).fill(0));
-      this.fadeGrid.splice(line, 1);
-      this.fadeGrid.unshift(Array(this.cols).fill(0));
-    });
-    return linesToClear.length;
   }
 
   addCheeseRows(count = 1, cheesePercent = 0) {
@@ -6185,7 +6167,7 @@ class GameScene extends Phaser.Scene {
     this.coolRegretText = null;
     this.coolRegretBlinkEvent = null;
     this.coolRegretHideEvent = null;
-    this.bravoText = null;
+    this.bravoBannerText = null;
     this.bravoHideEvent = null;
     this.bravoActive = false;
     this.sectionPerfTexts = [];
@@ -6624,6 +6606,10 @@ class GameScene extends Phaser.Scene {
     this._konohaAllClearHintKey = null;
     this._konohaAllClearHintPath = null;
     this._kitaLastAchievedAt = -Infinity;
+    this._kitaLastCheckTime = 0;
+    this._kitaWasAchievable = false;
+    this._kitaCrossStartTime = 0;
+    this._kitaShowCross = false;
     if (this.kitaIndicatorText) {
       this.kitaIndicatorText.setVisible(false);
       this.kitaIndicatorText.setText("");
@@ -7724,7 +7710,30 @@ class GameScene extends Phaser.Scene {
         .filter((p) => typeof p === "string")
         .map((p) => p.toUpperCase());
 
-      const pieceTypes = [this.currentPiece.type, ...upcoming];
+      // Build piece list: current + hold (if exists) + next queue
+      const pieceTypes = [];
+      
+      // Add current piece
+      if (this.currentPiece && this.currentPiece.type) {
+        pieceTypes.push(this.currentPiece.type.toUpperCase());
+      }
+      
+      // Add hold piece if available
+      if (this.holdPiece && this.holdPiece.type) {
+        const holdType = typeof this.holdPiece.type === "string" 
+          ? this.holdPiece.type.toUpperCase() 
+          : this.holdPiece.type;
+        if (!pieceTypes.includes(holdType)) {
+          pieceTypes.push(holdType);
+        }
+      }
+      
+      // Add next queue pieces
+      upcoming.forEach(piece => {
+        if (!pieceTypes.includes(piece)) {
+          pieceTypes.push(piece);
+        }
+      });
       const gridKey = JSON.stringify(normalizeGrid(this.board.grid || []));
       const cacheKey = `${gridKey}|${pieceTypes.join("")}`;
       if (this._konohaAllClearHintKey !== cacheKey) {
@@ -7735,22 +7744,46 @@ class GameScene extends Phaser.Scene {
       const path = this._konohaAllClearHintPath;
       const achievable = Array.isArray(path) && path.length > 0;
 
-      // Kita indicator (fox)
+      // Kita indicator (fox) - updated logic
       const now = this.time?.now || Date.now();
       if (!Number.isFinite(this._kitaLastAchievedAt)) this._kitaLastAchievedAt = -Infinity;
+      
       const achievedRecently = now - this._kitaLastAchievedAt < 1200;
       const foxBase = "🦊";
       const foxTick = "✓";
       const foxCross = "✗";
+      
       if (this.kitaIndicatorText) {
         this.kitaIndicatorText.setVisible(true);
         if (achievedRecently) {
+          // Show fox with tick for 1.2 seconds after achievement
           this.kitaIndicatorText.setText(`${foxBase}${foxTick}`);
         } else if (achievable) {
+          // Show fox when All Clear is possible
           this.kitaIndicatorText.setText(`${foxBase}`);
         } else {
-          this.kitaIndicatorText.setText(`${foxBase}${foxCross}`);
+          // Show fox with cross when All Clear was possible but missed
+          // Check if we recently missed an All Clear opportunity
+          const timeSinceLastCheck = now - (this._kitaLastCheckTime || 0);
+          if (timeSinceLastCheck > 100) { // Check every 100ms to avoid flicker
+            this._kitaLastCheckTime = now;
+            // If we had an achievable state before but don't now, show cross for 2 seconds
+            if (this._kitaWasAchievable && !achievable) {
+              this._kitaCrossStartTime = now;
+              this._kitaShowCross = true;
+            }
+          }
+          
+          if (this._kitaShowCross && (now - this._kitaCrossStartTime < 2000)) {
+            this.kitaIndicatorText.setText(`${foxBase}${foxCross}`);
+          } else {
+            this.kitaIndicatorText.setText("");
+            this._kitaShowCross = false;
+          }
         }
+        
+        // Update achievable state tracking
+        this._kitaWasAchievable = achievable;
       }
 
       if (!achievable) {
@@ -8445,9 +8478,8 @@ class GameScene extends Phaser.Scene {
     );
 
     // Move the matrix to the right within the border
-    this.matrixOffsetX = this.borderOffsetX + 17 - 10; // Shifted 2px left to align with border
-    this.matrixOffsetY = this.borderOffsetY + 20 - 7;
-
+    this.matrixOffsetX = this.borderOffsetX + 17; // Shifted 2px left to align with border
+    this.matrixOffsetY = this.borderOffsetY + 20;
     if (this.kitaIndicatorText) {
       // Position Kita indicator above the Bravo counter
       // Bravo counter is at ppsX, bravoY (where bravoY = ppsY - 60)
@@ -9047,7 +9079,7 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setVisible(isKonohaMode);
     this.bravoText = this.add
-      .text(ppsX, bravoY + 15, "0", {
+      .text(ppsX, bravoY + 15, "BRAVO", {
         fontSize: `${largeFontSize}px`,
         fill: "#ffffff",
         fontFamily: "Hatsukoi Friends",
@@ -9497,6 +9529,10 @@ class GameScene extends Phaser.Scene {
     this._konohaAllClearHintKey = null;
     this._konohaAllClearHintPath = null;
     this._kitaLastAchievedAt = -Infinity;
+    this._kitaLastCheckTime = 0;
+    this._kitaWasAchievable = false;
+    this._kitaCrossStartTime = 0;
+    this._kitaShowCross = false;
 
     if (!this.kitaIndicatorText) {
       const fontSize = Math.max(14, Math.floor(this.cellSize * 0.75));
@@ -9538,8 +9574,10 @@ class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
 
     // Scene instances can be reused across restarts; reset runtime flags/timers.
-    this.board = new Board();
-    this.board.scene = this;
+    if (!this.board) {
+      this.board = new Board();
+      this.board.scene = this;
+    }
     this.currentPiece = null;
     this.holdPiece = null;
     this.canHold = true;
@@ -9734,7 +9772,7 @@ class GameScene extends Phaser.Scene {
       this.gradePointsText = null;
       this.nextGradeText = null;
       this.bravoLabel = null;
-      this.bravoText = null;
+      this.bravoBannerText = null;
       this.playfieldBorder = null;
       this.minoRowFadeAlpha = null;
       if (this.hanabiLabel) this.hanabiLabel.destroy();
@@ -10033,9 +10071,9 @@ class GameScene extends Phaser.Scene {
 
   showBravoBanner() {
     // Reuse if exists
-    if (!this.bravoText) {
+    if (!this.bravoBannerText) {
       const fontSize = this.timeText?.style?.fontSize || `${Math.max(this.uiScale * 28, 20)}px`;
-      this.bravoText = this.add
+      this.bravoBannerText = this.add
         .text(
           this.borderOffsetX + this.playfieldWidth / 2,
           this.borderOffsetY + this.playfieldHeight / 2,
@@ -10052,25 +10090,34 @@ class GameScene extends Phaser.Scene {
         .setDepth(9999)
         .setAlpha(0);
       if (this.overlayGroup) {
-        this.overlayGroup.add(this.bravoText);
-      } else {
-        this.gameGroup.add(this.bravoText);
+        this.overlayGroup.add(this.bravoBannerText);
       }
     }
 
-    if (this.bravoHideEvent) {
-      this.bravoHideEvent.remove(false);
-      this.bravoHideEvent = null;
-    }
+    // Get current Bravo count from game mode
+    const bravoCount = this.gameMode && typeof this.gameMode.allClearsAchieved === "number" 
+      ? this.gameMode.allClearsAchieved 
+      : 0;
 
+    // Set Bravo text with count
+    this.bravoBannerText.setText(`BRAVO! ${bravoCount}`);
+    this.bravoBannerText.setVisible(true);
+    this.bravoBannerText.setAlpha(1); // Set to fully visible immediately
+    this.bravoBannerText.setScale(1);
+    this.bravoBannerText.setAngle(0);
     this.bravoActive = true;
-    this.bravoText.setText("BRAVO!!");
-    this.bravoText.setAlpha(0);
-    this.bravoText.setScale(0);
-    this.bravoText.setAngle(0);
-    this.bravoText.setVisible(true);
-    this.children.bringToTop(this.bravoText);
 
+    console.log(`[DEBUG] Bravo banner created: text="${this.bravoBannerText.text}", visible=${this.bravoBannerText.visible}, alpha=${this.bravoBannerText.alpha}`);
+
+    // Position on left of matrix, 60px up
+    const boardX = this.boardX || 0;
+    const boardWidth = (this.board?.cols || 10) * (this.cellSize || 24);
+    const textX = boardX - 100; // Left of matrix
+    const textY = (this.boardY || 0) - 60; // 60px up from matrix top
+
+    this.bravoBannerText.setPosition(textX, textY);
+
+    // Play appropriate sound
     try {
       const modeId =
         this.gameMode && typeof this.gameMode.getModeId === "function"
@@ -10081,31 +10128,33 @@ class GameScene extends Phaser.Scene {
       this.sound?.add(sfxKey, { volume: isKonohaMode ? 0.9 : 0.85 })?.play();
     } catch {}
 
-    // Timeline: grow + spin in 1s, then fade and slightly shrink over 3s
-    const tl = this.tweens.createTimeline();
-    tl.add({
-      targets: this.bravoText,
+    // Timeline: grow + spin multiple rounds in 1s, then fade and slightly shrink over 3s
+    // First tween: grow + spin multiple rounds in 1s (3 full rotations = 1080 degrees)
+    this.tweens.add({
+      targets: this.bravoBannerText,
       scale: { from: 0, to: 1 },
       alpha: { from: 0, to: 1 },
-      angle: { from: 0, to: 360 },
+      angle: { from: 0, to: 1080 }, // 3 full rotations
       duration: 1000,
       ease: "Cubic.easeOut",
-    });
-    tl.add({
-      targets: this.bravoText,
-      scale: { from: 1, to: 0.9 },
-      alpha: { from: 1, to: 0 },
-      duration: 3000,
-      ease: "Cubic.easeInOut",
-    });
-    tl.setCallback("onComplete", () => {
-      if (this.bravoText) {
-        this.bravoText.setVisible(false);
+      onComplete: () => {
+        // Second tween: fade and slightly shrink over 3s
+        this.tweens.add({
+          targets: this.bravoBannerText,
+          scale: { from: 1, to: 0.9 },
+          alpha: { from: 1, to: 0 },
+          duration: 3000,
+          ease: "Cubic.easeInOut",
+          onComplete: () => {
+            if (this.bravoBannerText) {
+              this.bravoBannerText.setVisible(false);
+            }
+            this.bravoActive = false;
+            this.bravoHideEvent = null;
+          }
+        });
       }
-      this.bravoActive = false;
-      this.bravoHideEvent = null;
     });
-    tl.play();
   }
 
   checkCoolRegretAnnouncements() {
@@ -10296,19 +10345,19 @@ class GameScene extends Phaser.Scene {
 
     // Konoha modes BGM logic
     if (modeId === "konoha_easy") {
-      // Konoha Easy: use 422_m1.mp3
-      if (this.currentBgmKey !== "422_m1") {
-        this.playBgmByKey("422_m1");
+      // Konoha Easy: use konoha_easy track
+      if (this.currentBgmKey !== "konoha_easy") {
+        this.playBgmByKey("konoha_easy");
       }
       return;
     }
     
     if (modeId === "konoha_hard") {
-      // Konoha Hard: use 423_m2.mp3 before level 1000, 424_m3.mp3 after level 1000
+      // Konoha Hard: use konoha_hard_pre before level 1000, konoha_hard_post after level 1000
       const internalLevel = this.gameMode && typeof this.gameMode.internalLevel === "number" 
         ? this.gameMode.internalLevel 
         : this.level;
-      const desiredKey = internalLevel >= 1000 ? "424_m3" : "423_m2";
+      const desiredKey = internalLevel >= 1000 ? "konoha_hard_post" : "konoha_hard_pre";
       
       if (this.currentBgmKey !== desiredKey) {
         this.playBgmByKey(desiredKey);
@@ -13678,10 +13727,10 @@ class GameScene extends Phaser.Scene {
       }
       this.backToBack = isDifficult;
 
-      // All clear bonus
+      // All clear bonus - don't modify clearType, let Bravo animation handle it
       if (isAllClear) {
         points += 3500;
-        clearType = clearType ? `${clearType} all clear` : "all clear";
+        // clearType remains unchanged - Bravo animation will show separately
       }
     } else {
       this.comboCount = this.getComboStartValue();
@@ -14991,9 +15040,11 @@ class GameScene extends Phaser.Scene {
   }
 
   updateBravoCounter(bravoCount, target = null) {
+    if (this.bravoLabel) {
+      this.bravoLabel.setText("BRAVO");
+    }
     if (this.bravoText) {
-      const displayText = target !== null ? `${bravoCount}/${target}` : bravoCount.toString();
-      this.bravoText.setText(displayText);
+      this.bravoText.setText(bravoCount.toString());
     }
   }
 
@@ -15128,10 +15179,12 @@ class GameScene extends Phaser.Scene {
       this.bigBlocksActive = false;
       this.visibleRows = visibleHeight;
     } else {
-      this.board = new Board();
-      this.doubleSizedPiecesActive = false;
-      this.bigBlocksActive = false;
-      this.visibleRows = 20;
+      if (!this.board) {
+        this.board = new Board();
+        this.doubleSizedPiecesActive = false;
+        this.bigBlocksActive = false;
+        this.visibleRows = 20;
+      }
     }
     this.board.scene = this;
     this.currentPiece = null;

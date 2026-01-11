@@ -68,27 +68,10 @@ class KonohaEasyMode extends BaseMode {
         
         if (!isBoardClear) return false;
         
-        // Enhanced All Clear logic: check if all clear solution is within available pieces
-        // Require that the exact pieces needed for solution are within Next queue + Hold (max 6 total)
-        const availablePieces = [];
-        
-        // Add held piece if available
-        if (gameScene.holdPiece) {
-            availablePieces.push(typeof gameScene.holdPiece === 'string' ? gameScene.holdPiece : gameScene.holdPiece.type);
-        }
-        
-        // Add next 6 pieces (or as many as available)
-        if (Array.isArray(gameScene.nextPieces)) {
-            for (let i = 0; i < Math.min(6, gameScene.nextPieces.length); i++) {
-                const piece = gameScene.nextPieces[i];
-                availablePieces.push(typeof piece === 'string' ? piece : piece.type || piece);
-            }
-        }
-        
-        // For a 5x10 board, we need exactly the pieces that can solve the current state
-        // Since we can't predict the exact solution, we'll check if we have enough pieces to potentially solve
-        // This is a more permissive check than requiring exact solution
-        return availablePieces.length >= 6; // Require up to 6 pieces (held + next)
+        // All Clear logic: check if available pieces can potentially solve the empty board
+        // Since board is empty, any piece can be placed, so All Clear is always possible
+        // This is more accurate than complex sequence prediction
+        return true;
     }
 
     // Handle line clear events
@@ -298,27 +281,10 @@ class KonohaHardMode extends BaseMode {
         
         if (!isBoardClear) return false;
         
-        // Enhanced All Clear logic: check if all clear solution is within available pieces
-        // Require that the exact pieces needed for solution are within Next queue + Hold (max 6 total)
-        const availablePieces = [];
-        
-        // Add held piece if available
-        if (gameScene.holdPiece) {
-            availablePieces.push(typeof gameScene.holdPiece === 'string' ? gameScene.holdPiece : gameScene.holdPiece.type);
-        }
-        
-        // Add next 6 pieces (or as many as available)
-        if (Array.isArray(gameScene.nextPieces)) {
-            for (let i = 0; i < Math.min(6, gameScene.nextPieces.length); i++) {
-                const piece = gameScene.nextPieces[i];
-                availablePieces.push(typeof piece === 'string' ? piece : piece.type || piece);
-            }
-        }
-        
-        // For a 5x10 board, we need exactly the pieces that can solve the current state
-        // Since we can't predict the exact solution, we'll check if we have enough pieces to potentially solve
-        // This is a more permissive check than requiring exact solution
-        return availablePieces.length >= 6; // Require up to 6 pieces (held + next)
+        // All Clear logic: check if available pieces can potentially solve the empty board
+        // Since board is empty, any piece can be placed, so All Clear is always possible
+        // This is more accurate than complex sequence prediction
+        return true;
     }
 
     // Handle line clear events
