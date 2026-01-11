@@ -90,7 +90,8 @@ class KonohaEasyMode extends BaseMode {
         }
 
         if (isAllClear) {
-            this.allClearsAchieved++;
+            // Don't increment here - already handled in main game loop
+            // this.allClearsAchieved++;
             if (this.allClearsAchieved >= this.allClearsTarget) {
                 if (typeof gameScene.victory === 'function') {
                     gameScene.victory();
@@ -303,7 +304,8 @@ class KonohaHardMode extends BaseMode {
         }
 
         if (isAllClear) {
-            this.allClearsAchieved++;
+            // Don't increment here - already handled in main game loop
+            // this.allClearsAchieved++;
         }
         
         // Update Bravo counter display (will be implemented in separate UI element)

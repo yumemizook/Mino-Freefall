@@ -8480,6 +8480,17 @@ class GameScene extends Phaser.Scene {
     // Move the matrix to the right within the border
     this.matrixOffsetX = this.borderOffsetX + 17; // Shifted 2px left to align with border
     this.matrixOffsetY = this.borderOffsetY + 20;
+    
+    // Adjust matrix position for Konoha modes (20px left, 15px up)
+    const modeId = this.gameMode && typeof this.gameMode.getModeId === "function"
+      ? this.gameMode.getModeId()
+      : this.selectedMode;
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    
+    if (isKonohaMode) {
+      this.matrixOffsetX -= 20; // Move 20px left
+      this.matrixOffsetY -= 19; // Move 19px up (15 + 4 additional)
+    }
     if (this.kitaIndicatorText) {
       // Position Kita indicator above the Bravo counter
       // Bravo counter is at ppsX, bravoY (where bravoY = ppsY - 60)
@@ -10094,67 +10105,177 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Get current Bravo count from game mode
-    const bravoCount = this.gameMode && typeof this.gameMode.allClearsAchieved === "number" 
-      ? this.gameMode.allClearsAchieved 
-      : 0;
+    // Get current Bravo count - calculate correctly for all modes
+    let bravoText = "BRAVO!";
+    let bravoCount = "";
+    const modeId =
+      (this.gameMode && typeof this.gameMode.getModeId === "function")
+        ? this.gameMode.getModeId()
+        : this.selectedMode || "";
+        
+    if (modeId === "konoha_easy" || modeId === "konoha_hard") {
+      // For Konoha modes, separate the count
+      const count = this.gameMode && typeof this.gameMode.allClearsAchieved === "number" 
+        ? this.gameMode.allClearsAchieved 
+        : 0;
+      bravoText = "BRAVO!";
+      bravoCount = count.toString();
+    }
 
-    // Set Bravo text with count
-    this.bravoBannerText.setText(`BRAVO! ${bravoCount}`);
+    // Set Bravo text
+    this.bravoBannerText.setText(bravoText);
     this.bravoBannerText.setVisible(true);
-    this.bravoBannerText.setAlpha(1); // Set to fully visible immediately
-    this.bravoBannerText.setScale(1);
+    this.bravoBannerText.setAlpha(0); // Start at 0, animation will fade in
+    this.bravoBannerText.setScale(0); // Start at 0, animation will scale up
     this.bravoBannerText.setAngle(0);
     this.bravoActive = true;
 
-    console.log(`[DEBUG] Bravo banner created: text="${this.bravoBannerText.text}", visible=${this.bravoBannerText.visible}, alpha=${this.bravoBannerText.alpha}`);
+    // Create separate count text for Konoha modes
+    if (modeId === "konoha_easy" || modeId === "konoha_hard" && bravoCount) {
+      if (!this.bravoCountText) {
+        const fontSize = this.timeText?.style?.fontSize || `${Math.max(this.uiScale * 32, 24)}px`;
+        this.bravoCountText = this.add
+          .text(0, 0, bravoCount, {
+            fontSize,
+            fill: "#ffffff",
+            fontFamily: "Hatsukoi Friends",
+            fontStyle: "bold",
+            align: "center",
+          })
+          .setOrigin(0.5, 0.5)
+          .setDepth(9999)
+          .setAlpha(0);
+        if (this.overlayGroup) {
+          this.overlayGroup.add(this.bravoCountText);
+        }
+      } else {
+        this.bravoCountText.setText(bravoCount);
+        this.bravoCountText.setStyle({ 
+          fontSize: `${Math.max(this.uiScale * 32, 24)}px`,
+          fill: "#ffffff"
+        });
+      }
+      this.bravoCountText.setVisible(true);
+      this.bravoCountText.setAlpha(0);
+      this.bravoCountText.setScale(0);
+    }
 
-    // Position on left of matrix, 60px up
-    const boardX = this.boardX || 0;
-    const boardWidth = (this.board?.cols || 10) * (this.cellSize || 24);
-    const textX = boardX - 100; // Left of matrix
-    const textY = (this.boardY || 0) - 60; // 60px up from matrix top
+    console.log(`[DEBUG] Bravo banner created: text="${this.bravoBannerText.text}", visible=${this.bravoBannerText.visible}, alpha=${this.bravoBannerText.alpha}`);
+    console.log(`[DEBUG] Bravo banner in overlayGroup: ${this.overlayGroup ? this.overlayGroup.contains(this.bravoBannerText) : 'no overlayGroup'}`);
+    console.log(`[DEBUG] Overlay group visible: ${this.overlayGroup ? this.overlayGroup.visible : 'no overlayGroup'}`);
+
+    // Position for Konoha modes - higher and slightly left
+    let textX, textY;
+    if (modeId === "konoha_easy" || modeId === "konoha_hard") {
+      textX = this.borderOffsetX + this.playfieldWidth / 2 - 30; // Move 30px left
+      textY = this.borderOffsetY + this.playfieldHeight / 2 - 40; // Move 40px up
+    } else {
+      textX = this.borderOffsetX + this.playfieldWidth / 2;
+      textY = this.borderOffsetY + this.playfieldHeight / 2;
+    }
+
+    console.log(`[DEBUG] Bravo banner positioning: textX=${textX}, textY=${textY}, borderOffsetX=${this.borderOffsetX}, borderOffsetY=${this.borderOffsetY}, playfieldWidth=${this.playfieldWidth}, playfieldHeight=${this.playfieldHeight}`);
 
     this.bravoBannerText.setPosition(textX, textY);
 
+    // Position count text for Konoha modes - near right border
+    if (modeId === "konoha_easy" || modeId === "konoha_hard" && this.bravoCountText) {
+      const countX = this.borderOffsetX + this.playfieldWidth - 20; // Near right border
+      const countY = textY; // Same vertical level as BRAVO text
+      this.bravoCountText.setPosition(countX, countY);
+    }
+
+    // Check if this is a Konoha mode for animation
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+
     // Play appropriate sound
     try {
-      const modeId =
-        this.gameMode && typeof this.gameMode.getModeId === "function"
-          ? this.gameMode.getModeId()
-          : this.selectedMode;
-      const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
       const sfxKey = isKonohaMode ? "konohabravo" : "firework";
       this.sound?.add(sfxKey, { volume: isKonohaMode ? 0.9 : 0.85 })?.play();
     } catch {}
 
-    // Timeline: grow + spin multiple rounds in 1s, then fade and slightly shrink over 3s
-    // First tween: grow + spin multiple rounds in 1s (3 full rotations = 1080 degrees)
-    this.tweens.add({
-      targets: this.bravoBannerText,
-      scale: { from: 0, to: 1 },
-      alpha: { from: 0, to: 1 },
-      angle: { from: 0, to: 1080 }, // 3 full rotations
-      duration: 1000,
-      ease: "Cubic.easeOut",
-      onComplete: () => {
-        // Second tween: fade and slightly shrink over 3s
-        this.tweens.add({
-          targets: this.bravoBannerText,
-          scale: { from: 1, to: 0.9 },
-          alpha: { from: 1, to: 0 },
-          duration: 3000,
-          ease: "Cubic.easeInOut",
-          onComplete: () => {
-            if (this.bravoBannerText) {
-              this.bravoBannerText.setVisible(false);
-            }
-            this.bravoActive = false;
-            this.bravoHideEvent = null;
+    // Different animations for Konoha vs other modes
+    if (isKonohaMode) {
+      // Konoha mode: 3 laps in 0.5s, then slow rotation during ARE
+      const areDuration = this.getAREDuration ? this.getAREDuration() : 1000; // Default 1s if no ARE
+      
+      // First phase: 3 laps in 0.15s with bigger scale
+      this.tweens.add({
+        targets: this.bravoBannerText,
+        scale: { from: 0, to: 1.5 }, // Bigger scale
+        alpha: { from: 0, to: 1 },
+        angle: { from: 0, to: 1080 }, // 3 full rotations in 0.15s
+        duration: 150,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          // Animate count text if it exists
+          if (this.bravoCountText) {
+            this.tweens.add({
+              targets: this.bravoCountText,
+              scale: { from: 0, to: 1.2 },
+              alpha: { from: 0, to: 1 },
+              duration: 300,
+              ease: "Cubic.easeOut"
+            });
           }
-        });
-      }
-    });
+          
+          // Second phase: slow rotation during remaining ARE time
+          const remainingARE = Math.max(0, areDuration - 150);
+          if (remainingARE > 0) {
+            this.tweens.add({
+              targets: this.bravoBannerText,
+              angle: { from: 1080, to: 1080 + 360 }, // 1 more slow rotation
+              duration: remainingARE,
+              ease: "Linear",
+              onComplete: () => {
+                // End animation immediately after ARE
+                this.endBravoAnimation();
+              }
+            });
+          } else {
+            this.endBravoAnimation();
+          }
+        }
+      });
+    } else {
+      // Original animation for other modes
+      this.tweens.add({
+        targets: this.bravoBannerText,
+        scale: { from: 0, to: 1 },
+        alpha: { from: 0, to: 1 },
+        angle: { from: 0, to: 1080 }, // 3 full rotations
+        duration: 1000,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          // Second tween: fade and slightly shrink over 3s
+          this.tweens.add({
+            targets: this.bravoBannerText,
+            scale: { from: 1, to: 0.9 },
+            alpha: { from: 1, to: 0 },
+            duration: 3000,
+            ease: "Cubic.easeInOut",
+            onComplete: () => {
+              if (this.bravoBannerText) {
+                this.bravoBannerText.setVisible(false);
+              }
+              this.bravoActive = false;
+              this.bravoHideEvent = null;
+            }
+          });
+        }
+      });
+    }
+  }
+
+  endBravoAnimation() {
+    if (this.bravoBannerText) {
+      this.bravoBannerText.setVisible(false);
+    }
+    if (this.bravoCountText) {
+      this.bravoCountText.setVisible(false);
+    }
+    this.bravoActive = false;
+    this.bravoHideEvent = null;
   }
 
   checkCoolRegretAnnouncements() {
@@ -13039,6 +13160,14 @@ class GameScene extends Phaser.Scene {
       try {
         `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`;
       } catch {}
+      
+      // For Konoha modes, increment the count before showing banner
+      if (modeId === "konoha_easy" || modeId === "konoha_hard") {
+        if (this.gameMode && typeof this.gameMode.allClearsAchieved === "number") {
+          this.gameMode.allClearsAchieved++;
+        }
+      }
+      
       this.showBravoBanner();
 
       // Kita: mark all-clear achieved for Konoha modes (used for tick display)
