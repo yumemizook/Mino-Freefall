@@ -7609,19 +7609,21 @@ class GameScene extends Phaser.Scene {
       return;
     }
     
-    // Initialize Lightweight Minosa AI once
+    // Initialize Robust Minosa AI once
     if (!this._minosaAI) {
-      if (typeof LightweightMinosa === 'undefined') return;
+      if (typeof RobustMinosa === 'undefined') return;
       
-      this._minosaAI = new LightweightMinosa({
-        rows: 10,
-        cols: 5,
-        pieceSet: modeId === 'konoha_easy' ? 'ILJOT' : 'STANDARD'
-      });
-      
-      // Reset cache after initialization
-      this._minosaCacheKey = null;
-      this._minosaFrameCounter = 0;
+      try {
+        this._minosaAI = new RobustMinosa({
+          rows: 10,
+          cols: 5,
+          pieceSet: modeId === 'konoha_easy' ? 'ILJOT' : 'STANDARD'
+        });
+        console.log('[MINOSA] Robust Minosa AI initialized successfully');
+      } catch (error) {
+        console.error('[MINOSA] Failed to initialize RobustMinosa:', error);
+        return;
+      }
     }
     
     // Reset detection after bravo or mode start
@@ -7640,6 +7642,7 @@ class GameScene extends Phaser.Scene {
     
     // Get current game state
     const currentPiece = this.currentPiece?.type?.toUpperCase() || null;
+    const currentRotation = this.currentPiece?.rotation || 0;
     const nextQueue = (this.nextPieces || [])
       .slice(0, 5)
       .map(p => typeof p === "string" ? p : p?.type || p?.piece || p)
@@ -7673,8 +7676,14 @@ class GameScene extends Phaser.Scene {
       if (holdPiece) availablePieces.push(holdPiece);
       
       this._minosaPath = this._minosaAI.findAllClearPath(
-        minosaBoard, currentPiece, nextQueue, holdPiece, true
+        minosaBoard, currentPiece, nextQueue, holdPiece, true, currentRotation
       );
+      
+      // Validate the returned path
+      if (this._minosaPath && !Array.isArray(this._minosaPath)) {
+        console.warn('[MINOSA] Invalid path returned, setting to null');
+        this._minosaPath = null;
+      }
     }
     
     // Update Kita indicator
@@ -7684,27 +7693,96 @@ class GameScene extends Phaser.Scene {
     if (this._minosaPath && this._minosaPath.length > 0) {
       const move = this._minosaPath[0];
       if (move && this._minosaAI) {
-        // Get piece shape from LightweightMinosa
-        const pieceShapes = this._minosaAI.getPieceShapes(move.piece);
-        if (pieceShapes && pieceShapes.length > 0) {
-          const pieceShape = pieceShapes[move.rotation];
-          if (pieceShape) {
-            let landingY = move.y;
-            const tempBoard = this.board.grid.slice(2).map(row => row.map(cell => (cell ? 1 : 0)));
-            while (this._minosaAI.isValidPosition(tempBoard, pieceShape, move.x, landingY + 1)) {
-              landingY++;
-            }
+        try {
+          // Get piece shape from LightweightMinosa
+          const pieceShapes = this._minosaAI.getPieceShapes(move.piece);
+          if (pieceShapes && pieceShapes.length > 0) {
+            const rotation = move.rotation || 0;
+            if (rotation >= 0 && rotation < pieceShapes.length) {
+              const pieceShape = pieceShapes[rotation];
+              if (pieceShape) {
+                let landingY = move.y || 0;
+                const tempBoard = this.board?.grid?.slice(2)?.map(row => row?.map(cell => (cell ? 1 : 0))) || [];
+                
+                // Only calculate landing position if we have a valid board
+                if (tempBoard.length > 0) {
+                  while (this._minosaAI.isValidPosition(tempBoard, pieceShape, move.x, landingY + 1)) {
+                    landingY++;
+                  }
+                }
 
-            this.hintPlacement = {
-              x: move.x,
-              y: landingY,
-              rotation: move.rotation,
-              shape: pieceShape,
-            };
+                // Trim the shape to remove empty padding rows/columns
+                const trimmedShape = this.trimPieceShape(pieceShape);
+                const shapeOffsetY = this.getShapeTopOffset(pieceShape);
+
+                this.hintPlacement = {
+                  x: move.x,
+                  y: landingY,
+                  rotation: rotation,
+                  shape: trimmedShape,
+                  originalShape: pieceShape,
+                  shapeOffsetY: shapeOffsetY
+                };
+              }
+            }
           }
+        } catch (error) {
+          console.warn('[MINOSA] Error calculating hint placement:', error);
+          this.hintPlacement = null;
+        }
+      }
+    } else {
+      this.hintPlacement = null;
+    }
+  }
+  
+  trimPieceShape(shape) {
+    if (!shape || !Array.isArray(shape)) return shape;
+    
+    // Find bounds of the actual piece (excluding empty padding)
+    let minRow = shape.length, maxRow = -1;
+    let minCol = shape[0].length, maxCol = -1;
+    
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c] === 1) {
+          minRow = Math.min(minRow, r);
+          maxRow = Math.max(maxRow, r);
+          minCol = Math.min(minCol, c);
+          maxCol = Math.max(maxCol, c);
         }
       }
     }
+    
+    // If no blocks found, return empty shape
+    if (maxRow === -1) return [];
+    
+    // Extract the trimmed shape
+    const trimmed = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      const row = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        row.push(shape[r][c] || 0);
+      }
+      trimmed.push(row);
+    }
+    
+    return trimmed;
+  }
+  
+  getShapeTopOffset(shape) {
+    if (!shape || !Array.isArray(shape)) return 0;
+    
+    // Find the first row that contains a block
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c] === 1) {
+          return r; // Return the row index of the first block
+        }
+      }
+    }
+    
+    return 0; // No blocks found
   }
   
   updateKitaIndicator(path) {
@@ -16816,7 +16894,7 @@ class GameScene extends Phaser.Scene {
       const hintBlinkAlpha = 0.3 + 0.7 * Math.sin(this.time.now * 0.005);
       if (this.hintPlacement && this._minosaPath && this._minosaPath.length > 0) {
         const hintColor = 0xFF8C00; // Fixed orange color
-        const pieceShape = this.hintPlacement.shape;
+        const pieceShape = this.hintPlacement.shape; // Use trimmed shape
         const cell = this.cellSize;
         const offX = this.matrixOffsetX;
         const offY = this.matrixOffsetY;
@@ -16828,10 +16906,11 @@ class GameScene extends Phaser.Scene {
         for (let r = 0; r < pieceShape.length; r++) {
           for (let c = 0; c < pieceShape[r].length; c++) {
             if (pieceShape[r][c]) {
+              // Use the original hint placement position, but adjust for trimmed shape
               const boardX = this.hintPlacement.x + c;
-              const boardY = this.hintPlacement.y + r;
+              const boardY = this.hintPlacement.y + this.hintPlacement.shapeOffsetY + r;
 
-              // hintPlacement.y is already adjusted for visible rows
+              // Adjust for visible rows (board is 10 rows high, we render from row 0)
               const drawY = boardY;
 
               if (drawY < 0 || drawY >= 10) continue; // Skip if outside visible area

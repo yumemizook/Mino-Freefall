@@ -102,33 +102,31 @@ class MinosaAI {
      * Recursive search for All Clear path
      */
     searchAllClear(board, pieces, pieceIndex, heldPiece, canHold, path) {
-        const boardKey = board.map(r => r.join('')).join('|');
-        const piecesKey = pieces.slice(pieceIndex).join(',');
-        const cacheKey = `${boardKey}-${piecesKey}-${heldPiece || ''}`;
+        // Create more efficient cache key
+        const boardHash = this.hashBoard(board);
+        const piecesHash = pieces.slice(pieceIndex).join(',');
+        const heldHash = heldPiece || 'null';
+        const cacheKey = `${boardHash}|${piecesHash}|${heldHash}`;
+        
         if (this.memo[cacheKey]) {
             return this.memo[cacheKey];
         }
-        console.log('[MINOSA] Search step - pieceIndex:', pieceIndex, 'heldPiece:', heldPiece, 'path length:', path.length);
         
         // Success condition
         if (this.isBoardEmpty(board)) {
-            console.log('[MINOSA] Board empty! Path found:', path);
             this.memo[cacheKey] = path;
             return path;
         }
         
         // Failure condition
         if (pieceIndex >= pieces.length && !heldPiece) {
-            console.log('[MINOSA] No pieces left, search failed');
             this.memo[cacheKey] = null;
             return null;
         }
         
         // Pruning: mathematical impossibility check
         const remainingPieces = (pieces.length - pieceIndex) + (heldPiece ? 1 : 0);
-        console.log('[MINOSA] Remaining pieces calculation:', pieces.length, '-', pieceIndex, '+', (heldPiece ? 1 : 0), '=', remainingPieces);
         if (this.isMathematicallyImpossible(board, remainingPieces)) {
-            console.log('[MINOSA] Mathematically impossible with', remainingPieces, 'pieces');
             this.memo[cacheKey] = null;
             return null;
         }
@@ -136,16 +134,12 @@ class MinosaAI {
         // Determine current piece to play
         const currentPiece = heldPiece || pieces[pieceIndex];
         if (!currentPiece || !this.shapes[currentPiece]) {
-            console.log('[MINOSA] Invalid piece:', currentPiece);
             this.memo[cacheKey] = null;
             return null;
         }
         
-        console.log('[MINOSA] Trying piece:', currentPiece);
-        
         // Try all valid moves for current piece
         const moves = this.generateValidMoves(board, currentPiece);
-        console.log('[MINOSA] Generated', moves.length, 'moves for', currentPiece);
         
         // Sort moves by lines cleared (optimization)
         moves.sort((a, b) => b.linesCleared - a.linesCleared);
@@ -200,16 +194,26 @@ class MinosaAI {
     }
     
     /**
+     * Efficient board hashing for memoization
+     */
+    hashBoard(board) {
+        let hash = 0;
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                hash = ((hash << 1) | (board[r][c] & 1)) & 0xFFFFFF; // Keep hash bounded
+            }
+        }
+        return hash.toString(36);
+    }
+    
+    /**
      * Generate all valid moves for a piece on the current board
      */
     generateValidMoves(board, pieceType) {
         const shapes = this.shapes[pieceType];
         if (!shapes) {
-            console.log('[MINOSA] No shapes found for piece:', pieceType);
             return [];
         }
-        
-        console.log('[MINOSA] Generating moves for piece:', pieceType, 'with', shapes.length, 'rotations');
         
         const moves = [];
         
@@ -231,7 +235,6 @@ class MinosaAI {
             }
         });
         
-        console.log('[MINOSA] Generated', moves.length, 'valid moves for', pieceType);
         return moves;
     }
     
@@ -358,11 +361,8 @@ class MinosaAI {
             }
         }
         
-        console.log('[MINOSA] Math check - filledBlocks:', filledBlocks, 'piecesRemaining:', piecesRemaining);;
-        
         // Basic economy check: need enough pieces to clear all blocks
         if (piecesRemaining * 4 < filledBlocks) {
-            console.log('[MINOSA] Failed basic economy check:', piecesRemaining * 4, '<', filledBlocks);
             return true;
         }
         
@@ -374,24 +374,20 @@ class MinosaAI {
         
         // We need to fill exactly 20 cells with complete rows
         if (totalPieceCells !== totalCells) {
-            console.log('[MINOSA] Failed total cells check:', totalPieceCells, '≠', totalCells);
             return true;
         }
         
         // Check if we can partition pieces into 5-block chunks (complete rows)
         // This is a simplified check - in reality, pieces can span multiple rows
         if (filledBlocks % 5 !== 0 && emptyCells % 5 !== 0) {
-            console.log('[MINOSA] Failed 5-block partition check');
             return true;
         }
         
         // Modulo check: blocks must be divisible by 4 (piece size)
         if (filledBlocks % 4 !== 0) {
-            console.log('[MINOSA] Failed modulo check:', filledBlocks, '% 4 ≠ 0');
             return true;
         }
         
-        console.log('[MINOSA] Economy check passed');
         return false;
     }
     
