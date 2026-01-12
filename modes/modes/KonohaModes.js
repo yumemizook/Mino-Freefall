@@ -27,7 +27,7 @@ class KonohaEasyMode extends BaseMode {
             lockDelay: 60/60,
             lineClearDelay: 25/60,
             
-            nextPieces: 3,
+            nextPieces: 6,
             holdEnabled: true,
             ghostEnabled: true,
             levelUpType: 'lines',
@@ -273,19 +273,86 @@ class KonohaHardMode extends BaseMode {
         return this.piecesAvailable[Math.floor(Math.random() * this.piecesAvailable.length)];
     }
 
-    // Check for all clear
+    // Check for all clear using a backtracking algorithm
     checkAllClear(gameScene) {
         if (!gameScene || !gameScene.game || !gameScene.game.board) return false;
-        
-        // Check if board is completely empty after line clear
-        const isBoardClear = gameScene.game.board.grid.every(row => row.every(cell => cell === 0));
-        
-        if (!isBoardClear) return false;
-        
-        // All Clear logic: check if available pieces can potentially solve the empty board
-        // Since board is empty, any piece can be placed, so All Clear is always possible
-        // This is more accurate than complex sequence prediction
-        return true;
+
+        const board = gameScene.game.board.grid;
+        const availablePieces = [...gameScene.game.nextPieces.queue, gameScene.game.holdPiece].filter(p => p);
+
+        // Helper function to get piece shape
+        const getPieceShape = (pieceType, rotation) => {
+            // This needs to be implemented based on how piece shapes are defined in your game
+            // Placeholder implementation:
+            const shapes = {
+                'I': [[1, 1, 1, 1]],
+                'O': [[1, 1], [1, 1]],
+                'T': [[0, 1, 0], [1, 1, 1]],
+                'S': [[0, 1, 1], [1, 1, 0]],
+                'Z': [[1, 1, 0], [0, 1, 1]],
+                'J': [[1, 0, 0], [1, 1, 1]],
+                'L': [[0, 0, 1], [1, 1, 1]]
+            };
+            // This is a simplified representation. A real implementation would handle rotations.
+            return shapes[pieceType] || [];
+        };
+
+        // Helper function to check if a piece can be placed at a given position
+        const canPlace = (pieceType, x, y, rotation) => {
+            const shape = getPieceShape(pieceType, rotation);
+            for (let row = 0; row < shape.length; row++) {
+                for (let col = 0; col < shape[row].length; col++) {
+                    if (shape[row][col] !== 0) {
+                        const boardX = x + col;
+                        const boardY = y + row;
+                        if (boardY >= board.length || boardX >= board[0].length || board[boardY][boardX] !== 0) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        // Recursive solver
+        const solve = (currentBoard, pieces) => {
+            if (currentBoard.every(row => row.every(cell => cell === 0))) {
+                return true; // Solved
+            }
+
+            if (pieces.length === 0) {
+                return false; // No more pieces, but board is not clear
+            }
+
+            const pieceType = pieces[0];
+            const remainingPieces = pieces.slice(1);
+
+            for (let r = 0; r < 4; r++) { // All 4 rotations
+                for (let y = 0; y < currentBoard.length; y++) {
+                    for (let x = 0; x < currentBoard[0].length; x++) {
+                        if (canPlace(pieceType, x, y, r)) {
+                            const newBoard = JSON.parse(JSON.stringify(currentBoard)); // Deep copy
+                            const shape = getPieceShape(pieceType, r);
+                            for (let row = 0; row < shape.length; row++) {
+                                for (let col = 0; col < shape[row].length; col++) {
+                                    if (shape[row][col] !== 0) {
+                                        newBoard[y + row][x + col] = 1;
+                                    }
+                                }
+                            }
+
+                            if (solve(newBoard, remainingPieces)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return false;
+        };
+
+        return solve(board, availablePieces.map(p => p.type));
     }
 
     // Handle line clear events

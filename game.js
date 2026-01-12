@@ -7556,431 +7556,192 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const modeId =
-      this.gameMode && typeof this.gameMode.getModeId === "function"
-        ? this.gameMode.getModeId()
-        : this.selectedMode;
-    const modeConfig =
-      this.gameMode && typeof this.gameMode.getConfig === "function" ? this.gameMode.getConfig() : {};
-    const specialMechanics = modeConfig && modeConfig.specialMechanics ? modeConfig.specialMechanics : {};
+    // Minosa AI All Clear hint rendering for Konoha modes
+    const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
     const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
-    const isAllClearChallenge = !!specialMechanics.allClearChallenge;
-
-    if (!isKonohaMode || !isAllClearChallenge) {
-      if (this.kitaIndicatorText) {
-        this.kitaIndicatorText.setVisible(false);
-        this.kitaIndicatorText.setText("");
-      }
-    }
-
-    if (isKonohaMode && isAllClearChallenge) {
-      const cols = 5;
-      const rows = 12;
-      const startRow = 2;
-
-      const cloneGrid = (grid) => grid.map((row) => row.slice());
-      const normalizeCell = (v) => (v ? 1 : 0);
-      const normalizeGrid = (grid) => grid.map((row) => row.map((cell) => normalizeCell(cell)));
-      const gridIsEmpty = (grid) => grid.every((row) => row.every((cell) => !cell));
-
-      const clearLinesInGrid = (grid) => {
-        const out = [];
-        let cleared = 0;
-        for (let r = 0; r < rows; r++) {
-          const row = grid[r] || [];
-          const full = row.length >= cols && row.slice(0, cols).every((c) => c !== 0);
-          if (full) {
-            cleared++;
-          } else {
-            out.push(row.slice(0, cols));
-          }
-        }
-        while (out.length < rows) {
-          out.unshift(Array(cols).fill(0));
-        }
-        return { grid: out, cleared };
-      };
-
-      const isValidPositionOnGrid = (shape, x, y, grid) => {
-        for (let r = 0; r < shape.length; r++) {
-          for (let c = 0; c < shape[r].length; c++) {
-            if (!shape[r][c]) continue;
-            const nx = x + c;
-            const ny = y + r;
-            if (nx < 0 || nx >= cols || ny >= rows) return false;
-            if (ny >= 0 && grid[ny] && grid[ny][nx]) return false;
-          }
-        }
-        return true;
-      };
-
-      const dropYFor = (shape, x, grid) => {
-        let y = -4;
-        while (isValidPositionOnGrid(shape, x, y + 1, grid)) {
-          y += 1;
-        }
-        return y;
-      };
-
-      const applyPieceToGrid = (shape, x, y, grid) => {
-        const next = cloneGrid(grid);
-        for (let r = 0; r < shape.length; r++) {
-          for (let c = 0; c < shape[r].length; c++) {
-            if (!shape[r][c]) continue;
-            const nx = x + c;
-            const ny = y + r;
-            if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-              next[ny][nx] = 1;
-            }
-          }
-        }
-        return clearLinesInGrid(next).grid;
-      };
-
-      const uniqueRotations = (type) => {
-        const shapes = [];
-        const seen = new Set();
-        for (let rot = 0; rot < 4; rot++) {
-          const p = new Piece(type, this.rotationSystem, rot);
-          const key = JSON.stringify(p.shape);
-          if (!seen.has(key)) {
-            seen.add(key);
-            shapes.push({ rot, shape: p.shape });
-          }
-        }
-        return shapes;
-      };
-
-      const enumeratePlacements = (grid, type) => {
-        const placements = [];
-        const rots = uniqueRotations(type);
-        for (const { rot, shape } of rots) {
-          const width = shape[0]?.length || 0;
-          for (let x = -2; x < cols + 2; x++) {
-            if (x + width <= 0 || x >= cols) continue;
-            const y = dropYFor(shape, x, grid);
-            if (!isValidPositionOnGrid(shape, x, y, grid)) continue;
-            placements.push({ x, y, rot, shape });
-          }
-        }
-        return placements;
-      };
-
-      const searchAllClear = (grid, pieceTypes) => {
-        const start = normalizeGrid(grid);
-        const startKey = JSON.stringify(start);
-        const memo = new Map();
-
-        const dfs = (g, idx) => {
-          const key = `${idx}|${JSON.stringify(g)}`;
-          if (memo.has(key)) return memo.get(key);
-          if (gridIsEmpty(g)) {
-            memo.set(key, []);
-            return [];
-          }
-          if (idx >= pieceTypes.length) {
-            memo.set(key, null);
-            return null;
-          }
-          const type = pieceTypes[idx];
-          const placements = enumeratePlacements(g, type);
-          for (const pl of placements) {
-            const nextGrid = applyPieceToGrid(pl.shape, pl.x, pl.y, g);
-            const rest = dfs(nextGrid, idx + 1);
-            if (rest) {
-              const path = [{ type, ...pl }, ...rest];
-              memo.set(key, path);
-              return path;
-            }
-          }
-          memo.set(key, null);
-          return null;
-        };
-
-        memo.set(`0|${startKey}`, undefined);
-        return dfs(start, 0);
-      };
-
-      const nextCount =
-        typeof modeConfig.nextPieces === "number" ? Math.max(0, Math.floor(modeConfig.nextPieces)) : 3;
-      const queue = Array.isArray(this.nextPieces) ? this.nextPieces : [];
-      const upcoming = queue
-        .slice(0, Math.max(0, nextCount))
-        .map((p) => (typeof p === "string" ? p : p?.type || p?.piece || p))
-        .filter((p) => typeof p === "string")
-        .map((p) => p.toUpperCase());
-
-      // Build piece list: current + hold (if exists) + next queue
-      const pieceTypes = [];
-      
-      // Add current piece
-      if (this.currentPiece && this.currentPiece.type) {
-        pieceTypes.push(this.currentPiece.type.toUpperCase());
-      }
-      
-      // Add hold piece if available
-      if (this.holdPiece && this.holdPiece.type) {
-        const holdType = typeof this.holdPiece.type === "string" 
-          ? this.holdPiece.type.toUpperCase() 
-          : this.holdPiece.type;
-        if (!pieceTypes.includes(holdType)) {
-          pieceTypes.push(holdType);
-        }
-      }
-      
-      // Add next queue pieces
-      upcoming.forEach(piece => {
-        if (!pieceTypes.includes(piece)) {
-          pieceTypes.push(piece);
-        }
-      });
-      const gridKey = JSON.stringify(normalizeGrid(this.board.grid || []));
-      const cacheKey = `${gridKey}|${pieceTypes.join("")}`;
-      if (this._konohaAllClearHintKey !== cacheKey) {
-        this._konohaAllClearHintKey = cacheKey;
-        this._konohaAllClearHintPath = searchAllClear(this.board.grid || [], pieceTypes);
-      }
-
-      const path = this._konohaAllClearHintPath;
-      const achievable = Array.isArray(path) && path.length > 0;
-
-      // Kita indicator (fox) - updated logic
-      const now = this.time?.now || Date.now();
-      if (!Number.isFinite(this._kitaLastAchievedAt)) this._kitaLastAchievedAt = -Infinity;
-      
-      const achievedRecently = now - this._kitaLastAchievedAt < 1200;
-      const foxBase = "🦊";
-      const foxTick = "✓";
-      const foxCross = "✗";
-      
-      if (this.kitaIndicatorText) {
-        this.kitaIndicatorText.setVisible(true);
-        if (achievedRecently) {
-          // Show fox with tick for 1.2 seconds after achievement
-          this.kitaIndicatorText.setText(`${foxBase}${foxTick}`);
-        } else if (achievable) {
-          // Show fox when All Clear is possible
-          this.kitaIndicatorText.setText(`${foxBase}`);
-        } else {
-          // Show fox with cross when All Clear was possible but missed
-          // Check if we recently missed an All Clear opportunity
-          const timeSinceLastCheck = now - (this._kitaLastCheckTime || 0);
-          if (timeSinceLastCheck > 100) { // Check every 100ms to avoid flicker
-            this._kitaLastCheckTime = now;
-            // If we had an achievable state before but don't now, show cross for 2 seconds
-            if (this._kitaWasAchievable && !achievable) {
-              this._kitaCrossStartTime = now;
-              this._kitaShowCross = true;
-            }
-          }
-          
-          if (this._kitaShowCross && (now - this._kitaCrossStartTime < 2000)) {
-            this.kitaIndicatorText.setText(`${foxBase}${foxCross}`);
-          } else {
-            this.kitaIndicatorText.setText("");
-            this._kitaShowCross = false;
-          }
-        }
-        
-        // Update achievable state tracking
-        this._kitaWasAchievable = achievable;
-      }
-
-      if (!achievable) {
-        return;
-      }
-
-      const best = path[0];
-      this.hintPlacement = {
-        x: best.x,
-        y: best.y,
-        rotation: best.rot,
-        shape: best.shape,
-      };
-
-      const hintColor = this.currentPiece?.color || 0x00e0ff;
-      const cell = this.cellSize;
-      const offX = this.matrixOffsetX;
-      const offY = this.matrixOffsetY;
-      const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
-      const rectSize = cell * renderScale;
-
-      this.hintGraphics.lineStyle(2, hintColor, 0.4);
-      for (let r = 0; r < this.hintPlacement.shape.length; r++) {
-        for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
-          if (!this.hintPlacement.shape[r][c]) continue;
-          const x = this.hintPlacement.x + c;
-          const y = this.hintPlacement.y + r;
-          const drawY = y - startRow;
-          if (drawY < 0) continue;
-          const centerX = this.doubleSizedPiecesActive
-            ? offX + (x * 2 + 1) * cell
-            : offX + x * cell;
-          const centerY = this.doubleSizedPiecesActive
-            ? offY + (drawY * 2 + 1) * cell
-            : offY + drawY * cell;
-          this.hintGraphics.strokeRect(
-            centerX - rectSize / 2,
-            centerY - rectSize / 2,
-            rectSize,
-            rectSize,
-          );
-        }
-      }
-
-      const blinkSpeed = 2;
-      const t = this.time.now / 1000;
-      const alpha = 0.3 + 0.2 * (1 + Math.sin(2 * Math.PI * blinkSpeed * t));
-      this.hintGraphics.setAlpha(Math.min(1, Math.max(0, alpha)));
+    
+    if (isKonohaMode) {
+      this.updateMinosaAllClearDetection();
       return;
     }
-    // Color hint based on current piece color
-    const hintColor = this.currentPiece && this.currentPiece.color
-      ? this.currentPiece.color
-      : 0x00e0ff;
 
-    // Scoring helpers (lightweight clone and analysis)
-    const rows = this.board.rows;
-    const cols = this.board.cols;
-    const baseGrid = this.board.grid;
-
-    const makeGridWithPiece = (piece) => {
-      const grid = baseGrid.map((row) => row.slice());
-      for (let r = 0; r < piece.shape.length; r++) {
-        for (let c = 0; c < piece.shape[r].length; c++) {
-          if (!piece.shape[r][c]) continue;
-          const gx = piece.x + c;
-          const gy = piece.y + r;
-          if (gy >= 0 && gy < rows && gx >= 0 && gx < cols) {
-            grid[gy][gx] = 1;
-          }
-        }
-      }
-      return grid;
-    };
-
-    const computeHeights = (grid) => {
-      const heights = Array(cols).fill(0);
-      for (let x = 0; x < cols; x++) {
-        let y = 0;
-        while (y < rows && grid[y][x] === 0) y++;
-        heights[x] = rows - y;
-      }
-      return heights;
-    };
-
-    const scorePlacement = (piece) => {
-      const grid = makeGridWithPiece(piece);
-      const heights = computeHeights(grid);
-
-      // Holes: empty cell with at least one filled above
-      let holes = 0;
-      let coveredHoles = 0;
-      for (let x = 0; x < cols; x++) {
-        let seenBlock = false;
-        for (let y = 0; y < rows; y++) {
-          const filled = grid[y][x] !== 0;
-          if (filled) {
-            seenBlock = true;
-          } else if (seenBlock) {
-            holes++;
-            // Covered hole: if there is also a block immediately above
-            if (y > 0 && grid[y - 1][x] !== 0) coveredHoles++;
-          }
-        }
-      }
-
-      // Surface stats
-      const maxHeight = Math.max(...heights);
-      const aggregateHeight = heights.reduce((a, b) => a + b, 0);
-      let bumpiness = 0;
-      for (let i = 0; i < cols - 1; i++) {
-        bumpiness += Math.abs(heights[i] - heights[i + 1]);
-      }
-
-      // Ceiling penalty (hidden rows: y < 2)
-      let aboveCeilPenalty = 0;
-      for (let r = 0; r < piece.shape.length; r++) {
-        for (let c = 0; c < piece.shape[r].length; c++) {
-          if (!piece.shape[r][c]) continue;
-          const gy = piece.y + r;
-          if (gy < 2) {
-            aboveCeilPenalty += (2 - gy) * 50;
-          }
-        }
-      }
-
-      // Weighted score (lower is better)
-      const score =
-        holes * 1000 +
-        coveredHoles * 800 +
-        bumpiness * 5 +
-        aggregateHeight * 2 +
-        maxHeight * 3 +
-        aboveCeilPenalty +
-        piece.x * 0.01; // slight tie-breaker to favor leftmost
-
-      return score;
-    };
-
-    const placements = [];
-    const rotations = [0, 1, 2, 3];
-    const pieceType = this.currentPiece.type;
-    for (const rot of rotations) {
-      const shape = new Piece(pieceType, this.rotationSystem, rot).shape;
-      const width = shape[0].length;
-      for (let x = -2; x < this.board.cols; x++) {
-        const tmpPiece = new Piece(pieceType, this.rotationSystem, rot);
-        tmpPiece.x = x;
-        tmpPiece.y = -4;
-        // Move down until collision
-        while (this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y + 1)) {
-          tmpPiece.y += 1;
-        }
-        if (!this.board.isValidPosition(tmpPiece, tmpPiece.x, tmpPiece.y)) {
-          continue;
-        }
-        // Skip if out of bounds horizontally
-        if (tmpPiece.x < -2 || tmpPiece.x + width > this.board.cols + 2) {
-          continue;
-        }
-
-        const score = scorePlacement(tmpPiece);
-        placements.push({ score, piece: tmpPiece });
-      }
-    }
-
-    if (!placements.length) return;
-    placements.sort((a, b) => a.score - b.score);
-    this.hintPlacement = placements[0].piece;
-    const startRow = 2;
+    // Regular hint rendering for other modes
+    const hintColor = this.currentPiece?.color || 0x00e0ff;
     const cell = this.cellSize;
     const offX = this.matrixOffsetX;
     const offY = this.matrixOffsetY;
+    const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
+    const rectSize = cell * renderScale;
+
     this.hintGraphics.lineStyle(2, hintColor, 0.4);
     for (let r = 0; r < this.hintPlacement.shape.length; r++) {
       for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
         if (!this.hintPlacement.shape[r][c]) continue;
         const x = this.hintPlacement.x + c;
         const y = this.hintPlacement.y + r;
-        const drawY = y - startRow;
+        const drawY = y - 2; // Visible rows start at row 2 in 22-row matrix
         if (drawY < 0) continue;
-        this.hintGraphics.strokeRect(
-          offX + x * cell - cell / 2,
-          offY + drawY * cell - cell / 2,
-          cell,
-          cell,
-        );
+        const centerX = this.doubleSizedPiecesActive
+          ? offX + (x * 2 + 1) * cell
+          : offX + x * cell;
+        const centerY = this.doubleSizedPiecesActive
+          ? offY + (drawY * 2 + 1) * cell
+          : offY + drawY * cell;
+        const renderX = centerX - rectSize / 2;
+        const renderY = centerY - rectSize / 2;
+        const left = renderX - rectSize / 2;
+        const top = renderY - rectSize / 2;
+        this.hintGraphics.strokeRect(left, top, rectSize, rectSize);
+      }
+    }
+  }
+
+  // Simplified Minosa All Clear detection for Konoha modes
+  updateMinosaAllClearDetection() {
+    const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
+    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    
+    if (!isKonohaMode) {
+      if (this.kitaIndicatorText) {
+        this.kitaIndicatorText.setVisible(false);
+        this.kitaIndicatorText.setText("");
+      }
+      return;
+    }
+    
+    // Initialize Lightweight Minosa AI once
+    if (!this._minosaAI) {
+      if (typeof LightweightMinosa === 'undefined') return;
+      
+      this._minosaAI = new LightweightMinosa({
+        rows: 10,
+        cols: 5,
+        pieceSet: modeId === 'konoha_easy' ? 'ILJOT' : 'STANDARD'
+      });
+      
+      // Reset cache after initialization
+      this._minosaCacheKey = null;
+      this._minosaFrameCounter = 0;
+    }
+    
+    // Reset detection after bravo or mode start
+    if (this._lastAllClearTime !== this.allClearTime) {
+      console.log('[MINOSA] All Clear detected, resetting detection');
+      this._minosaCacheKey = null;
+      this._minosaPath = null;
+      this.hintPlacement = null;
+      this._lastAllClearTime = this.allClearTime;
+    }
+    
+    // Only run detection every 10 frames for performance
+    if (!this._minosaFrameCounter) this._minosaFrameCounter = 0;
+    if (++this._minosaFrameCounter < 10) return;
+    this._minosaFrameCounter = 0;
+    
+    // Get current game state
+    const currentPiece = this.currentPiece?.type?.toUpperCase() || null;
+    const nextQueue = (this.nextPieces || [])
+      .slice(0, 5)
+      .map(p => typeof p === "string" ? p : p?.type || p?.piece || p)
+      .filter(p => typeof p === "string")
+      .map(p => p.toUpperCase());
+    const holdPiece = this.holdPiece?.type?.toUpperCase() || null;
+    
+    // Convert board (exclude 2 spawn rows)
+    const gameGrid = this.board?.grid || [];
+    const minosaBoard = gameGrid
+      .slice(2)
+      .map(row => row.map(cell => cell ? 1 : 0));
+    
+    // Create cache key
+    const cacheKey = `${JSON.stringify(minosaBoard)}|${currentPiece}|${nextQueue.join('')}|${holdPiece}`;
+    
+    // Run detection if cache miss
+    if (this._minosaCacheKey !== cacheKey) {
+      this._minosaCacheKey = cacheKey;
+      
+      // Build available pieces array
+      const availablePieces = [];
+      if (currentPiece) availablePieces.push(currentPiece);
+      if (Array.isArray(nextQueue)) {
+        nextQueue.forEach(piece => {
+          if (piece && typeof piece === 'string') {
+            availablePieces.push(piece.toUpperCase());
+          }
+        });
+      }
+      if (holdPiece) availablePieces.push(holdPiece);
+      
+      this._minosaPath = this._minosaAI.findAllClearPath(
+        minosaBoard, currentPiece, nextQueue, holdPiece, true
+      );
+    }
+    
+    // Update Kita indicator
+    this.updateKitaIndicator(this._minosaPath);
+    
+    // Update hint placement
+    if (this._minosaPath && this._minosaPath.length > 0) {
+      const move = this._minosaPath[0];
+      if (move && this._minosaAI) {
+        // Get piece shape from LightweightMinosa
+        const pieceShapes = this._minosaAI.getPieceShapes(move.piece);
+        if (pieceShapes && pieceShapes.length > 0) {
+          const pieceShape = pieceShapes[move.rotation];
+          if (pieceShape) {
+            let landingY = move.y;
+            const tempBoard = this.board.grid.slice(2).map(row => row.map(cell => (cell ? 1 : 0)));
+            while (this._minosaAI.isValidPosition(tempBoard, pieceShape, move.x, landingY + 1)) {
+              landingY++;
+            }
+
+            this.hintPlacement = {
+              x: move.x,
+              y: landingY,
+              rotation: move.rotation,
+              shape: pieceShape,
+            };
+          }
+        }
+      }
+    }
+  }
+  
+  updateKitaIndicator(path) {
+    if (!this.kitaIndicatorText) return;
+
+    const now = this.time.now;
+    const achievable = Array.isArray(path) && path.length > 0;
+
+    if (achievable) {
+      const move = path[0];
+      let text = "🦊✓";
+      if (this.holdPiece && move.piece === this.holdPiece.type) {
+        text = "🦊✓ (!)";
+      }
+      this.kitaIndicatorText.setText(text);
+    } else {
+      const timeSinceLastCheck = now - (this._kitaLastCheckTime || 0);
+      if (timeSinceLastCheck > 100) {
+        this._kitaLastCheckTime = now;
+        if (this._kitaWasAchievable && !achievable) {
+          this._kitaCrossStartTime = now;
+          this._kitaShowCross = true;
+        }
+      }
+
+      if (this._kitaShowCross && now - this._kitaCrossStartTime < 2000) {
+        this.kitaIndicatorText.setText("🦊✗");
+      } else {
+        this.kitaIndicatorText.setText("");
+        this._kitaShowCross = false;
       }
     }
 
-    // Apply smooth blink (alpha oscillation)
-    const blinkSpeed = 2; // Hz
-    const t = this.time.now / 1000;
-    const alpha = 0.3 + 0.2 * (1 + Math.sin(2 * Math.PI * blinkSpeed * t));
-    this.hintGraphics.setAlpha(Math.min(1, Math.max(0, alpha)));
+    this._kitaWasAchievable = achievable;
   }
-
+  
+  
   preload() {
     // Assets are loaded in AssetLoaderScene
     // This preload is intentionally empty to avoid duplicate loading
@@ -9560,6 +9321,16 @@ class GameScene extends Phaser.Scene {
         .setVisible(false);
       if (this.overlayGroup) {
         this.overlayGroup.add(this.kitaIndicatorText);
+      }
+      
+      // DEBUG: Test MinosaAI availability
+      console.log('[KITA DEBUG] Kita indicator created successfully');
+      console.log('[KITA DEBUG] MinosaAI available:', typeof MinosaAI !== 'undefined');
+      if (typeof MinosaAI !== 'undefined') {
+        const testAI = new MinosaAI({ rows: 10, cols: 5, pieceSet: 'ILJOT' });
+        console.log('[KITA DEBUG] MinosaAI test instance created:', testAI);
+        const emptyBoard = Array(10).fill(null).map(() => Array(5).fill(0));
+        console.log('[KITA DEBUG] Empty board test:', testAI.isBoardEmpty(emptyBoard));
       }
     }
     this.powerupEffectHandler =
@@ -11868,6 +11639,9 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // Update Minosa All Clear detection for Konoha modes
+    this.updateMinosaAllClearDetection();
+
     // Update game mode (for TGM2 grading system, powerup minos, etc.)
     if (this.gameMode && this.gameMode.update) {
       this.gameMode.update(this, this.deltaTime);
@@ -11994,6 +11768,7 @@ class GameScene extends Phaser.Scene {
     // Mark that gameplay pieces have begun spawning (enables timed cheese/SFX gating)
     if (!this.hasSpawnedPiece) {
       this.hasSpawnedPiece = true;
+      console.log('[KITA DEBUG] Piece spawned:', this.currentPiece ? this.currentPiece.type : 'null');
       this.zenCheeseTimer = 0; // start timing from first spawn
     }
     // Shirase garbage check before spawning next piece (during ARE)
@@ -17037,6 +16812,45 @@ class GameScene extends Phaser.Scene {
         pieceAlpha,
       );
 
+      // Slower blinking hint for All Clear
+      const hintBlinkAlpha = 0.3 + 0.7 * Math.sin(this.time.now * 0.005);
+      if (this.hintPlacement && this._minosaPath && this._minosaPath.length > 0) {
+        const hintColor = 0xFF8C00; // Fixed orange color
+        const pieceShape = this.hintPlacement.shape;
+        const cell = this.cellSize;
+        const offX = this.matrixOffsetX;
+        const offY = this.matrixOffsetY;
+        const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
+        const rectSize = cell * renderScale;
+
+        this.hintGraphics.lineStyle(4, hintColor, hintBlinkAlpha); // Thicker border
+
+        for (let r = 0; r < pieceShape.length; r++) {
+          for (let c = 0; c < pieceShape[r].length; c++) {
+            if (pieceShape[r][c]) {
+              const boardX = this.hintPlacement.x + c;
+              const boardY = this.hintPlacement.y + r;
+
+              // hintPlacement.y is already adjusted for visible rows
+              const drawY = boardY;
+
+              if (drawY < 0 || drawY >= 10) continue; // Skip if outside visible area
+
+              const centerX = this.doubleSizedPiecesActive
+                ? offX + (boardX * 2 + 1) * cell
+                : offX + boardX * cell;
+              const centerY = this.doubleSizedPiecesActive
+                ? offY + (drawY * 2 + 1) * cell
+                : offY + drawY * cell;
+
+              const left = centerX - rectSize / 2;
+              const top = centerY - rectSize / 2;
+              this.hintGraphics.strokeRect(left, top, rectSize, rectSize);
+            }
+          }
+        }
+      }
+      
       // Blinking yellow border around active piece
       const blinkAlpha = 0.5 + 0.5 * Math.sin(this.time.now * 0.02);
       const outlineRenderScale = (this.doubleSizedPiecesActive ? 2 : 1) * (this.bigBlocksActive ? 2 : 1);
