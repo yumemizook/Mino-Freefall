@@ -342,16 +342,18 @@ class RobustMinosa {
         const availablePieces = this.buildAvailablePieces(currentPiece, nextQueue, holdPiece);
         const path = [];
         let currentBoard = board.map(row => [...row]);
+        let currentPieceForIteration = currentPiece;
+        let availablePiecesForIteration = [...availablePieces];
         
         // Iterative approach - try to find path in limited attempts
-        const maxAttempts = Math.min(availablePieces.length, 5); // Limit attempts to prevent lag
+        const maxAttempts = Math.min(availablePiecesForIteration.length, 5); // Limit attempts to prevent lag
         console.log('[ROBUST MINOSA] Max attempts:', maxAttempts);
         
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            console.log('[ROBUST MINOSA] Iterative attempt', attempt + 1, 'Piece:', currentPiece);
+            console.log('[ROBUST MINOSA] Iterative attempt', attempt + 1, 'Piece:', currentPieceForIteration);
             
             // Find best move for current state
-            const bestMove = this.findSafestGreedyMove(currentBoard, availablePieces, currentPiece, currentRotation);
+            const bestMove = this.findSafestGreedyMove(currentBoard, availablePiecesForIteration, currentPieceForIteration, currentRotation);
             
             if (!bestMove) {
                 console.log('[ROBUST MINOSA] No move found in attempt', attempt + 1);
@@ -375,9 +377,9 @@ class RobustMinosa {
             }
             
             // Update for next iteration
-            currentPiece = this.getNextPiece(availablePieces, bestMove.piece);
+            currentPieceForIteration = this.getNextPiece(availablePiecesForIteration, bestMove.piece);
             currentRotation = 0;
-            availablePieces = this.updateAvailablePieces(availablePieces, bestMove.piece);
+            availablePiecesForIteration = this.updateAvailablePieces(availablePiecesForIteration, bestMove.piece);
             
             // Early exit if we're making progress
             if (attempt >= 2 && path.length > 1) {

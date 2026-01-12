@@ -76,7 +76,21 @@ class KonohaEasyMode extends BaseMode {
 
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
+        // Handle both number and array inputs for linesCleared
+        const linesCount = typeof linesCleared === 'number' ? linesCleared : (linesCleared && linesCleared.length) || 0;
+        
+        // Only process if lines were actually cleared
+        if (linesCount === 0) {
+            console.log(`[KONOHA] No lines cleared, skipping bonus calculation`);
+            return;
+        }
+        
+        // Try to get the actual lines array for All Clear detection
+        // The main game uses linesToClear array, but we only get the count
+        // We'll use a fallback approach: check if board is empty after the clear
         const isAllClear = this.checkAllClear(gameScene);
+        
+        console.log(`[KONOHA] All Clear check: ${linesCount} lines, AllClear: ${isAllClear}`);
 
         if (this.startTime === null && gameScene && typeof gameScene.currentTime === 'number') {
             this.startTime = gameScene.currentTime;
@@ -84,9 +98,16 @@ class KonohaEasyMode extends BaseMode {
 
         const level = gameScene && typeof gameScene.level === 'number' ? gameScene.level : 0;
         const inPost1000 = level >= 1000;
-        const bonusSeconds = this.getTimeBonusSeconds(linesCleared, isAllClear, inPost1000);
+        const bonusSeconds = this.getTimeBonusSeconds(linesCount, isAllClear, inPost1000);
+        
+        // Debug logging for time bonuses
         if (bonusSeconds > 0) {
+            console.log(`[KONOHA] Time bonus applied: +${bonusSeconds.toFixed(2)}s for ${linesCount} lines, AllClear: ${isAllClear}, Level: ${level}, Post1000: ${inPost1000}`);
+            const oldTotalTime = this.totalTime;
             this.totalTime = Math.min(300, this.totalTime + bonusSeconds);
+            console.log(`[KONOHA] Total time updated: ${oldTotalTime.toFixed(2)}s -> ${this.totalTime.toFixed(2)}s`);
+        } else {
+            console.log(`[KONOHA] No time bonus for ${linesCount} lines, AllClear: ${isAllClear}, Level: ${level}, Post1000: ${inPost1000}`);
         }
 
         if (isAllClear) {
@@ -357,7 +378,21 @@ class KonohaHardMode extends BaseMode {
 
     // Handle line clear events
     handleLineClear(gameScene, linesCleared, pieceType) {
+        // Handle both number and array inputs for linesCleared
+        const linesCount = typeof linesCleared === 'number' ? linesCleared : (linesCleared && linesCleared.length) || 0;
+        
+        // Only process if lines were actually cleared
+        if (linesCount === 0) {
+            console.log(`[KONOHA HARD] No lines cleared, skipping bonus calculation`);
+            return;
+        }
+        
+        // Try to get the actual lines array for All Clear detection
+        // The main game uses linesToClear array, but we only get the count
+        // We'll use a fallback approach: check if board is empty after the clear
         const isAllClear = this.checkAllClear(gameScene);
+        
+        console.log(`[KONOHA HARD] All Clear check: ${linesCount} lines, AllClear: ${isAllClear}`);
 
         if (this.startTime === null && gameScene && typeof gameScene.currentTime === 'number') {
             this.startTime = gameScene.currentTime;
@@ -365,9 +400,16 @@ class KonohaHardMode extends BaseMode {
 
         const level = gameScene && typeof gameScene.level === 'number' ? gameScene.level : 0;
         const inPost1000 = level >= 1000;
-        const bonusSeconds = this.getTimeBonusSeconds(linesCleared, isAllClear, inPost1000);
+        const bonusSeconds = this.getTimeBonusSeconds(linesCount, isAllClear, inPost1000);
+        
+        // Debug logging for time bonuses
         if (bonusSeconds > 0) {
+            console.log(`[KONOHA HARD] Time bonus applied: +${bonusSeconds.toFixed(2)}s for ${linesCount} lines, AllClear: ${isAllClear}, Level: ${level}, Post1000: ${inPost1000}`);
+            const oldTotalTime = this.totalTime;
             this.totalTime = Math.min(300, this.totalTime + bonusSeconds);
+            console.log(`[KONOHA HARD] Total time updated: ${oldTotalTime.toFixed(2)}s -> ${this.totalTime.toFixed(2)}s`);
+        } else {
+            console.log(`[KONOHA HARD] No time bonus for ${linesCount} lines, AllClear: ${isAllClear}, Level: ${level}, Post1000: ${inPost1000}`);
         }
 
         if (isAllClear) {
