@@ -6605,6 +6605,13 @@ class GameScene extends Phaser.Scene {
 
     this._konohaAllClearHintKey = null;
     this._konohaAllClearHintPath = null;
+    this._minosaAI = null;
+    this._minosaCacheKey = null;
+    this._minosaPath = null;
+    this._lastAllClearTime = null;
+    this._minosaFrameCounter = 0;
+    this._minosaNextAllowedAt = 0;
+    this._minosaForceNextUpdate = true;
     this._kitaLastAchievedAt = -Infinity;
     this._kitaLastCheckTime = 0;
     this._kitaWasAchievable = false;
@@ -7542,17 +7549,32 @@ class GameScene extends Phaser.Scene {
   }
 
   updatePlacementHint() {
+    // DISABLED: Old hint system - using new Minosa hint system instead
+    // This prevents conflicts with the new clean hint rendering
+    return;
+    
     if (!this.hintGraphics) return;
     this.hintGraphics.clear();
-    if (
+    // Konoha modes need Kita indicator updates even during ARE/line-clear; otherwise it can
+    // get stuck displaying ✗. Keep the expensive solver behind throttles.
+    const modeIdPre = this.gameMode?.getModeId?.() || this.selectedMode;
+    const isKonohaModePre = modeIdPre === "konoha_easy" || modeIdPre === "konoha_hard";
+    const shouldSkipHintDraw =
       !this.currentPiece ||
       this.areActive ||
       this.gameOver ||
       this.lineClearDelayActive ||
       this.loadingPhase ||
       this.readyGoPhase ||
-      !this.isNormalOrEasyMode()
-    ) {
+      !this.isNormalOrEasyMode();
+    if (shouldSkipHintDraw) {
+      if (isKonohaModePre && this.kitaIndicatorText) {
+        const now = this.time?.now || Date.now();
+        const achievedRecently =
+          Number.isFinite(this._kitaLastAchievedAt) && now - this._kitaLastAchievedAt < 2000;
+        this.kitaIndicatorText.setVisible(achievedRecently);
+        this.kitaIndicatorText.setText(achievedRecently ? "🦊✓" : "");
+      }
       return;
     }
 
@@ -7609,19 +7631,15 @@ class GameScene extends Phaser.Scene {
       return;
     }
     
-    // Initialize Robust Minosa AI once
+    // Initialize Minosa AI once
     if (!this._minosaAI) {
-      if (typeof RobustMinosa === 'undefined') return;
+      if (typeof MinosaAI === 'undefined') return;
       
       try {
-        this._minosaAI = new RobustMinosa({
-          rows: 10,
-          cols: 5,
-          pieceSet: modeId === 'konoha_easy' ? 'ILJOT' : 'STANDARD'
-        });
-        console.log('[MINOSA] Robust Minosa AI initialized successfully');
-      } catch (error) {
-        console.error('[MINOSA] Failed to initialize RobustMinosa:', error);
+        this._minosaAI = new MinosaAI();
+        console.log('[MINOSA] AI initialized successfully');
+      } catch (err) {
+        console.error('[MINOSA] Failed to initialize AI:', err);
         return;
       }
     }
@@ -7633,34 +7651,88 @@ class GameScene extends Phaser.Scene {
       this._minosaPath = null;
       this.hintPlacement = null;
       this._lastAllClearTime = this.allClearTime;
+      this._minosaForceNextUpdate = true;
+      this._minosaNextAllowedAt = 0;
     }
-    
-    // Only run detection every 10 frames for performance
-    if (!this._minosaFrameCounter) this._minosaFrameCounter = 0;
-    if (++this._minosaFrameCounter < 10) return;
-    this._minosaFrameCounter = 0;
+
+    // Time-based throttle (avoid frame-time spikes). Force-update bypasses throttle.
+    const nowMs = this.time?.now || Date.now();
+    const minIntervalMs = 200;
+    if (!this._minosaForceNextUpdate && nowMs < (this._minosaNextAllowedAt || 0)) {
+      return;
+    }
+    this._minosaNextAllowedAt = nowMs + minIntervalMs;
+    const forceThisUpdate = !!this._minosaForceNextUpdate;
+    this._minosaForceNextUpdate = false;
     
     // Get current game state
     const currentPiece = this.currentPiece?.type?.toUpperCase() || null;
     const currentRotation = this.currentPiece?.rotation || 0;
     const nextQueue = (this.nextPieces || [])
       .slice(0, 5)
-      .map(p => typeof p === "string" ? p : p?.type || p?.piece || p)
-      .filter(p => typeof p === "string")
-      .map(p => p.toUpperCase());
+      .map((p) => {
+        if (typeof p === "string") return p;
+        if (p && typeof p === "object") {
+          return p.type || p.piece || null;
+        }
+        return null;
+      })
+      .filter(Boolean);
     const holdPiece = this.holdPiece?.type?.toUpperCase() || null;
     
-    // Convert board (exclude 2 spawn rows)
-    const gameGrid = this.board?.grid || [];
-    const minosaBoard = gameGrid
-      .slice(2)
-      .map(row => row.map(cell => cell ? 1 : 0));
+
+
+    // Create board representation for Minosa (skip hidden rows 0-1)
+    const minosaBoard = Array(10).fill(null).map(() => Array(5).fill(0));
+    if (this.board && this.board.grid) {
+      // Start from row 2 to skip hidden rows 0-1
+      for (let r = 0; r < Math.min(10, this.board.grid.length - 2); r++) {
+        for (let c = 0; c < Math.min(5, this.board.grid[r + 2].length); c++) {
+          if (this.board.grid[r + 2][c]) {
+            minosaBoard[r][c] = 1;
+          }
+        }
+      }
+    }
     
-    // Create cache key
-    const cacheKey = `${JSON.stringify(minosaBoard)}|${currentPiece}|${nextQueue.join('')}|${holdPiece}`;
+
     
-    // Run detection if cache miss
-    if (this._minosaCacheKey !== cacheKey) {
+    // Check if board is empty using new API
+    const boardState = { grid: minosaBoard };
+    const isBoardEmpty = this._minosaAI.isBoardClear(boardState);
+
+    // If no current piece, don't try to find path
+    if (!currentPiece) {
+      this._minosaPath = null;
+      this.hintPlacement = null;
+      this.updateKitaIndicator(null);
+      return;
+    }
+
+
+
+
+    // Create a compact cache key (avoid JSON.stringify per tick)
+    let sig = "";
+    for (let r = 0; r < minosaBoard.length; r++) {
+      for (let c = 0; c < minosaBoard[r].length; c++) {
+        sig += minosaBoard[r][c] ? "1" : "0";
+      }
+    }
+    const cacheKey = `${sig}|${currentPiece || ""}|${nextQueue.join('')}|${holdPiece || ""}`;
+    
+    console.log('[MINOSA] Cache key components:');
+    console.log('  Board signature:', sig);
+    console.log('  Current piece:', currentPiece);
+    console.log('  Next queue:', nextQueue.join(''));
+    console.log('  Hold piece:', holdPiece);
+    console.log('  Full cache key:', cacheKey);
+    
+    // Run detection if cache miss (or we forced an update)
+    if (forceThisUpdate || this._minosaCacheKey !== cacheKey) {
+      console.log('[MINOSA] Cache miss, running detection');
+      console.log('[MINOSA] Old cache key:', this._minosaCacheKey);
+      console.log('[MINOSA] New cache key:', cacheKey);
       this._minosaCacheKey = cacheKey;
       
       // Build available pieces array
@@ -7675,65 +7747,201 @@ class GameScene extends Phaser.Scene {
       }
       if (holdPiece) availablePieces.push(holdPiece);
       
-      this._minosaPath = this._minosaAI.findAllClearPath(
-        minosaBoard, currentPiece, nextQueue, holdPiece, true, currentRotation
+      // Use new MinosaAI analyzeGameState API
+      const analysis = this._minosaAI.analyzeGameState(
+        currentPiece, nextQueue, holdPiece, boardState
       );
       
+      this._minosaPath = analysis.status === 'possible' ? [analysis.hint] : null;
+      
+
       // Validate the returned path
       if (this._minosaPath && !Array.isArray(this._minosaPath)) {
         console.warn('[MINOSA] Invalid path returned, setting to null');
         this._minosaPath = null;
       }
+    } else {
+      console.log('[MINOSA] Cache hit, using cached result');
     }
     
-    // Update Kita indicator
-    this.updateKitaIndicator(this._minosaPath);
+    // Update Kita indicator using new MinosaAI API
+    this.updateKitaIndicator(this._minosaAI.getCurrentStatus(), this._minosaAI.getKitaDisplay());
     
-    // Update hint placement
-    if (this._minosaPath && this._minosaPath.length > 0) {
-      const move = this._minosaPath[0];
-      if (move && this._minosaAI) {
-        try {
-          // Get piece shape from LightweightMinosa
-          const pieceShapes = this._minosaAI.getPieceShapes(move.piece);
-          if (pieceShapes && pieceShapes.length > 0) {
-            const rotation = move.rotation || 0;
-            if (rotation >= 0 && rotation < pieceShapes.length) {
-              const pieceShape = pieceShapes[rotation];
-              if (pieceShape) {
-                let landingY = move.y || 0;
-                const tempBoard = this.board?.grid?.slice(2)?.map(row => row?.map(cell => (cell ? 1 : 0))) || [];
-                
-                // Only calculate landing position if we have a valid board
-                if (tempBoard.length > 0) {
-                  while (this._minosaAI.isValidPosition(tempBoard, pieceShape, move.x, landingY + 1)) {
-                    landingY++;
-                  }
-                }
-
-                // Trim the shape to remove empty padding rows/columns
-                const trimmedShape = this.trimPieceShape(pieceShape);
-                const shapeOffsetY = this.getShapeTopOffset(pieceShape);
-
-                this.hintPlacement = {
-                  x: move.x,
-                  y: landingY,
-                  rotation: rotation,
-                  shape: trimmedShape,
-                  originalShape: pieceShape,
-                  shapeOffsetY: shapeOffsetY
-                };
-              }
-            }
+    // Update hint placement using new MinosaAI API
+    const currentHint = this._minosaAI.getCurrentHint();
+    console.log('[MINOSA] Current hint from AI:', currentHint);
+    
+    // Clear any existing hints first
+    if (this.hintGraphics) {
+      this.hintGraphics.clear();
+    }
+    
+    // If hint is null but we have pieces, force a fresh analysis
+    if (!currentHint && (currentPiece || holdPiece || (nextQueue && nextQueue.length > 0))) {
+      console.log('[MINOSA] Hint is null but pieces available, forcing fresh analysis');
+      // Force update by invalidating cache
+      this._minosaCacheKey = null;
+      // Run fresh analysis
+      this.updateMinosaAllClearDetection();
+      return;
+    }
+    
+    // ALWAYS show hint if available (remove suppression logic)
+    if (currentHint && currentHint.position) {
+      console.log('[MINOSA] Displaying new hint:', currentHint);
+      try {
+        
+        // Get the actual piece shape for the hint with proper rotation
+        let hintShape = [[1]]; // Default fallback
+        if (currentHint.nextPiece && typeof TETROMINOES !== 'undefined') {
+          // Use the actual piece shape from TETROMINOES with rotation
+          const pieceData = TETROMINOES[currentHint.nextPiece];
+          if (pieceData && pieceData.rotations) {
+            const rotation = currentHint.rotation || 0;
+            hintShape = pieceData.rotations[rotation] || pieceData.rotations[0];
+            console.log('[MINOSA] Using piece shape for', currentHint.nextPiece, 'rotation', rotation);
           }
-        } catch (error) {
-          console.warn('[MINOSA] Error calculating hint placement:', error);
-          this.hintPlacement = null;
         }
+        
+        // Create simple, clean hint placement
+        this.hintPlacement = {
+          x: currentHint.position.x,
+          y: currentHint.position.y,
+          shape: hintShape,
+          nextPiece: currentHint.nextPiece,
+          hint: currentHint,
+          rotation: currentHint.rotation || 0
+        };
+        
+        console.log('[MINOSA] Clean hint placement:', this.hintPlacement);
+        
+        // Render the new hint immediately
+        console.log('[MINOSA] About to call renderCleanMinosaHint');
+        this.renderCleanMinosaHint();
+        console.log('[MINOSA] renderCleanMinosaHint call completed');
+        
+        
+      } catch (error) {
+        console.error('[MINOSA] Error setting hint placement:', error);
+        this.hintPlacement = null;
       }
     } else {
+      console.log('[MINOSA] No hint available - currentHint:', currentHint, 'position:', currentHint?.position);
       this.hintPlacement = null;
     }
+  }
+
+  // Clean, simple Minosa hint rendering
+  renderCleanMinosaHint() {
+    console.log('[MINOSA] renderCleanMinosaHint called');
+    
+    if (!this.hintGraphics) {
+      console.log('[MINOSA] No hintGraphics object');
+      return;
+    }
+    
+    if (!this.hintPlacement) {
+      console.log('[MINOSA] No hintPlacement');
+      return;
+    }
+    
+    // Clear any previous graphics completely
+    this.hintGraphics.clear();
+    
+    const cell = this.cellSize;
+    const offX = this.matrixOffsetX;
+    const offY = this.matrixOffsetY;
+    const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
+    const rectSize = cell * renderScale;
+    
+    // Simple, slow blinking - one cycle every 0.5 seconds
+    const now = this.time?.now || Date.now();
+    const cycleTime = 500; // 0.5 seconds
+    const phase = (now % cycleTime) / cycleTime;
+    const alpha = 0.4 + 0.6 * Math.sin(phase * Math.PI * 2); // Smooth sine wave
+    
+    // Simple orange style
+    this.hintGraphics.lineStyle(4, 0xFF8800, alpha);
+    this.hintGraphics.fillStyle(0xFF8800, alpha * 0.2);
+    
+    // Get current stack height to position hint at bottom
+    const stackHeight = this.getCurrentStackHeight();
+    console.log('[MINOSA] Current stack height:', stackHeight);
+    
+    // For Konoha modes, position hint relative to the bottom of the visible area
+    // The AI position is relative to the solve pattern, so we need to convert it
+    const visibleBoardHeight = 20; // Visible board height (rows 2-21)
+    const hintBottomY = visibleBoardHeight - this.hintPlacement.shape.length - 2; // Position near bottom, accounting for hidden rows
+    
+    console.log('[MINOSA] Original hint position:', this.hintPlacement.x, this.hintPlacement.y);
+    console.log('[MINOSA] Adjusted hint position:', this.hintPlacement.x, hintBottomY);
+    
+    // Render each block of the piece
+    for (let r = 0; r < this.hintPlacement.shape.length; r++) {
+      for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
+        if (!this.hintPlacement.shape[r][c]) continue;
+        
+        // Calculate final position on the board
+        const boardX = this.hintPlacement.x + c;
+        const boardY = hintBottomY + r;
+        
+        // Convert to screen coordinates
+        // Account for the fact that visible rows start at row 2
+        const screenY = boardY - 2;
+        if (screenY < 0 || screenY >= 20) {
+          console.log('[MINOSA] Skipping block at board', boardX, boardY, '- screen Y out of bounds:', screenY);
+          continue;
+        }
+        
+        const screenX = this.doubleSizedPiecesActive
+          ? offX + (boardX * 2 + 1) * cell
+          : offX + boardX * cell;
+        const screenYPos = this.doubleSizedPiecesActive
+          ? offY + (screenY * 2 + 1) * cell
+          : offY + screenY * cell;
+        
+        const left = screenX - rectSize / 2;
+        const top = screenYPos - rectSize / 2;
+        
+        // Draw simple rectangle
+        this.hintGraphics.fillRect(left, top, rectSize, rectSize);
+        this.hintGraphics.strokeRect(left, top, rectSize, rectSize);
+        
+        console.log('[MINOSA] Drew block at board', boardX, boardY, 'screen', left, top);
+      }
+    }
+    
+    console.log('[MINOSA] Hint rendering complete');
+  }
+
+  // Get current stack height for bottom positioning
+  getCurrentStackHeight() {
+    if (!this.board || !this.board.grid) return 0;
+    
+    let maxHeight = 0;
+    for (let col = 0; col < this.board.cols; col++) {
+      for (let row = 0; row < this.board.rows; row++) {
+        if (this.board.grid[row][col]) {
+          maxHeight = Math.max(maxHeight, this.board.rows - row);
+        }
+      }
+    }
+    return maxHeight;
+  }
+
+  // Get current board height for proper hint positioning
+  getBoardHeight() {
+    if (!this.board || !this.board.grid) return 0;
+    
+    let maxHeight = 0;
+    for (let col = 0; col < this.board.cols; col++) {
+      for (let row = 0; row < this.board.rows; row++) {
+        if (this.board.grid[row][col]) {
+          maxHeight = Math.max(maxHeight, this.board.rows - row);
+        }
+      }
+    }
+    return maxHeight;
   }
   
   trimPieceShape(shape) {
@@ -7785,24 +7993,21 @@ class GameScene extends Phaser.Scene {
     return 0; // No blocks found
   }
   
-  updateKitaIndicator(path) {
+  updateKitaIndicator(status, kitaDisplay) {
     if (!this.kitaIndicatorText) return;
 
     const now = this.time.now;
-    const achievable = Array.isArray(path) && path.length > 0;
-
-    if (achievable) {
-      const move = path[0];
-      let text = "🦊✓";
-      if (this.holdPiece && move.piece === this.holdPiece.type) {
-        text = "🦊✓ (!)";
-      }
-      this.kitaIndicatorText.setText(text);
+    
+    // Use the provided status and display from MinosaAI
+    if (status === 'achieved') {
+      this.kitaIndicatorText.setText("✅");
+    } else if (status === 'possible') {
+      this.kitaIndicatorText.setText(kitaDisplay || "🦊");
     } else {
       const timeSinceLastCheck = now - (this._kitaLastCheckTime || 0);
       if (timeSinceLastCheck > 100) {
         this._kitaLastCheckTime = now;
-        if (this._kitaWasAchievable && !achievable) {
+        if (this._kitaWasAchievable && status !== 'possible') {
           this._kitaCrossStartTime = now;
           this._kitaShowCross = true;
         }
@@ -7816,7 +8021,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    this._kitaWasAchievable = achievable;
+    this._kitaWasAchievable = status === 'possible';
   }
   
   
@@ -9403,10 +9608,10 @@ class GameScene extends Phaser.Scene {
       
       // DEBUG: Test MinosaAI availability
       console.log('[KITA DEBUG] Kita indicator created successfully');
-      console.log('[KITA DEBUG] MinosaAI available:', typeof MinosaAI !== 'undefined');
-      if (typeof MinosaAI !== 'undefined') {
-        const testAI = new MinosaAI({ rows: 10, cols: 5, pieceSet: 'ILJOT' });
-        console.log('[KITA DEBUG] MinosaAI test instance created:', testAI);
+      console.log('[KITA DEBUG] RobustMinosa available:', typeof RobustMinosa !== 'undefined');
+      if (typeof RobustMinosa !== 'undefined') {
+        const testAI = new RobustMinosa({ rows: 10, cols: 5, pieceSet: 'ILJOT' });
+        console.log('[KITA DEBUG] RobustMinosa test instance created:', testAI);
         const emptyBoard = Array(10).fill(null).map(() => Array(5).fill(0));
         console.log('[KITA DEBUG] Empty board test:', testAI.isBoardEmpty(emptyBoard));
       }
@@ -11717,7 +11922,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Update Minosa All Clear detection for Konoha modes
+    // Update Minosa All Clear detection
     this.updateMinosaAllClearDetection();
 
     // Update game mode (for TGM2 grading system, powerup minos, etc.)
@@ -11725,6 +11930,7 @@ class GameScene extends Phaser.Scene {
       this.gameMode.update(this, this.deltaTime);
     }
 
+// ...
     // Update credits system
     if (this.creditsActive) {
       this.creditsTimer += 1 / 60; // Convert frame time to seconds
@@ -11843,12 +12049,6 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnPiece() {
-    // Mark that gameplay pieces have begun spawning (enables timed cheese/SFX gating)
-    if (!this.hasSpawnedPiece) {
-      this.hasSpawnedPiece = true;
-      console.log('[KITA DEBUG] Piece spawned:', this.currentPiece ? this.currentPiece.type : 'null');
-      this.zenCheeseTimer = 0; // start timing from first spawn
-    }
     // Shirase garbage check before spawning next piece (during ARE)
     const modeId =
       (this.gameMode && typeof this.gameMode.getModeId === "function"
@@ -11950,6 +12150,13 @@ class GameScene extends Phaser.Scene {
         pieceTextureKey,
       );
       this.activePowerupType = null;
+    }
+
+    // Mark that gameplay pieces have begun spawning (enables timed cheese/SFX gating)
+    if (!this.hasSpawnedPiece) {
+      this.hasSpawnedPiece = true;
+      console.log('[KITA DEBUG] Piece spawned:', this.currentPiece ? this.currentPiece.type : 'null');
+      this.zenCheeseTimer = 0; // start timing from first spawn
     }
 
     // Adjust spawn position for custom-width boards (e.g., Konoha 5-wide)
@@ -13018,6 +13225,14 @@ class GameScene extends Phaser.Scene {
       if (modeId === "konoha_easy" || modeId === "konoha_hard") {
         if (this.gameMode && typeof this.gameMode.allClearsAchieved === "number") {
           this.gameMode.allClearsAchieved++;
+          console.log('[KONOHA] All Clear achieved! Total:', this.gameMode.allClearsAchieved);
+          
+          // Force immediate score save for Konoha modes
+          setTimeout(() => {
+            console.log('[KONOHA] Forcing immediate score save...');
+            this.leaderboardSaved = false; // Reset flag to allow saving
+            this.saveBestScore();
+          }, 100);
         }
       }
       
@@ -13031,6 +13246,12 @@ class GameScene extends Phaser.Scene {
             : this.selectedMode) || "";
         if (modeIdNow === "konoha_easy" || modeIdNow === "konoha_hard") {
           this._kitaLastAchievedAt = this.time?.now || Date.now();
+
+          // Minosa: force immediate recompute on the next hint update after a Bravo reset.
+          this._minosaCacheKey = null;
+          this._minosaPath = null;
+          this._minosaForceNextUpdate = true;
+          this._minosaNextAllowedAt = 0;
         }
       } catch {}
     }
@@ -15952,18 +16173,26 @@ class GameScene extends Phaser.Scene {
       this.saveLeaderboardEntry(this.selectedMode, entry);
       this.leaderboardSaved = true;
 
+      // Force Firestore upload for Konoha modes
       try {
         const submitScore = window.FirebaseClient?.submitScore;
+        console.log('[KONOHA] Attempting Firestore upload:', { submitScore: !!submitScore, allClears, modeId: this.selectedMode });
+        
         if (submitScore) {
-          submitScore(this.selectedMode, {
+          const scoreData = {
             bravos: allClears,
             level: this.level,
             lines: this.lines,
             timeSeconds: this.currentTime != null ? Number(this.currentTime) : null,
-          });
+          };
+          console.log('[KONOHA] Submitting to Firestore:', scoreData);
+          submitScore(this.selectedMode, scoreData);
+          console.log('[KONOHA] Firestore upload initiated');
+        } else {
+          console.warn('[KONOHA] FirebaseClient.submitScore not available');
         }
       } catch (err) {
-        console.warn("Rating submit failed (konoha)", err);
+        console.error("[KONOHA] Rating submit failed:", err);
       }
       return;
     }

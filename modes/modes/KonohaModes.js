@@ -138,6 +138,12 @@ class KonohaEasyMode extends BaseMode {
         if (gameScene.scoreText) {
             gameScene.scoreText.setText('');
         }
+        
+        // Initialize Minosa AI if available
+        if (typeof MinosaAI !== 'undefined' && gameScene._minosaAI) {
+            console.log('[KONOHA] Minosa AI available for hints');
+            gameScene._minosaAI.reset();
+        }
     }
 
     // Update UI elements
@@ -216,6 +222,41 @@ class KonohaEasyMode extends BaseMode {
 
     getDisplayedGrade() {
         return `BRAVO: ${this.allClearsAchieved}`;
+    }
+    
+    // Get piece hint from Minosa AI
+    getPieceHint(gameScene) {
+        if (!gameScene || !gameScene._minosaAI) {
+            return null;
+        }
+        
+        try {
+            const currentPiece = gameScene.currentPiece?.type?.toUpperCase() || null;
+            const nextQueue = (gameScene.nextPieces || [])
+                .slice(0, 5)
+                .map((p) => {
+                    if (typeof p === "string") return p;
+                    if (p && typeof p === "object") {
+                        return p.type || p.piece || null;
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+            const holdPiece = gameScene.holdPiece?.type?.toUpperCase() || null;
+            
+            // Create board state for AI
+            const boardState = { grid: gameScene.board?.grid || [] };
+            
+            // Get AI analysis
+            const analysis = gameScene._minosaAI.analyzeGameState(
+                currentPiece, nextQueue, holdPiece, boardState
+            );
+            
+            return analysis;
+        } catch (error) {
+            console.error('[KONOHA] Error getting piece hint:', error);
+            return null;
+        }
     }
 }
 
