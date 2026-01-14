@@ -295,6 +295,14 @@ async function updateUserScoreAndRating(modeId, entry) {
       const prev = existing?.level ?? existing?.lines ?? 0;
       const curr = entry.level ?? entry.lines ?? 0;
       better = curr > prev;
+    } else if (cfg.type === "hanabi") {
+      const prev = existing?.hanabi ?? 0;
+      const curr = entry.hanabi ?? 0;
+      better = curr > prev;
+    } else if (cfg.type === "all_clears") {
+      const prev = existing?.allClears ?? existing?.bravos ?? 0;
+      const curr = entry.allClears ?? entry.bravos ?? 0;
+      better = curr > prev;
     } else {
       better = (entry.score || 0) > (existing?.score || 0);
     }

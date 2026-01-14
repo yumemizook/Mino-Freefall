@@ -92,8 +92,9 @@ class KonohaEasyMode extends BaseMode {
         
         console.log(`[KONOHA] All Clear check: ${linesCount} lines, AllClear: ${isAllClear}`);
 
+        // Ensure startTime is set for proper time tracking
         if (this.startTime === null && gameScene && typeof gameScene.currentTime === 'number') {
-            this.startTime = gameScene.currentTime;
+            this.startTime = gameScene.currentTime; // Use actual current time
         }
 
         const level = gameScene && typeof gameScene.level === 'number' ? gameScene.level : 0;
@@ -118,6 +119,18 @@ class KonohaEasyMode extends BaseMode {
                     gameScene.victory();
                 }
             }
+            // Show All Clear achieved indicator
+            gameScene.kitaDisplayState = '🦊✓';
+            gameScene.kitaDisplayTimer = 2;
+        } else {
+            // Check if there is no All Clear path
+            const nextQueue = (gameScene.nextPieces || []).slice(0, 6).map(p => typeof p === 'string' ? p : p?.type || '').filter(Boolean);
+            const holdPiece = gameScene.holdPiece?.type || null;
+            const sequence = PatternSequenceCalculator.calculateSequence(nextQueue, holdPiece);
+            if (!sequence) {
+                gameScene.kitaDisplayState = '🦊✗';
+                gameScene.kitaDisplayTimer = 1.5;
+            }
         }
         
         // Update Bravo counter display (will be implemented in separate UI element)
@@ -134,15 +147,9 @@ class KonohaEasyMode extends BaseMode {
         if (gameScene.levelText) {
             gameScene.levelText.setText('LEVEL: 0');
         }
-        // Grade display is handled by updateGradeUIVisibility in Konoha modes
+        // Score display is handled by grade display in Konoha modes
         if (gameScene.scoreText) {
             gameScene.scoreText.setText('');
-        }
-        
-        // Initialize Minosa AI if available
-        if (typeof MinosaAI !== 'undefined' && gameScene._minosaAI) {
-            console.log('[KONOHA] Minosa AI available for hints');
-            gameScene._minosaAI.reset();
         }
     }
 
@@ -153,8 +160,10 @@ class KonohaEasyMode extends BaseMode {
             this.startTime = gameScene.currentTime;
         }
         if (this.startTime !== null) {
-            const elapsed = gameScene.currentTime - this.startTime;
-            this.elapsedActiveTime = elapsed;
+            // Use the game's currentTime directly instead of calculating elapsed time
+            // This ensures synchronization with the main game timer
+            this.elapsedActiveTime = gameScene.currentTime;
+            const elapsed = this.elapsedActiveTime;
             const remaining = Math.max(0, this.totalTime - elapsed);
             if (remaining <= 0) {
                 if (typeof gameScene.showGameOverScreen === 'function') {
@@ -222,41 +231,6 @@ class KonohaEasyMode extends BaseMode {
 
     getDisplayedGrade() {
         return `BRAVO: ${this.allClearsAchieved}`;
-    }
-    
-    // Get piece hint from Minosa AI
-    getPieceHint(gameScene) {
-        if (!gameScene || !gameScene._minosaAI) {
-            return null;
-        }
-        
-        try {
-            const currentPiece = gameScene.currentPiece?.type?.toUpperCase() || null;
-            const nextQueue = (gameScene.nextPieces || [])
-                .slice(0, 5)
-                .map((p) => {
-                    if (typeof p === "string") return p;
-                    if (p && typeof p === "object") {
-                        return p.type || p.piece || null;
-                    }
-                    return null;
-                })
-                .filter(Boolean);
-            const holdPiece = gameScene.holdPiece?.type?.toUpperCase() || null;
-            
-            // Create board state for AI
-            const boardState = { grid: gameScene.board?.grid || [] };
-            
-            // Get AI analysis
-            const analysis = gameScene._minosaAI.analyzeGameState(
-                currentPiece, nextQueue, holdPiece, boardState
-            );
-            
-            return analysis;
-        } catch (error) {
-            console.error('[KONOHA] Error getting piece hint:', error);
-            return null;
-        }
     }
 }
 
@@ -485,8 +459,10 @@ class KonohaHardMode extends BaseMode {
             this.startTime = gameScene.currentTime;
         }
         if (this.startTime !== null) {
-            const elapsed = gameScene.currentTime - this.startTime;
-            this.elapsedActiveTime = elapsed;
+            // Use the game's currentTime directly instead of calculating elapsed time
+            // This ensures synchronization with the main game timer
+            this.elapsedActiveTime = gameScene.currentTime;
+            const elapsed = this.elapsedActiveTime;
             const remaining = Math.max(0, this.totalTime - elapsed);
             if (remaining <= 0) {
                 if (typeof gameScene.showGameOverScreen === 'function') {

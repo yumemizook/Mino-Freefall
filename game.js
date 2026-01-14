@@ -6612,15 +6612,7 @@ class GameScene extends Phaser.Scene {
     this._minosaFrameCounter = 0;
     this._minosaNextAllowedAt = 0;
     this._minosaForceNextUpdate = true;
-    this._kitaLastAchievedAt = -Infinity;
-    this._kitaLastCheckTime = 0;
-    this._kitaWasAchievable = false;
-    this._kitaCrossStartTime = 0;
-    this._kitaShowCross = false;
-    if (this.kitaIndicatorText) {
-      this.kitaIndicatorText.setVisible(false);
-      this.kitaIndicatorText.setText("");
-    }
+    
     this.standardComboCount = -1;
     this.clearBannerGroup = null;
     this.clearBannerLine1 = null;
@@ -6843,6 +6835,9 @@ class GameScene extends Phaser.Scene {
     // Ensure particle arrays exist before clearing
     this.hanabiParticles = [];
     this.hanabiPool = [];
+    // Initialize hanabi sound queue for rate-limited playback
+    this.hanabiSoundQueue = [];
+    this.hanabiSoundTimer = 0;
     this.clearHanabiParticles();
     this.levelMaxSoundPlayed = false;
     this.lastBellLevel = -1;
@@ -7468,15 +7463,20 @@ class GameScene extends Phaser.Scene {
     if (this.gameMode && this.gameMode.modeId === "tgm2_normal") {
       return;
     }
-    // Play firework SFX in Easy modes
+    // Play firework SFX in Easy modes and TGM3 Easy mode
     const modeId =
       this.gameMode && typeof this.gameMode.getModeId === "function"
         ? this.gameMode.getModeId()
         : this.selectedMode;
-    if (modeId === "easy_easy" || modeId === "easy_normal") {
-      try {
-        this.sound?.add("firework", { volume: 0.6 })?.play();
-      } catch {}
+    if (modeId === "easy_easy" || modeId === "easy_normal" || modeId === "tgm3_easy") {
+      // Queue up hanabi sounds for rate-limited playback (15 per second max)
+      if (!this.hanabiSoundQueue) this.hanabiSoundQueue = [];
+      if (!this.hanabiSoundTimer) this.hanabiSoundTimer = 0;
+      
+      // Add sounds to queue
+      for (let i = 0; i < count; i++) {
+        this.hanabiSoundQueue.push({ time: Date.now() });
+      }
     }
     if (!this.hanabiContainer) return;
     const particlesToSpawn = Math.min(
@@ -7524,17 +7524,33 @@ class GameScene extends Phaser.Scene {
       p.life -= deltaTime;
       if (p.life <= 0) {
         p.g.clear();
-        p.g.setVisible(false);
-        this.hanabiPool.push(p.g);
+        p.g.destroy();
         continue;
       }
-      p.vy += 120 * deltaTime;
       p.g.x += p.vx * deltaTime;
       p.g.y += p.vy * deltaTime;
+      p.vy += 200 * deltaTime; // gravity
       p.g.setAlpha(Math.max(0, p.life / 0.5));
       remaining.push(p);
     }
     this.hanabiParticles = remaining;
+  }
+
+  updateHanabiSounds(deltaTime) {
+    // Process hanabi sound queue at 15 sounds per second max (1 every ~66.67ms)
+    if (!this.hanabiSoundQueue || this.hanabiSoundQueue.length === 0) return;
+    
+    this.hanabiSoundTimer = (this.hanabiSoundTimer || 0) + deltaTime;
+    const soundInterval = 1 / 15; // 15 sounds per second
+    
+    while (this.hanabiSoundTimer >= soundInterval && this.hanabiSoundQueue.length > 0) {
+      this.hanabiSoundTimer -= soundInterval;
+      this.hanabiSoundQueue.shift(); // Remove one from queue
+      
+      try {
+        this.sound?.add("firework", { volume: 0.6 })?.play();
+      } catch {}
+    }
   }
 
   clearHanabiParticles() {
@@ -7549,16 +7565,9 @@ class GameScene extends Phaser.Scene {
   }
 
   updatePlacementHint() {
-    // DISABLED: Old hint system - using new Minosa hint system instead
-    // This prevents conflicts with the new clean hint rendering
-    return;
-    
     if (!this.hintGraphics) return;
     this.hintGraphics.clear();
-    // Konoha modes need Kita indicator updates even during ARE/line-clear; otherwise it can
-    // get stuck displaying ✗. Keep the expensive solver behind throttles.
-    const modeIdPre = this.gameMode?.getModeId?.() || this.selectedMode;
-    const isKonohaModePre = modeIdPre === "konoha_easy" || modeIdPre === "konoha_hard";
+    
     const shouldSkipHintDraw =
       !this.currentPiece ||
       this.areActive ||
@@ -7568,26 +7577,33 @@ class GameScene extends Phaser.Scene {
       this.readyGoPhase ||
       !this.isNormalOrEasyMode();
     if (shouldSkipHintDraw) {
-      if (isKonohaModePre && this.kitaIndicatorText) {
-        const now = this.time?.now || Date.now();
-        const achievedRecently =
-          Number.isFinite(this._kitaLastAchievedAt) && now - this._kitaLastAchievedAt < 2000;
-        this.kitaIndicatorText.setVisible(achievedRecently);
-        this.kitaIndicatorText.setText(achievedRecently ? "🦊✓" : "");
-      }
       return;
     }
 
-    // Minosa AI All Clear hint rendering for Konoha modes
+    // Check if this is a mode that should use Minosa AI hints
     const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
-    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+    const allowedModes = ['tgm2_normal', 'tgm3_easy'];
+    const isAllowedMode = allowedModes.includes(modeId);
     
-    if (isKonohaMode) {
-      this.updateMinosaAllClearDetection();
+    if (isAllowedMode) {
+      // For TGM2 Normal and TGM3 Easy, use regular piece placement hints
+      // (Minosa AI is for all-clear detection, not regular placement hints)
+      this.renderRegularPlacementHint();
       return;
     }
 
     // Regular hint rendering for other modes
+    this.renderRegularPlacementHint();
+  }
+
+  renderRegularPlacementHint() {
+    // Calculate optimal stacking hint position (not just ghost position)
+    if (this.currentPiece && this.board) {
+      this.hintPlacement = this.calculateOptimalPlacement();
+    }
+    
+    if (!this.hintPlacement || !this.hintPlacement.shape) return;
+    
     const hintColor = this.currentPiece?.color || 0x00e0ff;
     const cell = this.cellSize;
     const offX = this.matrixOffsetX;
@@ -7595,342 +7611,377 @@ class GameScene extends Phaser.Scene {
     const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
     const rectSize = cell * renderScale;
 
-    this.hintGraphics.lineStyle(2, hintColor, 0.4);
-    for (let r = 0; r < this.hintPlacement.shape.length; r++) {
-      for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
-        if (!this.hintPlacement.shape[r][c]) continue;
+    // Calculate smooth fade animation
+    const time = this.time.now || 0;
+    const fadeSpeed = 0.002; // Adjust for faster/slower fade
+    const alpha = 0.3 + 0.3 * Math.sin(time * fadeSpeed); // Oscillate between 0.3 and 0.6
+    
+    this.hintGraphics.lineStyle(2, hintColor, alpha);
+    const shape = this.hintPlacement.shape;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
         const x = this.hintPlacement.x + c;
         const y = this.hintPlacement.y + r;
         const drawY = y - 2; // Visible rows start at row 2 in 22-row matrix
         if (drawY < 0) continue;
-        const centerX = this.doubleSizedPiecesActive
-          ? offX + (x * 2 + 1) * cell
+        
+        // Calculate top-left corner of block to match regular piece drawing
+        const renderX = this.doubleSizedPiecesActive
+          ? offX + (x * 2) * cell
           : offX + x * cell;
-        const centerY = this.doubleSizedPiecesActive
-          ? offY + (drawY * 2 + 1) * cell
+        const renderY = this.doubleSizedPiecesActive
+          ? offY + (drawY * 2) * cell
           : offY + drawY * cell;
-        const renderX = centerX - rectSize / 2;
-        const renderY = centerY - rectSize / 2;
-        const left = renderX - rectSize / 2;
-        const top = renderY - rectSize / 2;
-        this.hintGraphics.strokeRect(left, top, rectSize, rectSize);
+        
+        // Draw rectangle centered like regular pieces (subtract half size for centering)
+        this.hintGraphics.strokeRect(
+          renderX - rectSize / 2,
+          renderY - rectSize / 2,
+          rectSize,
+          rectSize
+        );
       }
     }
   }
 
-  // Simplified Minosa All Clear detection for Konoha modes
-  updateMinosaAllClearDetection() {
-    const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
-    const isKonohaMode = modeId === "konoha_easy" || modeId === "konoha_hard";
+  calculateOptimalPlacement() {
+    if (!this.currentPiece || !this.board) return null;
     
-    if (!isKonohaMode) {
-      if (this.kitaIndicatorText) {
-        this.kitaIndicatorText.setVisible(false);
-        this.kitaIndicatorText.setText("");
-      }
-      return;
-    }
+    let bestPlacement = null;
+    let bestScore = -Infinity;
     
-    // Initialize Minosa AI once
-    if (!this._minosaAI) {
-      if (typeof MinosaAI === 'undefined') return;
+    // Try all possible positions and rotations
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const testPiece = new Piece(this.currentPiece.type, this.currentPiece.rotationSystem, rotation);
       
-      try {
-        this._minosaAI = new MinosaAI();
-        console.log('[MINOSA] AI initialized successfully');
-      } catch (err) {
-        console.error('[MINOSA] Failed to initialize AI:', err);
-        return;
-      }
-    }
-    
-    // Reset detection after bravo or mode start
-    if (this._lastAllClearTime !== this.allClearTime) {
-      console.log('[MINOSA] All Clear detected, resetting detection');
-      this._minosaCacheKey = null;
-      this._minosaPath = null;
-      this.hintPlacement = null;
-      this._lastAllClearTime = this.allClearTime;
-      this._minosaForceNextUpdate = true;
-      this._minosaNextAllowedAt = 0;
-    }
-
-    // Time-based throttle (avoid frame-time spikes). Force-update bypasses throttle.
-    const nowMs = this.time?.now || Date.now();
-    const minIntervalMs = 200;
-    if (!this._minosaForceNextUpdate && nowMs < (this._minosaNextAllowedAt || 0)) {
-      return;
-    }
-    this._minosaNextAllowedAt = nowMs + minIntervalMs;
-    const forceThisUpdate = !!this._minosaForceNextUpdate;
-    this._minosaForceNextUpdate = false;
-    
-    // Get current game state
-    const currentPiece = this.currentPiece?.type?.toUpperCase() || null;
-    const currentRotation = this.currentPiece?.rotation || 0;
-    const nextQueue = (this.nextPieces || [])
-      .slice(0, 5)
-      .map((p) => {
-        if (typeof p === "string") return p;
-        if (p && typeof p === "object") {
-          return p.type || p.piece || null;
-        }
-        return null;
-      })
-      .filter(Boolean);
-    const holdPiece = this.holdPiece?.type?.toUpperCase() || null;
-    
-
-
-    // Create board representation for Minosa (skip hidden rows 0-1)
-    const minosaBoard = Array(10).fill(null).map(() => Array(5).fill(0));
-    if (this.board && this.board.grid) {
-      // Start from row 2 to skip hidden rows 0-1
-      for (let r = 0; r < Math.min(10, this.board.grid.length - 2); r++) {
-        for (let c = 0; c < Math.min(5, this.board.grid[r + 2].length); c++) {
-          if (this.board.grid[r + 2][c]) {
-            minosaBoard[r][c] = 1;
+      // Try all horizontal positions
+      for (let x = -2; x < this.board.cols; x++) {
+        testPiece.x = x;
+        testPiece.y = 0;
+        
+        // Drop to bottom
+        const ghost = testPiece.getGhostPosition(this.board);
+        
+        // Check if position is valid
+        if (this.isValidPlacement(ghost.x, ghost.y, testPiece.shape)) {
+          const score = this.evaluatePlacement(ghost.x, ghost.y, testPiece.shape);
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestPlacement = {
+              x: ghost.x,
+              y: ghost.y,
+              shape: testPiece.shape
+            };
           }
         }
       }
     }
     
-
-    
-    // Check if board is empty using new API
-    const boardState = { grid: minosaBoard };
-    const isBoardEmpty = this._minosaAI.isBoardClear(boardState);
-
-    // If no current piece, don't try to find path
-    if (!currentPiece) {
-      this._minosaPath = null;
-      this.hintPlacement = null;
-      this.updateKitaIndicator(null);
-      return;
-    }
-
-
-
-
-    // Create a compact cache key (avoid JSON.stringify per tick)
-    let sig = "";
-    for (let r = 0; r < minosaBoard.length; r++) {
-      for (let c = 0; c < minosaBoard[r].length; c++) {
-        sig += minosaBoard[r][c] ? "1" : "0";
-      }
-    }
-    const cacheKey = `${sig}|${currentPiece || ""}|${nextQueue.join('')}|${holdPiece || ""}`;
-    
-    console.log('[MINOSA] Cache key components:');
-    console.log('  Board signature:', sig);
-    console.log('  Current piece:', currentPiece);
-    console.log('  Next queue:', nextQueue.join(''));
-    console.log('  Hold piece:', holdPiece);
-    console.log('  Full cache key:', cacheKey);
-    
-    // Run detection if cache miss (or we forced an update)
-    if (forceThisUpdate || this._minosaCacheKey !== cacheKey) {
-      console.log('[MINOSA] Cache miss, running detection');
-      console.log('[MINOSA] Old cache key:', this._minosaCacheKey);
-      console.log('[MINOSA] New cache key:', cacheKey);
-      this._minosaCacheKey = cacheKey;
-      
-      // Build available pieces array
-      const availablePieces = [];
-      if (currentPiece) availablePieces.push(currentPiece);
-      if (Array.isArray(nextQueue)) {
-        nextQueue.forEach(piece => {
-          if (piece && typeof piece === 'string') {
-            availablePieces.push(piece.toUpperCase());
-          }
-        });
-      }
-      if (holdPiece) availablePieces.push(holdPiece);
-      
-      // Use new MinosaAI analyzeGameState API
-      const analysis = this._minosaAI.analyzeGameState(
-        currentPiece, nextQueue, holdPiece, boardState
-      );
-      
-      this._minosaPath = analysis.status === 'possible' ? [analysis.hint] : null;
-      
-
-      // Validate the returned path
-      if (this._minosaPath && !Array.isArray(this._minosaPath)) {
-        console.warn('[MINOSA] Invalid path returned, setting to null');
-        this._minosaPath = null;
-      }
-    } else {
-      console.log('[MINOSA] Cache hit, using cached result');
-    }
-    
-    // Update Kita indicator using new MinosaAI API
-    this.updateKitaIndicator(this._minosaAI.getCurrentStatus(), this._minosaAI.getKitaDisplay());
-    
-    // Update hint placement using new MinosaAI API
-    const currentHint = this._minosaAI.getCurrentHint();
-    console.log('[MINOSA] Current hint from AI:', currentHint);
-    
-    // Clear any existing hints first
-    if (this.hintGraphics) {
-      this.hintGraphics.clear();
-    }
-    
-    // If hint is null but we have pieces, force a fresh analysis
-    if (!currentHint && (currentPiece || holdPiece || (nextQueue && nextQueue.length > 0))) {
-      console.log('[MINOSA] Hint is null but pieces available, forcing fresh analysis');
-      // Force update by invalidating cache
-      this._minosaCacheKey = null;
-      // Run fresh analysis
-      this.updateMinosaAllClearDetection();
-      return;
-    }
-    
-    // ALWAYS show hint if available (remove suppression logic)
-    if (currentHint && currentHint.position) {
-      console.log('[MINOSA] Displaying new hint:', currentHint);
-      try {
-        
-        // Get the actual piece shape for the hint with proper rotation
-        let hintShape = [[1]]; // Default fallback
-        if (currentHint.nextPiece && typeof TETROMINOES !== 'undefined') {
-          // Use the actual piece shape from TETROMINOES with rotation
-          const pieceData = TETROMINOES[currentHint.nextPiece];
-          if (pieceData && pieceData.rotations) {
-            const rotation = currentHint.rotation || 0;
-            hintShape = pieceData.rotations[rotation] || pieceData.rotations[0];
-            console.log('[MINOSA] Using piece shape for', currentHint.nextPiece, 'rotation', rotation);
-          }
-        }
-        
-        // Create simple, clean hint placement
-        this.hintPlacement = {
-          x: currentHint.position.x,
-          y: currentHint.position.y,
-          shape: hintShape,
-          nextPiece: currentHint.nextPiece,
-          hint: currentHint,
-          rotation: currentHint.rotation || 0
-        };
-        
-        console.log('[MINOSA] Clean hint placement:', this.hintPlacement);
-        
-        // Render the new hint immediately
-        console.log('[MINOSA] About to call renderCleanMinosaHint');
-        this.renderCleanMinosaHint();
-        console.log('[MINOSA] renderCleanMinosaHint call completed');
-        
-        
-      } catch (error) {
-        console.error('[MINOSA] Error setting hint placement:', error);
-        this.hintPlacement = null;
-      }
-    } else {
-      console.log('[MINOSA] No hint available - currentHint:', currentHint, 'position:', currentHint?.position);
-      this.hintPlacement = null;
-    }
+    return bestPlacement || this.getGhostPosition(this.currentPiece);
   }
 
-  // Clean, simple Minosa hint rendering
-  renderCleanMinosaHint() {
-    console.log('[MINOSA] renderCleanMinosaHint called');
-    
-    if (!this.hintGraphics) {
-      console.log('[MINOSA] No hintGraphics object');
-      return;
-    }
-    
-    if (!this.hintPlacement) {
-      console.log('[MINOSA] No hintPlacement');
-      return;
-    }
-    
-    // Clear any previous graphics completely
-    this.hintGraphics.clear();
-    
-    const cell = this.cellSize;
-    const offX = this.matrixOffsetX;
-    const offY = this.matrixOffsetY;
-    const renderScale = this.doubleSizedPiecesActive ? 2 : 1;
-    const rectSize = cell * renderScale;
-    
-    // Simple, slow blinking - one cycle every 0.5 seconds
-    const now = this.time?.now || Date.now();
-    const cycleTime = 500; // 0.5 seconds
-    const phase = (now % cycleTime) / cycleTime;
-    const alpha = 0.4 + 0.6 * Math.sin(phase * Math.PI * 2); // Smooth sine wave
-    
-    // Simple orange style
-    this.hintGraphics.lineStyle(4, 0xFF8800, alpha);
-    this.hintGraphics.fillStyle(0xFF8800, alpha * 0.2);
-    
-    // Get current stack height to position hint at bottom
-    const stackHeight = this.getCurrentStackHeight();
-    console.log('[MINOSA] Current stack height:', stackHeight);
-    
-    // For Konoha modes, position hint relative to the bottom of the visible area
-    // The AI position is relative to the solve pattern, so we need to convert it
-    const visibleBoardHeight = 20; // Visible board height (rows 2-21)
-    const hintBottomY = visibleBoardHeight - this.hintPlacement.shape.length - 2; // Position near bottom, accounting for hidden rows
-    
-    console.log('[MINOSA] Original hint position:', this.hintPlacement.x, this.hintPlacement.y);
-    console.log('[MINOSA] Adjusted hint position:', this.hintPlacement.x, hintBottomY);
-    
-    // Render each block of the piece
-    for (let r = 0; r < this.hintPlacement.shape.length; r++) {
-      for (let c = 0; c < this.hintPlacement.shape[r].length; c++) {
-        if (!this.hintPlacement.shape[r][c]) continue;
+  isValidPlacement(x, y, shape) {
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
         
-        // Calculate final position on the board
-        const boardX = this.hintPlacement.x + c;
-        const boardY = hintBottomY + r;
+        const boardX = x + c;
+        const boardY = y + r;
         
-        // Convert to screen coordinates
-        // Account for the fact that visible rows start at row 2
-        const screenY = boardY - 2;
-        if (screenY < 0 || screenY >= 20) {
-          console.log('[MINOSA] Skipping block at board', boardX, boardY, '- screen Y out of bounds:', screenY);
-          continue;
+        // Check boundaries
+        if (boardX < 0 || boardX >= this.board.cols || 
+            boardY >= this.board.rows || boardY < 0) {
+          return false;
         }
         
-        const screenX = this.doubleSizedPiecesActive
-          ? offX + (boardX * 2 + 1) * cell
-          : offX + boardX * cell;
-        const screenYPos = this.doubleSizedPiecesActive
-          ? offY + (screenY * 2 + 1) * cell
-          : offY + screenY * cell;
-        
-        const left = screenX - rectSize / 2;
-        const top = screenYPos - rectSize / 2;
-        
-        // Draw simple rectangle
-        this.hintGraphics.fillRect(left, top, rectSize, rectSize);
-        this.hintGraphics.strokeRect(left, top, rectSize, rectSize);
-        
-        console.log('[MINOSA] Drew block at board', boardX, boardY, 'screen', left, top);
+        // Check collision with existing blocks
+        if (boardY >= 0 && this.board.grid[boardY][boardX] !== 0) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  evaluatePlacement(x, y, shape) {
+    let score = 0;
+    
+    // Create temporary board to evaluate placement
+    const tempGrid = this.createTempGrid();
+    
+    // Place piece on temp grid
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          const gridY = y + r;
+          const gridX = x + c;
+          if (gridY >= 0 && gridY < this.board.rows && 
+              gridX >= 0 && gridX < this.board.cols) {
+            tempGrid[gridY][gridX] = 1;
+          }
+        }
       }
     }
     
-    console.log('[MINOSA] Hint rendering complete');
+    // 1. Heavy penalty for creating holes
+    const holes = this.countHolesInGrid(tempGrid);
+    score -= holes * 200; // Very heavy penalty
+    
+    // 2. Penalty for uneven columns (bad for stacking)
+    const columnUnevenness = this.calculateColumnUnevenness(tempGrid);
+    score -= columnUnevenness * 50;
+    
+    // 3. Bonus for flat top surface
+    const surfaceFlatness = this.calculateSurfaceFlatness(tempGrid);
+    score += surfaceFlatness * 30;
+    
+    // 4. Massive bonus for tetrises
+    const lines = this.countLinesCompleted(x, y, shape);
+    if (lines === 4) {
+      score += 2000; // Huge tetris bonus
+    } else if (lines > 0) {
+      score += lines * 25; // Small bonus for other clears
+    }
+    
+    // 5. Bonus for well-formed columns (4+ high, clean)
+    const wellFormedColumns = this.countWellFormedColumns(tempGrid);
+    score += wellFormedColumns * 100;
+    
+    // 6. Prefer lower positions
+    score += y * 5;
+    
+    // 7. Prefer center positioning
+    const centerDistance = Math.abs(x + this.getPieceCenter(shape) - this.board.cols / 2);
+    score -= centerDistance * 3;
+    
+    return score;
   }
 
-  // Get current stack height for bottom positioning
-  getCurrentStackHeight() {
-    if (!this.board || !this.board.grid) return 0;
+  countHolesInGrid(grid) {
+    let holes = 0;
+    for (let c = 0; c < this.board.cols; c++) {
+      let foundBlock = false;
+      for (let r = 0; r < this.board.rows; r++) {
+        if (grid[r][c] !== 0) {
+          foundBlock = true;
+        } else if (foundBlock && grid[r][c] === 0) {
+          holes++;
+        }
+      }
+    }
+    return holes;
+  }
+
+  calculateColumnUnevenness(grid) {
+    let heights = [];
+    for (let c = 0; c < this.board.cols; c++) {
+      let height = 0;
+      for (let r = 0; r < this.board.rows; r++) {
+        if (grid[r][c] !== 0) {
+          height = this.board.rows - r;
+          break;
+        }
+      }
+      heights.push(height);
+    }
     
+    // Calculate standard deviation (higher = more uneven)
+    const avgHeight = heights.reduce((a, b) => a + b, 0) / heights.length;
+    const variance = heights.reduce((sum, h) => sum + Math.pow(h - avgHeight, 2), 0) / heights.length;
+    return Math.sqrt(variance);
+  }
+
+  calculateSurfaceFlatness(grid) {
+    let flatness = 0;
+    // Count consecutive blocks in top rows
+    for (let r = 0; r < 4; r++) { // Check top 4 rows
+      let consecutive = 0;
+      for (let c = 0; c < this.board.cols; c++) {
+        if (grid[r][c] !== 0) {
+          consecutive++;
+        } else {
+          consecutive = 0;
+        }
+        flatness += consecutive;
+      }
+    }
+    return flatness;
+  }
+
+  countWellFormedColumns(grid) {
+    let wellFormed = 0;
+    for (let c = 0; c < this.board.cols; c++) {
+      let columnHeight = 0;
+      let hasHoles = false;
+      
+      for (let r = 0; r < this.board.rows; r++) {
+        if (grid[r][c] !== 0) {
+          columnHeight++;
+        } else if (columnHeight > 0) {
+          hasHoles = true;
+        }
+      }
+      
+      // Column is well-formed if it's 4+ high and has no holes
+      if (columnHeight >= 4 && !hasHoles) {
+        wellFormed++;
+      }
+    }
+    return wellFormed;
+  }
+
+  calculateSurfaceHeight(x, y, shape) {
     let maxHeight = 0;
-    for (let col = 0; col < this.board.cols; col++) {
-      for (let row = 0; row < this.board.rows; row++) {
-        if (this.board.grid[row][col]) {
-          maxHeight = Math.max(maxHeight, this.board.rows - row);
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          maxHeight = Math.max(maxHeight, y + r);
         }
       }
     }
     return maxHeight;
   }
 
-  // Get current board height for proper hint positioning
-  getBoardHeight() {
+  countHolesCreated(x, y, shape) {
+    let holes = 0;
+    const tempGrid = this.createTempGrid();
+    
+    // Place piece on temp grid
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          const gridY = y + r;
+          const gridX = x + c;
+          if (gridY >= 0 && gridY < this.board.rows && 
+              gridX >= 0 && gridX < this.board.cols) {
+            tempGrid[gridY][gridX] = 1;
+          }
+        }
+      }
+    }
+    
+    // Count holes (empty cells with filled cells above)
+    for (let c = 0; c < this.board.cols; c++) {
+      let foundBlock = false;
+      for (let r = 0; r < this.board.rows; r++) {
+        if (tempGrid[r][c] !== 0) {
+          foundBlock = true;
+        } else if (foundBlock && tempGrid[r][c] === 0) {
+          holes++;
+        }
+      }
+    }
+    
+    return holes;
+  }
+
+  countLinesCompleted(x, y, shape) {
+    let lines = 0;
+    const tempGrid = this.createTempGrid();
+    
+    // Place piece on temp grid
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          const gridY = y + r;
+          const gridX = x + c;
+          if (gridY >= 0 && gridY < this.board.rows && 
+              gridX >= 0 && gridX < this.board.cols) {
+            tempGrid[gridY][gridX] = 1;
+          }
+        }
+      }
+    }
+    
+    // Count completed lines
+    for (let r = 0; r < this.board.rows; r++) {
+      let complete = true;
+      for (let c = 0; c < this.board.cols; c++) {
+        if (tempGrid[r][c] === 0) {
+          complete = false;
+          break;
+        }
+      }
+      if (complete) lines++;
+    }
+    
+    return lines;
+  }
+
+  countTetrisSetup(x, y, shape) {
+    let setupScore = 0;
+    const tempGrid = this.createTempGrid();
+    
+    // Place piece on temp grid
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          const gridY = y + r;
+          const gridX = x + c;
+          if (gridY >= 0 && gridY < this.board.rows && 
+              gridX >= 0 && gridX < this.board.cols) {
+            tempGrid[gridY][gridX] = 1;
+          }
+        }
+      }
+    }
+    
+    // Count columns that are 4+ blocks high (good for tetrises)
+    for (let c = 0; c < this.board.cols; c++) {
+      let columnHeight = 0;
+      for (let r = 0; r < this.board.rows; r++) {
+        if (tempGrid[r][c] !== 0) {
+          columnHeight++;
+        }
+      }
+      if (columnHeight >= 4) {
+        setupScore++;
+      }
+    }
+    
+    return setupScore;
+  }
+
+  createTempGrid() {
+    const tempGrid = [];
+    for (let r = 0; r < this.board.rows; r++) {
+      tempGrid[r] = [...this.board.grid[r]];
+    }
+    return tempGrid;
+  }
+
+  getPieceCenter(shape) {
+    let sumX = 0, count = 0;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c]) {
+          sumX += c;
+          count++;
+        }
+      }
+    }
+    return count > 0 ? sumX / count : 0;
+  }
+
+  // All Clear detection - only enabled for TGM2 Normal and TGM3 Easy
+  updateMinosaAllClearDetection() {
+    const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
+    const allowedModes = ['tgm2_normal', 'tgm3_easy'];
+    const isAllowedMode = allowedModes.includes(modeId);
+    
+    if (!isAllowedMode) {
+      // Minosa AI deprecated for this mode
+      return;
+    }
+    
+    // Minosa AI logic for allowed modes only
+    // (Original Minosa AI implementation would go here)
+  }
+
+  // Get current stack height for bottom positioning
+  getCurrentStackHeight() {
     if (!this.board || !this.board.grid) return 0;
     
     let maxHeight = 0;
@@ -7992,38 +8043,6 @@ class GameScene extends Phaser.Scene {
     
     return 0; // No blocks found
   }
-  
-  updateKitaIndicator(status, kitaDisplay) {
-    if (!this.kitaIndicatorText) return;
-
-    const now = this.time.now;
-    
-    // Use the provided status and display from MinosaAI
-    if (status === 'achieved') {
-      this.kitaIndicatorText.setText("✅");
-    } else if (status === 'possible') {
-      this.kitaIndicatorText.setText(kitaDisplay || "🦊");
-    } else {
-      const timeSinceLastCheck = now - (this._kitaLastCheckTime || 0);
-      if (timeSinceLastCheck > 100) {
-        this._kitaLastCheckTime = now;
-        if (this._kitaWasAchievable && status !== 'possible') {
-          this._kitaCrossStartTime = now;
-          this._kitaShowCross = true;
-        }
-      }
-
-      if (this._kitaShowCross && now - this._kitaCrossStartTime < 2000) {
-        this.kitaIndicatorText.setText("🦊✗");
-      } else {
-        this.kitaIndicatorText.setText("");
-        this._kitaShowCross = false;
-      }
-    }
-
-    this._kitaWasAchievable = status === 'possible';
-  }
-  
   
   preload() {
     // Assets are loaded in AssetLoaderScene
@@ -8534,32 +8553,6 @@ class GameScene extends Phaser.Scene {
     if (isKonohaMode) {
       this.matrixOffsetX -= 20; // Move 20px left
       this.matrixOffsetY -= 19; // Move 19px up (15 + 4 additional)
-    }
-    if (this.kitaIndicatorText) {
-      // Position Kita indicator above the Bravo counter
-      // Bravo counter is at ppsX, bravoY (where bravoY = ppsY - 60)
-      // Place Kita indicator 30px above Bravo counter
-      const ppsX = Math.max(
-        20,
-        Math.min(
-          windowWidth - 180,
-          this.borderOffsetX + this.playfieldWidth + 20,
-        ),
-      );
-      const ppsY = Math.max(
-        40,
-        Math.min(
-          windowHeight - 80,
-          this.borderOffsetY + this.playfieldHeight - 40,
-        ),
-      );
-      const bravoY = ppsY - 60;
-      const kitaY = bravoY - 30;
-      
-      this.kitaIndicatorText.setPosition(
-        ppsX,
-        kitaY,
-      );
     }
 
     // Store window dimensions for UI positioning
@@ -9583,44 +9576,13 @@ class GameScene extends Phaser.Scene {
 
     this._konohaAllClearHintKey = null;
     this._konohaAllClearHintPath = null;
-    this._kitaLastAchievedAt = -Infinity;
-    this._kitaLastCheckTime = 0;
-    this._kitaWasAchievable = false;
-    this._kitaCrossStartTime = 0;
-    this._kitaShowCross = false;
 
-    if (!this.kitaIndicatorText) {
-      const fontSize = Math.max(14, Math.floor(this.cellSize * 0.75));
-      this.kitaIndicatorText = this.add
-        .text(this.borderOffsetX + this.playfieldWidth - 8, this.borderOffsetY - 28, "", {
-          fontSize: `${fontSize}px`,
-          fill: "#ffffff",
-          fontFamily: "Hatsukoi Friends",
-          fontStyle: "bold",
-          align: "right",
-        })
-        .setOrigin(1, 0)
-        .setDepth(9999)
-        .setVisible(false);
-      if (this.overlayGroup) {
-        this.overlayGroup.add(this.kitaIndicatorText);
-      }
-      
-      // DEBUG: Test MinosaAI availability
-      console.log('[KITA DEBUG] Kita indicator created successfully');
-      console.log('[KITA DEBUG] RobustMinosa available:', typeof RobustMinosa !== 'undefined');
-      if (typeof RobustMinosa !== 'undefined') {
-        const testAI = new RobustMinosa({ rows: 10, cols: 5, pieceSet: 'ILJOT' });
-        console.log('[KITA DEBUG] RobustMinosa test instance created:', testAI);
-        const emptyBoard = Array(10).fill(null).map(() => Array(5).fill(0));
-        console.log('[KITA DEBUG] Empty board test:', testAI.isBoardEmpty(emptyBoard));
-      }
-    }
     this.powerupEffectHandler =
       typeof PowerupEffectHandler !== "undefined"
         ? new PowerupEffectHandler(this)
         : null;
     this.pendingPowerup = null;
+
     this.powerupSpawned = { free_fall: false, del_even: false };
     this.powerupCells = new Map();
     const powerupLabelSize = Math.max(12, Math.floor(this.cellSize * 0.6));
@@ -10214,10 +10176,6 @@ class GameScene extends Phaser.Scene {
       this.bravoCountText.setScale(0);
     }
 
-    console.log(`[DEBUG] Bravo banner created: text="${this.bravoBannerText.text}", visible=${this.bravoBannerText.visible}, alpha=${this.bravoBannerText.alpha}`);
-    console.log(`[DEBUG] Bravo banner in overlayGroup: ${this.overlayGroup ? this.overlayGroup.contains(this.bravoBannerText) : 'no overlayGroup'}`);
-    console.log(`[DEBUG] Overlay group visible: ${this.overlayGroup ? this.overlayGroup.visible : 'no overlayGroup'}`);
-
     // Position for Konoha modes - higher and slightly left
     let textX, textY;
     if (modeId === "konoha_easy" || modeId === "konoha_hard") {
@@ -10227,8 +10185,6 @@ class GameScene extends Phaser.Scene {
       textX = this.borderOffsetX + this.playfieldWidth / 2;
       textY = this.borderOffsetY + this.playfieldHeight / 2;
     }
-
-    console.log(`[DEBUG] Bravo banner positioning: textX=${textX}, textY=${textY}, borderOffsetX=${this.borderOffsetX}, borderOffsetY=${this.borderOffsetY}, playfieldWidth=${this.playfieldWidth}, playfieldHeight=${this.playfieldHeight}`);
 
     this.bravoBannerText.setPosition(textX, textY);
 
@@ -10969,6 +10925,8 @@ class GameScene extends Phaser.Scene {
 
     // Update lightweight fireworks particles
     this.updateHanabiParticles(this.deltaTime);
+    // Update hanabi sound queue for rate-limited firework sounds
+    this.updateHanabiSounds(this.deltaTime);
     // Update BGM scheduling
     this.updateBGM();
     // Fallback: ensure section transition/evaluation fires when basis passes threshold
@@ -13221,39 +13179,51 @@ class GameScene extends Phaser.Scene {
         `[BRAVO] mode=${modeId} lines=${linesToClear.length} level=${this.level} score=${this.score}`;
       } catch {}
       
-      // For Konoha modes, increment the count before showing banner
+      // For Konoha modes, increment count before showing banner
       if (modeId === "konoha_easy" || modeId === "konoha_hard") {
         if (this.gameMode && typeof this.gameMode.allClearsAchieved === "number") {
           this.gameMode.allClearsAchieved++;
           console.log('[KONOHA] All Clear achieved! Total:', this.gameMode.allClearsAchieved);
           
-          // Force immediate score save for Konoha modes
+          // Apply time bonus for Konoha modes - add to totalTime instead of subtracting from currentTime
+          if (this.gameMode && typeof this.gameMode.getTimeBonusSeconds === 'function') {
+            const timeBonus = this.gameMode.getTimeBonusSeconds(
+              linesToClear.length, 
+              true, // isAllClear
+              this.level >= 1000 // inPost1000 - use this.level instead of gameMode.level
+            );
+            
+            if (timeBonus > 0) {
+              const oldTotalTime = this.gameMode.totalTime || 120;
+              const newTotalTime = Math.min(300, oldTotalTime + timeBonus);
+              this.gameMode.totalTime = newTotalTime;
+              console.log(`[KONOHA] Time bonus applied: +${timeBonus.toFixed(2)}s, total time: ${oldTotalTime.toFixed(2)}s -> ${newTotalTime.toFixed(2)}s`);
+              
+              // Update time display if available - show remaining time instead of elapsed
+              if (this.timeText) {
+                const remainingTime = Math.max(0, newTotalTime - (this.currentTime || 0));
+                const timeString = this.formatTime(remainingTime);
+                this.timeText.setText(timeString);
+              }
+            }
+          }
+          
+          // Force immediate score save for Konoha modes with a longer delay to ensure proper state capture
           setTimeout(() => {
             console.log('[KONOHA] Forcing immediate score save...');
             this.leaderboardSaved = false; // Reset flag to allow saving
+            // Ensure allClearsAchieved is properly synchronized before saving
+            if (this.gameMode && typeof this.gameMode.allClearsAchieved === "number") {
+              console.log('[KONOHA] Saving with allClearsAchieved:', this.gameMode.allClearsAchieved);
+            }
             this.saveBestScore();
-          }, 100);
+          }, 200); // Increased delay to ensure state is properly updated
         }
       }
       
       this.showBravoBanner();
 
-      // Kita: mark all-clear achieved for Konoha modes (used for tick display)
-      try {
-        const modeIdNow =
-          (this.gameMode && typeof this.gameMode.getModeId === "function"
-            ? this.gameMode.getModeId()
-            : this.selectedMode) || "";
-        if (modeIdNow === "konoha_easy" || modeIdNow === "konoha_hard") {
-          this._kitaLastAchievedAt = this.time?.now || Date.now();
-
-          // Minosa: force immediate recompute on the next hint update after a Bravo reset.
-          this._minosaCacheKey = null;
-          this._minosaPath = null;
-          this._minosaForceNextUpdate = true;
-          this._minosaNextAllowedAt = 0;
-        }
-      } catch {}
+    // All Clear handling for Konoha modes - Kita system removed
     }
     // Zen cheese injection on line clears when configured (only in Zen sandbox modes)
     if (this.isZenSandboxActive && this.isZenSandboxActive()) {
@@ -16147,16 +16117,20 @@ class GameScene extends Phaser.Scene {
 
     // Konoha (All Clear): store all-clears and submit as bravos for rating
     if ((this.selectedMode === "konoha_easy" || this.selectedMode === "konoha_hard") && this.gameMode) {
+      // Ensure we get the most up-to-date allClears count from the game mode
       const allClears =
         typeof this.gameMode.allClearsAchieved === "number"
           ? this.gameMode.allClearsAchieved
           : typeof this.gameMode.allClears === "number"
             ? this.gameMode.allClears
             : 0;
+      
+      console.log('[KONOHA] Saving to leaderboard with allClears:', allClears, 'modeId:', this.selectedMode);
+      
       const entry = {
         allClears,
-        level: this.level,
-        lines: this.lines,
+        level: this.level || 0,
+        lines: this.lines || 0,
         time:
           this.currentTime !== undefined && this.currentTime !== null
             ? `${Math.floor(this.currentTime / 60)
@@ -16170,6 +16144,7 @@ class GameScene extends Phaser.Scene {
         pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : undefined,
       };
 
+      console.log('[KONOHA] Leaderboard entry created:', entry);
       this.saveLeaderboardEntry(this.selectedMode, entry);
       this.leaderboardSaved = true;
 
@@ -16179,20 +16154,34 @@ class GameScene extends Phaser.Scene {
         console.log('[KONOHA] Attempting Firestore upload:', { submitScore: !!submitScore, allClears, modeId: this.selectedMode });
         
         if (submitScore) {
+          // Ensure we have the most up-to-date allClears count
+          const currentAllClears = this.gameMode && typeof this.gameMode.allClearsAchieved === "number" 
+            ? this.gameMode.allClearsAchieved 
+            : allClears;
+          
           const scoreData = {
-            bravos: allClears,
-            level: this.level,
-            lines: this.lines,
+            bravos: currentAllClears,
+            level: this.level || 0,
+            lines: this.lines || 0,
             timeSeconds: this.currentTime != null ? Number(this.currentTime) : null,
+            pps: this.conventionalPPS != null ? Number(this.conventionalPPS.toFixed(2)) : null,
           };
+          
           console.log('[KONOHA] Submitting to Firestore:', scoreData);
-          submitScore(this.selectedMode, scoreData);
-          console.log('[KONOHA] Firestore upload initiated');
+          const result = submitScore(this.selectedMode, scoreData);
+          console.log('[KONOHA] Firestore upload initiated, result:', result);
         } else {
           console.warn('[KONOHA] FirebaseClient.submitScore not available');
         }
       } catch (err) {
         console.error("[KONOHA] Rating submit failed:", err);
+        // Fallback: try to save locally if Firebase fails
+        try {
+          console.log('[KONOHA] Firebase failed, attempting local fallback save');
+          this.saveLeaderboardEntry(this.selectedMode, entry);
+        } catch (localErr) {
+          console.error('[KONOHA] Local fallback also failed:', localErr);
+        }
       }
       return;
     }
@@ -17014,9 +17003,10 @@ class GameScene extends Phaser.Scene {
 
       // Draw game elements using matrix offset (skip during game over after fading)
       // During game over fading, keep drawing the stack so row-by-row alpha can be applied.
+      // Allow drawing during credits roll.
       if (
         this.gameStarted &&
-        (!this.gameOver || this.minoFadeActive) &&
+        (!this.gameOver || this.minoFadeActive || this.creditsActive) &&
         !this.fadingComplete
       ) {
         this.board.draw(
@@ -17083,9 +17073,10 @@ class GameScene extends Phaser.Scene {
       }
     }
     // Draw current/ghost only during active play; during game over fading we already merged the active piece into the board
+    // Allow drawing during credits roll.
     if (
       this.currentPiece &&
-      !this.gameOver &&
+      (!this.gameOver || this.creditsActive) &&
       !this.minoFadeActive &&
       !this.fadingComplete &&
       !suppressRender
@@ -17119,9 +17110,14 @@ class GameScene extends Phaser.Scene {
         pieceAlpha,
       );
 
-      // Slower blinking hint for All Clear
+      // Slower blinking hint for All Clear - only for TGM2 Normal and TGM3 Easy
       const hintBlinkAlpha = 0.3 + 0.7 * Math.sin(this.time.now * 0.005);
-      if (this.hintPlacement && this._minosaPath && this._minosaPath.length > 0) {
+      const modeId = this.gameMode?.getModeId?.() || this.selectedMode;
+      const allowedModes = ['tgm2_normal', 'tgm3_easy'];
+      const isAllowedMode = allowedModes.includes(modeId);
+      
+      // Only render Minosa hints for allowed modes
+      if (isAllowedMode && this.hintPlacement && this._minosaPath && this._minosaPath.length > 0) {
         const hintColor = 0xFF8C00; // Fixed orange color
         const pieceShape = this.hintPlacement.shape; // Use trimmed shape
         const cell = this.cellSize;
@@ -17282,6 +17278,12 @@ class GameScene extends Phaser.Scene {
     }
     if (this.rawPpsText) {
       this.rawPpsText.setText(this.rawPPS.toFixed(2));
+    }
+
+    // Update hanabi count display for TGM3 Easy mode
+    if (this.hanabiTextInGame && this.gameMode && this.gameMode.modeId === 'tgm3_easy') {
+      const hanabiCount = this.gameMode.hanabi || 0;
+      this.hanabiTextInGame.setText(hanabiCount.toString());
     }
     if (
       this.ppsGraphGraphics &&
@@ -17663,8 +17665,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Draw game over text - centered on screen (only after 3 seconds)
-    // Skip in Zen to avoid overlay
-    if (this.showGameOverText && !(this.isZenSandboxActive && this.isZenSandboxActive())) {
+    // Skip in Zen and during credits to avoid overlay
+    if (this.showGameOverText && !(this.isZenSandboxActive && this.isZenSandboxActive()) && !this.creditsActive) {
       const gameOverFontSize = Math.max(
         48,
         Math.min(72, Math.floor(this.cellSize * 1.5)),

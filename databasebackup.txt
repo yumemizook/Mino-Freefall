@@ -1,0 +1,624 @@
+       database.fullBag = {
+            earlyJ: {
+                name: 'Early J',
+                pattern: [
+                    ['I', 'O', 'O', 'L', 'L'],
+                    ['I', 'O', 'O', 'T', 'L'],
+                    ['I', 'J', 'T', 'T', 'T'],
+                    ['I', 'J', 'J', 'J', 'L']
+                ],
+                requiredPieces: ['I', 'O', 'L', 'J', 'T'],
+                difficulty: 'easy'
+            },
+            earlyJ_mirrored: {
+                name: 'Early J (Mirrored)',
+                pattern: [
+                    ['J', 'J', 'O', 'O', 'I'],
+                    ['J', 'T', 'O', 'O', 'I'],
+                    ['T', 'T', 'T', 'L', 'I'],
+                    ['J', 'L', 'L', 'L', 'I']
+                ],
+                requiredPieces: ['I', 'O', 'L', 'J', 'T'],
+                difficulty: 'easy'
+            },
+            earlyTO: {
+                name: 'Early TO',
+                pattern: [
+                    ['J', 'J', 'J', 'L', 'L'],
+                    ['I', 'I', 'I', 'I', 'L'],
+                    ['O', 'O', 'J', 'T', 'L'],
+                    ['O', 'O', 'T', 'T', 'T']
+                ],
+                requiredPieces: ['J', 'L', 'I', 'O', 'T'],
+                difficulty: 'easy'
+            },
+            earlyTO_mirrored: {
+                name: 'Early TO (Mirrored)',
+                pattern: [
+                    ['J', 'J', 'L', 'L', 'L'],
+                    ['J', 'I', 'I', 'I', 'I'],
+                    ['J', 'T', 'L', 'O', 'O'],
+                    ['T', 'T', 'T', 'O', 'O']
+                ],
+                requiredPieces: ['J', 'L', 'I', 'O', 'T'],
+                difficulty: 'easy'
+            },
+            earlyIO: {
+                name: 'Early IO',
+                pattern: [
+                    ['J', 'J', 'T', 'T', 'T'],
+                    ['J', 'O', 'O', 'L', 'L'],
+                    ['J', 'O', 'O', 'T', 'L'],
+                    ['I', 'I', 'I', 'I', 'L']
+                ],
+                requiredPieces: ['J', 'T', 'O', 'L', 'I'],
+                difficulty: 'easy'
+            },
+            earlyIO_mirrored: {
+                name: 'Early IO (Mirrored)',
+                pattern: [
+                    ['T', 'T', 'T', 'L', 'L'],
+                    ['J', 'J', 'O', 'O', 'L'],
+                    ['J', 'T', 'O', 'O', 'L'],
+                    ['J', 'I', 'I', 'I', 'I']
+                ],
+                requiredPieces: ['J', 'T', 'O', 'L', 'I'],
+                difficulty: 'easy'
+            },
+            ilj: {
+                name: 'ILJ',
+                pattern: [
+                    ['O', 'O', 'T', 'T', 'T'],
+                    ['J', 'J', 'J', 'L', 'L'],
+                    ['O', 'O', 'J', 'T', 'L'],
+                    ['I', 'I', 'I', 'I', 'L']
+                ],
+                requiredPieces: ['O', 'T', 'J', 'L', 'I'],
+                difficulty: 'easy'
+            },
+            ilj_mirrored: {
+                name: 'ILJ (Mirrored)',
+                pattern: [
+                    ['T', 'T', 'T', 'O', 'O'],
+                    ['J', 'J', 'L', 'L', 'L'],
+                    ['J', 'T', 'L', 'O', 'O'],
+                    ['J', 'I', 'I', 'I', 'I']
+                ],
+                requiredPieces: ['O', 'T', 'J', 'L', 'I'],
+                difficulty: 'easy'
+            }
+        };
+
+        // 3x4 Box patterns - Universal solutions
+        database.box3x4 = {
+            // Universal solutions for any 3x4 setup
+            solutions: {
+                ljoSolution: {
+                    name: 'LJO Solution',
+                    solve: [
+                        ['L', 'L', null, null, null],
+                        ['J', 'J', null, null, null],
+                        ['J', 'L', null, null, null],
+                        ['J', 'L', null, null, null]
+                    ],
+                    requiredPieces: ['L', 'J'],
+                    difficulty: 'medium'
+                },
+                ljoSolution_mirrored: {
+                    name: 'LJO Solution (Mirrored)',
+                    solve: [
+                        [null, null, null, 'J', 'J'],
+                        [null, null, null, 'L', 'L'],
+                        [null, null, null, 'L', 'J'],
+                        [null, null, null, 'L', 'J']
+                    ],
+                    requiredPieces: ['L', 'J'],
+                    difficulty: 'medium'
+                },
+                lloSolution: {
+                    name: 'LLO Solution',
+                    solve: [
+                        [null, null, null, 'J', 'J'],
+                        [null, null, null, 'J', 'T'],
+                        [null, null, null, 'T', 'T'],
+                        [null, null, null, 'J', 'T']
+                    ],
+                    requiredPieces: ['J', 'T'],
+                    difficulty: 'medium'
+                },
+                lloSolution_mirrored: {
+                    name: 'LLO Solution (Mirrored)',
+                    solve: [
+                        ['L', 'L', null, null, null],
+                        ['T', 'L', null, null, null],
+                        ['T', 'T', null, null, null],
+                        ['T', 'L', null, null, null]
+                    ],
+                    requiredPieces: ['L', 'T'],
+                    difficulty: 'medium'
+                },
+                ttlSolution: {
+                    name: 'TTL Solution',
+                    solve: [
+                        [null, null, 'L', 'L', null],
+                        [null, null, 'L', 'L', null],
+                        [null, null, 'L', 'L', null],
+                        [null, null, 'L', 'L', null]
+                    ],
+                    requiredPieces: ['T', 'L'],
+                    difficulty: 'medium'
+                },
+                ttlSolution_mirrored: {
+                    name: 'TTL Solution (Mirrored)',
+                    solve: [
+                        [null, null, 'J', 'J', null],
+                        [null, null, 'J', 'J', null],
+                        [null, null, 'J', 'J', null],
+                        [null, null, 'J', 'J', null]
+                    ],
+                    requiredPieces: ['T', 'J'],
+                    difficulty: 'medium'
+                }
+            },
+            // 3x4 setups (all use universal solutions)
+            ljo: {
+                name: 'LJO',
+                setup: [
+                    [null, null, 'J', 'J', 'J'],
+                    [null, null, 'O', 'O', 'J'],
+                    [null, null, 'O', 'O', 'L'],
+                    [null, null, 'L', 'L', 'L']
+                ],
+                requiredPieces: ['L', 'O', 'J'],
+                difficulty: 'medium'
+            },
+            ljo_mirrored: {
+                name: 'LJO (Mirrored)',
+                setup: [
+                    ['L', 'L', 'L', null, null],
+                    ['L', 'O', 'O', null, null],
+                    ['J', 'O', 'O', null, null],
+                    ['J', 'J', 'J', null, null]
+                ],
+                requiredPieces: ['L', 'O', 'J'],
+                difficulty: 'medium'
+            },
+            llo: {
+                name: 'LLO',
+                setup: [
+                    ['L', 'O', 'O', null, null],
+                    ['L', 'O', 'O', null, null],
+                    ['L', 'L', 'L', null, null],
+                    ['L', 'L', 'L', null, null]
+                ],
+                requiredPieces: ['L', 'O'],
+                difficulty: 'medium'
+            },
+            llo_mirrored: {
+                name: 'LLO (Mirrored)',
+                setup: [
+                    [null, null, 'O', 'O', 'J'],
+                    [null, null, 'O', 'O', 'J'],
+                    [null, null, 'J', 'J', 'J'],
+                    [null, null, 'J', 'J', 'J']
+                ],
+                requiredPieces: ['J', 'O'],
+                difficulty: 'medium'
+            },
+            ttl: {
+                name: 'TTL',
+                setup: [
+                    [null, null, 'J', 'J', 'T'],
+                    [null, null, 'J', 'T', 'T'],
+                    [null, null, 'J', 'T', 'T'],
+                    [null, null, 'T', 'T', 'T']
+                ],
+                requiredPieces: ['T', 'J'],
+                difficulty: 'medium'
+            },
+            ttl_mirrored: {
+                name: 'TTL (Mirrored)',
+                setup: [
+                    ['T', 'T', 'T', null, null],
+                    ['T', 'T', 'L', null, null],
+                    ['T', 'T', 'L', null, null],
+                    ['T', 'L', 'L', null, null]
+                ],
+                requiredPieces: ['T', 'L'],
+                difficulty: 'medium'
+            }
+        };
+
+        // 2x4 Box patterns
+        database.box2x4 = {
+            olj: {
+                name: 'OLJ',
+                solve: [
+                    [null, null, 'J', 'L', 'L'],
+                    [null, null, 'J', 'J', 'J'],
+                    [null, null, 'O', 'O', 'L'],
+                    [null, null, 'O', 'O', 'L']
+                ],
+                requiredPieces: ['J', 'L', 'O'],
+                difficulty: 'medium'
+            },
+            olj_mirrored: {
+                name: 'OLJ (Mirrored)',
+                solve: [
+                    ['J', 'J', 'L', null, null],
+                    ['L', 'L', 'L', null, null],
+                    ['J', 'O', 'O', null, null],
+                    ['J', 'O', 'O', null, null]
+                ],
+                requiredPieces: ['J', 'L', 'O'],
+                difficulty: 'medium'
+            },
+            ojl: {
+                name: 'OJL',
+                solve: [
+                    [null, null, 'J', 'J', 'L'],
+                    [null, null, 'L', 'L', 'L'],
+                    [null, null, 'J', 'O', 'O'],
+                    [null, null, 'J', 'O', 'O']
+                ],
+                requiredPieces: ['J', 'L', 'O'],
+                difficulty: 'medium'
+            },
+            ojl_mirrored: {
+                name: 'OJL (Mirrored)',
+                solve: [
+                    ['J', 'L', 'L', null, null],
+                    ['J', 'J', 'J', null, null],
+                    ['O', 'O', 'L', null, null],
+                    ['O', 'O', 'L', null, null]
+                ],
+                requiredPieces: ['J', 'L', 'O'],
+                difficulty: 'medium'
+            },
+            tlj: {
+                name: 'TLJ',
+                solve: [
+                    [null, null, 'J', 'J', 'J'],
+                    [null, null, 'L', 'L', 'L'],
+                    [null, null, 'L', 'T', 'J'],
+                    [null, null, 'T', 'T', 'T']
+                ],
+                requiredPieces: ['J', 'L', 'T'],
+                difficulty: 'medium'
+            },
+            tlj_mirrored: {
+                name: 'TLJ (Mirrored)',
+                solve: [
+                    ['L', 'L', 'L', null, null],
+                    ['J', 'J', 'J', null, null],
+                    ['L', 'T', 'J', null, null],
+                    ['T', 'T', 'T', null, null]
+                ],
+                requiredPieces: ['J', 'L', 'T'],
+                difficulty: 'medium'
+            },
+            ltl: {
+                name: 'LTL',
+                solve: [
+                    [null, null, 'L', 'L', 'L'],
+                    [null, null, 'T', 'T', 'T'],
+                    [null, null, 'L', 'T', 'L'],
+                    [null, null, 'L', 'L', 'L']
+                ],
+                requiredPieces: ['L', 'T'],
+                difficulty: 'medium'
+            },
+            ltl_mirrored: {
+                name: 'LTL (Mirrored)',
+                solve: [
+                    ['J', 'J', 'J', null, null],
+                    ['T', 'T', 'T', null, null],
+                    ['J', 'T', 'J', null, null],
+                    ['J', 'J', 'J', null, null]
+                ],
+                requiredPieces: ['J', 'T'],
+                difficulty: 'medium'
+            },
+            llt: {
+                name: 'LLT',
+                solve: [
+                    [null, null, 'T', 'T', 'T'],
+                    [null, null, 'L', 'L', 'L'],
+                    [null, null, 'L', 'T', 'L'],
+                    [null, null, 'L', 'L', 'L']
+                ],
+                requiredPieces: ['L', 'T'],
+                difficulty: 'medium'
+            },
+            llt_mirrored: {
+                name: 'LLT (Mirrored)',
+                solve: [
+                    ['T', 'T', 'T', null, null],
+                    ['J', 'J', 'J', null, null],
+                    ['J', 'T', 'J', null, null],
+                    ['J', 'J', 'J', null, null]
+                ],
+                requiredPieces: ['J', 'T'],
+                difficulty: 'medium'
+            },
+            ltt: {
+                name: 'LTT',
+                solve: [
+                    [null, null, 'T', 'T', 'T'],
+                    [null, null, 'L', 'T', 'T'],
+                    [null, null, 'L', 'T', 'T'],
+                    [null, null, 'L', 'L', 'T']
+                ],
+                requiredPieces: ['L', 'T'],
+                difficulty: 'medium'
+            },
+            ltt_mirrored: {
+                name: 'LTT (Mirrored)',
+                solve: [
+                    ['T', 'T', 'T', null, null],
+                    ['T', 'T', 'J', null, null],
+                    ['T', 'T', 'J', null, null],
+                    ['T', 'J', 'J', null, null]
+                ],
+                requiredPieces: ['J', 'T'],
+                difficulty: 'medium'
+            },
+            ltt_variant2: {
+                name: 'LTT Variant 2',
+                solve: [
+                    [null, null, 'T', 'T', 'T'],
+                    [null, null, 'T', 'L', 'L'],
+                    [null, null, 'T', 'T', 'L'],
+                    [null, null, 'T', 'T', 'L']
+                ],
+                requiredPieces: ['L', 'T'],
+                difficulty: 'medium'
+            },
+            ltt_variant2_mirrored: {
+                name: 'LTT Variant 2 (Mirrored)',
+                solve: [
+                    ['T', 'T', 'T', null, null],
+                    ['J', 'J', 'T', null, null],
+                    ['J', 'T', 'T', null, null],
+                    ['J', 'T', 'T', null, null]
+                ],
+                requiredPieces: ['J', 'T'],
+                difficulty: 'medium'
+            },
+            ltt_variant3: {
+                name: 'LTT Variant 3',
+                solve: [
+                    [null, null, 'T', 'L', 'L'],
+                    [null, null, 'T', 'T', 'L'],
+                    [null, null, 'T', 'T', 'L'],
+                    [null, null, 'L', 'L', 'T']
+                ],
+                requiredPieces: ['L', 'T'],
+                difficulty: 'medium'
+            },
+            ltt_variant3_mirrored: {
+                name: 'LTT Variant 3 (Mirrored)',
+                solve: [
+                    ['J', 'J', 'T', null, null],
+                    ['J', 'T', 'T', null, null],
+                    ['J', 'T', 'T', null, null],
+                    ['T', 'T', 'T', null, null]
+                ],
+                requiredPieces: ['J', 'T'],
+                difficulty: 'medium'
+            }
+
+        };
+
+        // Double T patterns
+        database.doubleT = {
+            ilt: {
+                name: 'ILT',
+                solve: [
+                    [null, 'T', 'T', 'T', 'I'],
+                    [null, null, 'L', 'L', 'I'],
+                    [null, null, 'T', 'L', 'I'],
+                    [null, null, null, 'L', 'I']
+                ],
+                requiredPieces: ['T', 'I', 'L'],
+                difficulty: 'hard'
+            },
+            ilt_mirrored: {
+                name: 'ILT (Mirrored)',
+                solve: [
+                    ['I', 'T', 'T', 'T', null],
+                    ['I', 'J', 'J', null, null],
+                    ['I', 'J', 'T', null, null],
+                    ['I', 'J', null, null, null]
+                ],
+                requiredPieces: ['T', 'I', 'L'],
+                difficulty: 'hard'
+            },
+            ilo: {
+                name: 'ILO',
+                solve: [
+                    [null, 'I', 'I', 'I', 'I'],
+                    [null, null, 'L', 'L', 'L'],
+                    [null, null, 'L', 'O', 'O'],
+                    [null, null, null, 'O', 'O']
+                ],
+                requiredPieces: ['I', 'L', 'O'],
+                difficulty: 'hard'
+            },
+            ilo_mirrored: {
+                name: 'ILO (Mirrored)',
+                solve: [
+                    ['I', 'I', 'I', 'I', null],
+                    ['J', 'J', 'J', null, null],
+                    ['O', 'O', 'J', null, null],
+                    ['O', 'O', null, null, null]
+                ],
+                requiredPieces: ['I', 'L', 'O'],
+                difficulty: 'hard'
+            },
+            ijo: {
+                name: 'IJO',
+                solve: [
+                    [null, 'I', 'I', 'I', 'I'],
+                    [null, null, 'J', 'O', 'O'],
+                    [null, null, 'J', 'J', 'J'],
+                    [null, null, null, 'O', 'O']
+                ],
+                requiredPieces: ['I', 'J', 'O'],
+                difficulty: 'hard'
+            },
+            ijo_mirrored: {
+                name: 'IJO (Mirrored)',
+                solve: [
+                    ['I', 'I', 'I', 'I', null],
+                    ['O', 'O', 'L', null, null],
+                    ['L', 'L', 'L', null, null],
+                    ['O', 'O', null, null, null]
+                ],
+                requiredPieces: ['I', 'J', 'O'],
+                difficulty: 'hard'
+            }
+        };
+
+        // IOT/JJT patterns
+        database.iotJjt = {
+            lt: {
+                name: 'LT',
+                solve: [
+                    [null, null, null, null, null],
+                    ['T', 'T', 'T', 'L', null],
+                    [null, 'L', 'L', 'L', null],
+                    [null, 'T', null, null, null]
+                ],
+                requiredPieces: ['T', 'L'],
+                difficulty: 'hard'
+            },
+            lt_mirrored: {
+                name: 'LT (Mirrored)',
+                solve: [
+                    [null, null, null, null, null],
+                    [null, 'J', 'T', 'T', 'T'],
+                    [null, 'J', 'J', 'J', null],
+                    [null, null, null, 'T', null]
+                ],
+                requiredPieces: ['T', 'L'],
+                difficulty: 'hard'
+            },
+            lo: {
+                name: 'LO',
+                solve: [
+                    [null, null, null, null, null],
+                    ['L', 'L', 'O', 'O', null],
+                    [null, 'L', 'O', 'O', null],
+                    [null, 'L', null, null, null]
+                ],
+                requiredPieces: ['L', 'O'],
+                difficulty: 'hard'
+            },
+            lo_mirrored: {
+                name: 'LO (Mirrored)',
+                solve: [
+                    [null, null, null, null, null],
+                    [null, 'O', 'O', 'J', 'J'],
+                    [null, 'O', 'O', 'J', null],
+                    [null, null, null, 'J', null]
+                ],
+                requiredPieces: ['L', 'O'],
+                difficulty: 'hard'
+            },
+            li: {
+                name: 'LI',
+                solve: [
+                    [null, null, null, null, null],
+                    ['I', 'I', 'I', 'I', null],
+                    [null, 'L', 'L', 'L', null],
+                    [null, 'L', null, null, null]
+                ],
+                requiredPieces: ['I', 'L'],
+                difficulty: 'hard'
+            },
+            li_mirrored: {
+                name: 'LI (Mirrored)',
+                solve: [
+                    [null, null, null, null, null],
+                    [null, 'I', 'I', 'I', 'I'],
+                    [null, 'J', 'J', 'J', null],
+                    [null, null, null, 'J', null]
+                ],
+                requiredPieces: ['I', 'L'],
+                difficulty: 'hard'
+            }
+        };
+
+        // // TL patterns
+        // database.tl = {
+        //     ojj: {
+        //         name: 'OJJ',
+        //         solve: [
+        //             ['O', 'O', 'J', 'J', null],
+        //             ['O', 'O', 'J', null, null],
+        //             [null, 'J', 'J', null, null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['O', 'J'],
+        //         difficulty: 'hard'
+        //     },
+        //     ojj_mirrored: {
+        //         name: 'OJJ (Mirrored)',
+        //         solve: [
+        //             [null, 'J', 'J', 'O', 'O'],
+        //             [null, null, 'J', 'O', 'O'],
+        //             [null, null, 'J', 'J', null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['O', 'J'],
+        //         difficulty: 'hard'
+        //     },
+        //     oll: {
+        //         name: 'OLL',
+        //         solve: [
+        //             ['O', 'O', 'L', 'L', 'L'],
+        //             ['O', 'O', 'L', null, null],
+        //             [null, 'L', 'L', 'L', null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['O', 'L'],
+        //         difficulty: 'hard'
+        //     },
+        //     oll_mirrored: {
+        //         name: 'OLL (Mirrored)',
+        //         solve: [
+        //             [null, 'L', 'L', 'L', 'O'],
+        //             [null, null, 'L', 'O', 'O'],
+        //             [null, 'L', 'L', 'L', null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['O', 'L'],
+        //         difficulty: 'hard'
+        //     },
+        //     olj: {
+        //         name: 'OLJ',
+        //         solve: [
+        //             ['L', 'L', 'L', 'J', 'J'],
+        //             ['L', 'O', 'O', 'J', null],
+        //             [null, 'O', 'O', 'J', null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['L', 'O', 'J'],
+        //         difficulty: 'hard'
+        //     },
+        //     olj_mirrored: {
+        //         name: 'OLJ (Mirrored)',
+        //         solve: [
+        //             [null, 'J', 'J', 'L', 'L'],
+        //             [null, 'J', 'O', 'O', 'L'],
+        //             [null, 'J', 'O', 'O', null],
+        //             [null, null, null, null, null]
+        //         ],
+        //         requiredPieces: ['L', 'O', 'J'],
+        //         difficulty: 'hard'
+        //     }
+        // };
+
+        return database;
+    }

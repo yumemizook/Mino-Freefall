@@ -23,6 +23,7 @@ class ModeManager {
             'tgm1': 0x888888,      // grey
             'tgm2': 0x888888,      // grey
             'tgm3': 0x888888,      // grey
+            'tgm3_easy': 0x00ff00, // green (TGM3 Easy)
             'tgm4': 0x888888,      // grey
             'tgm4_1_1': 0x888888,  // grey
             'tgm4_2_1': 0xff0000,  // red (20G)
@@ -45,8 +46,8 @@ class ModeManager {
             'flashpoint': 0x8800ff, // purple
             'easy_normal': 0x00ff00, // green
             'easy_easy': 0x00ff00, // green
-            'tgm2_master': 0x888888, // grey
             'tgm2_normal': 0x00ff00, // green
+            'tgm2_master': 0x888888, // grey
             'tgm_plus': 0x888888   // grey
         };
         

@@ -163,11 +163,27 @@
         row.style.justifyContent = "space-between";
         row.style.fontSize = "13px";
         const leftRow = document.createElement("div");
-        leftRow.textContent = modeId;
+        // Format mode name for better display
+        const displayName = modeId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        leftRow.textContent = displayName;
         const rightRow = document.createElement("div");
-        const best = entry.bestScore ?? entry.bestTime ?? entry.bestLines ?? "—";
+        
+        // Determine score type and format accordingly
+        let scoreDisplay = "—";
+        if (entry.allClears !== undefined) {
+          scoreDisplay = `${entry.allClears} Bravos`;
+        } else if (entry.bravos !== undefined) {
+          scoreDisplay = `${entry.bravos} Bravos`;
+        } else if (entry.bestScore !== undefined) {
+          scoreDisplay = `${entry.bestScore.toLocaleString()} Score`;
+        } else if (entry.bestTime !== undefined) {
+          scoreDisplay = `${entry.bestTime}s Time`;
+        } else if (entry.bestLines !== undefined) {
+          scoreDisplay = `${entry.bestLines} Lines`;
+        }
+        
         const rank = entry.absoluteRank ?? "—";
-        rightRow.textContent = `${best} | Rank ${rank}`;
+        rightRow.textContent = `${scoreDisplay} | Rank ${rank}`;
         row.appendChild(leftRow);
         row.appendChild(rightRow);
         list.appendChild(row);
