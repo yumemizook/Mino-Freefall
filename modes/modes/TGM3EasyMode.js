@@ -272,6 +272,29 @@ class TGM3EasyMode extends BaseMode {
         }
     }
 
+    // Handle credit roll completion
+    finishCreditRoll(gameScene) {
+        // TGM3 Easy: Ensure stack is properly handled and save Hanabi-based score
+        console.log('TGM3 Easy: Credit roll completed');
+        
+        // Save best score with Hanabi as primary metric
+        this.saveBestScore(gameScene);
+    }
+
+    // Save best score for TGM3 Easy mode (Hanabi-based)
+    saveBestScore(gameScene) {
+        const entry = {
+            hanabi: this.hanabi || 0,
+            score: gameScene.score || 0,
+            level: gameScene.level,
+            time: `${Math.floor(gameScene.currentTime / 60)}:${Math.floor(gameScene.currentTime % 60).toString().padStart(2, '0')}.${Math.floor((gameScene.currentTime % 1) * 100).toString().padStart(2, '0')}`,
+            pps: gameScene.conventionalPPS != null ? Number(gameScene.conventionalPPS.toFixed(2)) : undefined
+        };
+        if (typeof gameScene.saveLeaderboardEntry === 'function') {
+            gameScene.saveLeaderboardEntry(this.modeId, entry);
+        }
+    }
+
     // Simplified Ti Easy gravity table (1/256G units converted)
     getGravitySpeed(level) {
         if (level < 8) return 4;

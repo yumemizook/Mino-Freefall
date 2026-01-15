@@ -157,6 +157,11 @@ class TGM2NormalMode extends BaseMode {
         return newLevel;
     }
     
+    // Handle line clear for TGM2 scoring
+    handleLineClear(gameScene, linesCleared, pieceType) {
+        this.updateTGM2Score(gameScene, linesCleared, pieceType);
+    }
+    
     // Update TGM2 score using official TGM2 (TAP) scoring formula
     updateTGM2Score(gameScene, linesCleared, pieceType) {
         if (linesCleared === 0) return;
@@ -233,19 +238,18 @@ class TGM2NormalMode extends BaseMode {
     
     // Update method (called every frame)
     update(gameScene, deltaTime) {
-        // Handle credit roll
-        if (this.creditsStarted) {
-            this.creditsTimer += deltaTime;
-
-            if (this.creditsTimer >= this.creditsDuration) {
-                this.creditsStarted = false;
-                gameScene.showGameOverScreen();
-            }
-        }
+        // Credit roll is handled by the game engine automatically
+        // No manual timing needed here
     }
     
     
-    // Handle game over
+    // Handle credit roll completion
+    finishCreditRoll(gameScene) {
+        // TGM2 Normal: Don't show GAME OVER text, just end the game gracefully
+        console.log('TGM2 Normal: Credit roll completed');
+        // Save final score
+        this.saveBestScore(gameScene);
+    }
     onGameOver(gameScene) {
         // Apply Normal mode finish time bonus before recording score
         this.applyFinishTimeBonus(gameScene);

@@ -6210,6 +6210,7 @@ class GameScene extends Phaser.Scene {
     this.rightTimer = 0;
     this.leftInRepeat = false;
     this.rightInRepeat = false;
+    this.preventDasThisFrame = false;
     this.softDropPressed = false;
 
     // Rotation and action key states
@@ -9044,7 +9045,7 @@ class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setDepth(2000)
-      .setVisible(!!this.showB2BUI);
+      .setVisible(false); // Initially hidden, will be shown appropriately
     uiParent.add(this.b2bChainText);
 
     // Standard combo display (for sprint/ultra/marathon/zen)
@@ -10826,8 +10827,55 @@ class GameScene extends Phaser.Scene {
           !!(this.keys.right && this.keys.right.isDown);
         const zKeyDown = !!(this.keys.left && this.keys.left.isDown);
         const cKeyDown = !!(this.keys.right && this.keys.right.isDown);
+        
+        // Properly reset DAS charge when keys are released during ready-go phase
+        const prevLeftHeld = this.areLeftHeld;
+        const prevRightHeld = this.areRightHeld;
         this.areLeftHeld = leftDown || zKeyDown;
         this.areRightHeld = rightDown || cKeyDown;
+        
+        // Accumulate DAS charge during ready-go phase
+        if (this.areLeftHeld) {
+          if (!prevLeftHeld) {
+            // Key just pressed during ready-go - start DAS charging
+            this.leftKeyPressed = true;
+            this.leftTimer = 0;
+            this.leftInRepeat = false;
+          } else {
+            // Key held during ready-go - accumulate DAS charge
+            this.leftTimer += this.deltaTime;
+            if (!this.leftInRepeat && this.leftTimer >= this.dasDelay) {
+              this.leftInRepeat = true;
+              this.leftTimer = this.dasDelay; // Keep at full charge
+            }
+          }
+        } else if (prevLeftHeld && !this.areLeftHeld) {
+          // Key released during ready-go - reset DAS state
+          this.leftKeyPressed = false;
+          this.leftTimer = 0;
+          this.leftInRepeat = false;
+        }
+        
+        if (this.areRightHeld) {
+          if (!prevRightHeld) {
+            // Key just pressed during ready-go - start DAS charging
+            this.rightKeyPressed = true;
+            this.rightTimer = 0;
+            this.rightInRepeat = false;
+          } else {
+            // Key held during ready-go - accumulate DAS charge
+            this.rightTimer += this.deltaTime;
+            if (!this.rightInRepeat && this.rightTimer >= this.dasDelay) {
+              this.rightInRepeat = true;
+              this.rightTimer = this.dasDelay; // Keep at full charge
+            }
+          }
+        } else if (prevRightHeld && !this.areRightHeld) {
+          // Key released during ready-go - reset DAS state
+          this.rightKeyPressed = false;
+          this.rightTimer = 0;
+          this.rightInRepeat = false;
+        }
       }
       this.draw();
       return;
@@ -11074,7 +11122,8 @@ class GameScene extends Phaser.Scene {
       }
 
       // Track key states for DAS using custom keys (z for left, c for right)
-      if (leftPressed && !bothPressed && !this.leftKeyPressed) {
+      // Skip DAS processing during ARE, line ARE, line clear delay, and on spawn frame
+      if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && leftPressed && !bothPressed && !this.leftKeyPressed) {
         this.leftKeyPressed = true;
         this.leftTimer = 0;
         this.leftInRepeat = false;
@@ -11087,7 +11136,7 @@ class GameScene extends Phaser.Scene {
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
-      if (rightPressed && !bothPressed && !this.rightKeyPressed) {
+      if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && rightPressed && !bothPressed && !this.rightKeyPressed) {
         this.rightKeyPressed = true;
         this.rightTimer = 0;
         this.rightInRepeat = false;
@@ -11110,7 +11159,8 @@ class GameScene extends Phaser.Scene {
       // SRS: Process movement before rotation
 
       // Track key states for DAS using custom keys (z for left, c for right)
-      if ((leftDown || zKeyDown) && !this.leftKeyPressed) {
+      // Skip DAS processing during ARE, line ARE, line clear delay, and on spawn frame
+      if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && (leftDown || zKeyDown) && !this.leftKeyPressed) {
         this.leftKeyPressed = true;
         this.leftTimer = 0;
         this.leftInRepeat = false;
@@ -11122,7 +11172,7 @@ class GameScene extends Phaser.Scene {
         }
         // Don't set grounded state here - let gravity/soft drop logic handle it
       }
-      if ((rightDown || cKeyDown) && !this.rightKeyPressed) {
+      if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && (rightDown || cKeyDown) && !this.rightKeyPressed) {
         this.rightKeyPressed = true;
         this.rightTimer = 0;
         this.rightInRepeat = false;
@@ -11224,7 +11274,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Handle DAS for left key (cursors.left or z key)
-    if (this.leftKeyPressed && leftPressed && !bothPressed) {
+    // Skip DAS processing during ARE, line ARE, line clear delay, and on spawn frame
+    if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && this.leftKeyPressed && leftPressed && !bothPressed) {
       this.leftTimer += this.deltaTime;
       if (!this.leftInRepeat) {
         // Wait for DAS delay
@@ -11241,7 +11292,7 @@ class GameScene extends Phaser.Scene {
             // Don't set grounded state here - let gravity/soft drop logic handle it
           }
         }
-      } else if (this.leftInRepeat) {
+      } else if (!this.preventDasThisFrame) {
         // Handle ARR (Auto Repeat Rate)
         if (this.arrDelay <= 0) {
           // Instant travel to wall when ARR is 0
@@ -11272,7 +11323,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Handle DAS for right key (cursors.right or c key)
-    if (this.rightKeyPressed && rightPressed && !bothPressed) {
+    // Skip DAS processing during ARE, line ARE, line clear delay, and on spawn frame
+    if (!this.preventDasThisFrame && !this.areActive && !this.lineClearDelayActive && this.rightKeyPressed && rightPressed && !bothPressed) {
       this.rightTimer += this.deltaTime;
       if (!this.rightInRepeat) {
         // Wait for DAS delay
@@ -11289,7 +11341,7 @@ class GameScene extends Phaser.Scene {
             // Don't set grounded state here - let gravity/soft drop logic handle it
           }
         }
-      } else {
+      } else if (!this.preventDasThisFrame) {
         // Handle ARR (Auto Repeat Rate)
         if (this.arrDelay <= 0) {
           // Instant travel to wall when ARR is 0
@@ -11341,8 +11393,55 @@ class GameScene extends Phaser.Scene {
     const allowAreInputs = this.shouldAllowAREInputs();
     if (this.areActive || !this.currentPiece) {
       if (allowAreInputs) {
+        // Properly reset DAS charge when keys are released during ARE
+        const prevLeftHeld = this.areLeftHeld;
+        const prevRightHeld = this.areRightHeld;
         this.areLeftHeld = leftDown || zKeyDown;
         this.areRightHeld = rightDown || cKeyDown;
+        
+        // Accumulate DAS charge during ARE
+        if (this.areLeftHeld) {
+          if (!prevLeftHeld) {
+            // Key just pressed during ARE - start DAS charging
+            this.leftKeyPressed = true;
+            this.leftTimer = 0;
+            this.leftInRepeat = false;
+          } else {
+            // Key held during ARE - accumulate DAS charge
+            this.leftTimer += this.deltaTime;
+            if (!this.leftInRepeat && this.leftTimer >= this.dasDelay) {
+              this.leftInRepeat = true;
+              this.leftTimer = this.dasDelay; // Keep at full charge
+            }
+          }
+        } else if (prevLeftHeld && !this.areLeftHeld) {
+          // Key released during ARE - reset DAS state
+          this.leftKeyPressed = false;
+          this.leftTimer = 0;
+          this.leftInRepeat = false;
+        }
+        
+        if (this.areRightHeld) {
+          if (!prevRightHeld) {
+            // Key just pressed during ARE - start DAS charging
+            this.rightKeyPressed = true;
+            this.rightTimer = 0;
+            this.rightInRepeat = false;
+          } else {
+            // Key held during ARE - accumulate DAS charge
+            this.rightTimer += this.deltaTime;
+            if (!this.rightInRepeat && this.rightTimer >= this.dasDelay) {
+              this.rightInRepeat = true;
+              this.rightTimer = this.dasDelay; // Keep at full charge
+            }
+          }
+        } else if (prevRightHeld && !this.areRightHeld) {
+          // Key released during ARE - reset DAS state
+          this.rightKeyPressed = false;
+          this.rightTimer = 0;
+          this.rightInRepeat = false;
+        }
+        
         this.areRotationKeys.k = kKeyDown;
         this.areRotationKeys.space = spaceKeyDown;
         this.areRotationKeys.l = lKeyDown;
@@ -11904,6 +12003,9 @@ class GameScene extends Phaser.Scene {
 
     // Draw
 
+  // Reset DAS prevention flag after the spawn frame
+  this.preventDasThisFrame = false;
+  
   this.draw();
 }
 
@@ -12030,6 +12132,22 @@ class GameScene extends Phaser.Scene {
     this.lastGroundedY = null;
     // Reset spin tracking for new piece
     this.spinRotatedWhileGrounded = false;
+    
+    // Save DAS state from ARE before resetting it
+    const savedLeftKeyPressed = this.leftKeyPressed;
+    const savedRightKeyPressed = this.rightKeyPressed;
+    const savedLeftTimer = this.leftTimer;
+    const savedRightTimer = this.rightTimer;
+    const savedLeftInRepeat = this.leftInRepeat;
+    const savedRightInRepeat = this.rightInRepeat;
+    
+    // Reset DAS state to prevent pieces from moving immediately due to DAS charged during ARE
+    this.leftKeyPressed = false;
+    this.rightKeyPressed = false;
+    this.leftTimer = 0;
+    this.rightTimer = 0;
+    this.leftInRepeat = false;
+    this.rightInRepeat = false;
 
     // Sanitize next piece entry
     const rawNext = this.nextPieces.shift();
@@ -12095,6 +12213,8 @@ class GameScene extends Phaser.Scene {
         powerupType,
         this.rotationSystem,
       );
+      // Ensure texture key is set for powerup pieces
+      this.currentPiece.textureKey = pieceTextureKey || (this.rotationSystem === "ARS" ? "mino_ars" : "mino_srs");
       // Track for status label
       this.activePowerupType = powerupType;
       // Mark as spawned to guarantee once-per-level
@@ -12446,27 +12566,8 @@ class GameScene extends Phaser.Scene {
     const isInstantGravity =
       hardDropOnSpawn || effectiveRowsPerSecond >= 1200; // 20G == 20 rows/frame (1200 rows/sec at 60fps)
 
-    if (isInstantGravity) {
-      // For 20G+ gravity, immediately hard drop the piece to the ground/stack
-      // but do NOT lock it - let it be placed on top of the stack
-      this.currentPiece.hardDrop(this.board);
-      // Set grounded state since piece is now on the ground/stack
-      this.isGrounded = true;
-      this.lastGroundedY = this.currentPiece ? this.currentPiece.y : this.lastGroundedY;
-      // Start lock delay on the next frame to avoid instant lock on spawn
-      this.lockDelayBufferedStart = true;
-      this.lockDelay = 0;
-      // Prevent gravity and rendering the pre-drop position on the spawn frame
-      this.gravityAccum = 0;
-      this.skipGravityThisFrame = true;
-      this.suppressPieceRenderThisFrame = true;
-    } else {
-      // Normal spawning behavior for non-20G levels
-      this.resetLockDelay();
-      this.isGrounded = false;
-      // Reset gravity accumulator so falling time is measured from a clean state
-      this.gravityAccum = 0;
-    }
+    // Don't hard drop immediately - let DAS logic run first, then hard drop at the end
+    // This ensures piece spawns in correct position regardless of DAS charge
 
     // Track piece spawn time for scoring
     this.pieceSpawnTime = this.time.now;
@@ -12557,19 +12658,47 @@ class GameScene extends Phaser.Scene {
     // Reset finesse tracking for the freshly active piece
     this.resetFinessePieceInputs(this.currentPiece);
 
-    // Log final piece state after spawn
+    // Log final piece state after spawn - restore saved DAS state from ARE
     if (this.areLeftHeld) {
-      this.leftKeyPressed = true;
-      this.leftTimer = this.dasDelay;
-      this.leftInRepeat = false;
+      this.leftKeyPressed = savedLeftKeyPressed;
+      this.leftTimer = savedLeftTimer;
+      this.leftInRepeat = savedLeftInRepeat;
     }
     if (this.areRightHeld) {
-      this.rightKeyPressed = true;
-      this.rightTimer = this.dasDelay;
-      this.rightInRepeat = false;
+      this.rightKeyPressed = savedRightKeyPressed;
+      this.rightTimer = savedRightTimer;
+      this.rightInRepeat = savedRightInRepeat;
     }
     this.areLeftHeld = false;
     this.areRightHeld = false;
+
+    // Now apply hard drop for 20G modes after DAS state is set up
+    if (isInstantGravity) {
+      // For 20G+ gravity, hard drop the piece to the ground/stack after DAS state is preserved
+      // but do NOT lock it - let it be placed on top of the stack
+      this.currentPiece.hardDrop(this.board);
+      // Set grounded state since piece is now on the ground/stack
+      this.isGrounded = true;
+      this.lastGroundedY = this.currentPiece ? this.currentPiece.y : this.lastGroundedY;
+      // Start lock delay on the next frame to avoid instant lock on spawn
+      this.lockDelayBufferedStart = true;
+      this.lockDelay = 0;
+      // Prevent gravity and rendering the pre-drop position on the spawn frame
+      this.gravityAccum = 0;
+      this.skipGravityThisFrame = true;
+      this.suppressPieceRenderThisFrame = true;
+      // Prevent DAS/ARR movement on the spawn frame to ensure piece spawns at center
+      // ARR will apply on the next frame with preserved DAS charge
+      this.preventDasThisFrame = true;
+    } else {
+      // Normal spawning behavior for non-20G levels
+      this.resetLockDelay();
+      this.isGrounded = false;
+      // Reset gravity accumulator so falling time is measured from a clean state
+      this.gravityAccum = 0;
+      // For non-20G modes, also prevent DAS/ARR on spawn frame to ensure center spawn
+      this.preventDasThisFrame = true;
+    }
 
     // Update level on piece spawn
     if (this.isFirstSpawn) {
@@ -12594,6 +12723,10 @@ class GameScene extends Phaser.Scene {
       modeIdLower.includes("sprint") ||
       modeIdLower.includes("marathon");
     const isZenMode = modeIdLower.includes("zen");
+    
+    // Check for TGM2 Normal mode powerup insertion
+    const isTgm2Normal = modeIdLower === "tgm2_normal" || modeIdLower === "normal" || modeIdLower === "tgm2normal";
+    
     if (isGuidelineBagMode) {
       // Force a fresh standard 7-bag when entering guideline modes to avoid stale/randomized bags
       // from prior Zen sessions or other modes.
@@ -12677,6 +12810,17 @@ class GameScene extends Phaser.Scene {
     const visiblePreviewCount = this.nextPiecesCount || 1;
 
     while (this.nextPieces.length < minCount) {
+      // Check if we should insert a powerup for TGM2 Normal
+      let powerupType = null;
+      if (isTgm2Normal && typeof PowerupMino !== "undefined" && PowerupMino.createPowerupPiece) {
+        // Force powerup spawn at/after thresholds if not yet spawned
+        if (this.level >= 200 && !this.powerupSpawned.del_even) {
+          powerupType = "del_even";
+        } else if (this.level >= 100 && !this.powerupSpawned.free_fall) {
+          powerupType = "free_fall";
+        }
+      }
+      
       // Check if current mode supports powerup minos
       let piece;
       if (isZenSandbox) {
@@ -12698,6 +12842,15 @@ class GameScene extends Phaser.Scene {
         } else {
           piece = this.generateTGM1Piece();
         }
+      }
+
+      // Create powerup piece if needed for TGM2 Normal
+      if (powerupType && typeof PowerupMino !== "undefined" && PowerupMino.createPowerupPiece) {
+        const basePiece = typeof piece === "string" ? piece : (piece?.type || "I");
+        piece = PowerupMino.createPowerupPiece(basePiece, powerupType, this.rotationSystem);
+        // Mark as spawned to guarantee once-per-level
+        if (powerupType === "free_fall") this.powerupSpawned.free_fall = true;
+        if (powerupType === "del_even") this.powerupSpawned.del_even = true;
       }
 
       const queueIndex = this.nextPieces.length; // 0-based index where this piece will sit
@@ -13547,8 +13700,13 @@ class GameScene extends Phaser.Scene {
     }
 
     // Powerup effects (run after normal clears, before extra-line pass)
-    if (this.pendingPowerup && this.powerupEffectHandler) {
-      this.powerupEffectHandler.executePowerupByType(this.pendingPowerup.type);
+    if (this.pendingPowerup) {
+      // Use PowerupMino if available, otherwise fallback to PowerupEffectHandler
+      if (typeof PowerupMino !== 'undefined' && PowerupMino.applyPowerupEffect) {
+        PowerupMino.applyPowerupEffect(this, this.pendingPowerup.type);
+      } else if (this.powerupEffectHandler) {
+        this.powerupEffectHandler.executePowerupByType(this.pendingPowerup.type);
+      }
       // Restore remaining cells of the powerup piece to original mino color/texture
       const cells = this.powerupCells.get(this.pendingPowerup.type) || [];
       for (const cell of cells) {
@@ -13565,21 +13723,6 @@ class GameScene extends Phaser.Scene {
               ? originalColor
               : this.board.grid[boardY][boardX].color || this.board.grid[boardY][boardX];
           this.board.grid[boardY][boardX] = restoreColor;
-        }
-      }
-      // Normalize any remaining powerup objects on the board to plain colors
-      for (let r = 0; r < this.board.rows; r++) {
-        for (let c = 0; c < this.board.cols; c++) {
-          const cell = this.board.grid[r][c];
-          if (cell && typeof cell === "object" && cell.color) {
-            const fallbackColor =
-              typeof cell.originalColor === "number"
-                ? cell.originalColor
-                : typeof cell.color === "number"
-                  ? cell.color
-                  : 0;
-            this.board.grid[r][c] = fallbackColor;
-          }
         }
       }
       this.powerupCells.delete(this.pendingPowerup.type);
@@ -14119,6 +14262,11 @@ class GameScene extends Phaser.Scene {
     }
 
     this.level = newLevel;
+
+    // Check for credit roll start in TGM2 Normal mode
+    if (this.gameMode && this.gameMode.checkCreditRoll) {
+      this.gameMode.checkCreditRoll(this);
+    }
 
     // Ensure level never exceeds mode's gravity level cap
     const maxLevel = this.gameMode ? this.gameMode.getGravityLevelCap() : 999;
@@ -14701,6 +14849,17 @@ class GameScene extends Phaser.Scene {
     return internalGravity;
   }
 
+  getTSpinCorners(piece) {
+    // Return the 4 corner positions to check for T-spin detection
+    // These are the diagonal corners around the T-piece's center
+    return [
+      [piece.x - 1, piece.y - 1], // top-left
+      [piece.x + 2, piece.y - 1], // top-right  
+      [piece.x - 1, piece.y + 2], // bottom-left
+      [piece.x + 2, piece.y + 2], // bottom-right
+    ];
+  }
+
   detectSpin(piece, board) {
     if (!piece || !board) return { isSpin: false, isTSpin: false, spinType: null };
     if (piece.type === "O") return { isSpin: false, isTSpin: false, spinType: null };
@@ -14752,16 +14911,14 @@ class GameScene extends Phaser.Scene {
         return { isSpin: false, isTSpin: false, spinType: null };
       }
 
-      const corners = [
-        [piece.x - 1, piece.y - 1],
-        [piece.x + 1, piece.y - 1],
-        [piece.x - 1, piece.y + 1],
-        [piece.x + 1, piece.y + 1],
-      ];
+      // Check 3-corner T-spin rule - use the piece's current rotation to determine corners
+      const corners = this.getTSpinCorners(piece);
       let filledCorners = 0;
       for (const [cx, cy] of corners) {
         if (cellBlocked(cx, cy)) filledCorners++;
       }
+      
+      // T-spin detected if 3+ corners filled (or 2 corners for mini)
       if (filledCorners >= 3) {
         return { isSpin: true, isTSpin: true, spinType: "t-spin" };
       }
@@ -17536,8 +17693,24 @@ class GameScene extends Phaser.Scene {
       }
 
       const previewTextureKey =
-        rawTextureKey || (this.rotationSystem === "ARS" ? "mino_ars" : "mino_srs");
-      const nextPiece = new Piece(previewType, this.rotationSystem, 0, previewTextureKey);
+        rawNext?.textureKey || 
+        (this.rotationSystem === "ARS" ? "mino_ars" : "mino_srs");
+      
+      // Check if this is a powerup piece
+      let nextPiece;
+      if (rawNext && typeof rawNext === "object" && rawNext.isPowerup) {
+        // Create powerup piece with proper properties
+        nextPiece = new Piece(previewType, this.rotationSystem, 0, previewTextureKey);
+        nextPiece.isPowerup = rawNext.isPowerup;
+        nextPiece.powerupType = rawNext.powerupType;
+        nextPiece.baseColor = rawNext.baseColor;
+        nextPiece.powerupFillColor = rawNext.powerupFillColor;
+        nextPiece.powerupColors = rawNext.powerupColors;
+        nextPiece.textureKey = previewTextureKey; // Ensure texture key is set
+      } else {
+        // Regular piece
+        nextPiece = new Piece(previewType, this.rotationSystem, 0, previewTextureKey);
+      }
       // Use matrix-relative positioning like the main game pieces
       nextPiece.x = 0;
       nextPiece.y = 2; // Start from the top visible row

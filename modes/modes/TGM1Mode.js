@@ -6,6 +6,9 @@ class TGM1Mode extends BaseMode {
         super();
         this.modeName = 'TGM1';
         this.description = 'The Tetris game you know and love. Scale through the grades and be a Grand Master!';
+        
+        // Credit roll tracking
+        this.creditsStarted = false;
     }
 
     getModeConfig() {
@@ -144,6 +147,26 @@ class TGM1Mode extends BaseMode {
             score: requiredScore,
             pointsNeeded: Math.max(0, requiredScore - currentScore)
         };
+    }
+
+    // Check for credit roll start
+    checkCreditRoll(gameScene) {
+        if (gameScene.level >= 999 && !this.creditsStarted) {
+            this.creditsStarted = true;
+            
+            // Start credit roll at level 999 for GM qualification
+            gameScene.startCredits(30);
+            
+            console.log('TGM1: Started credit roll at level 999');
+        }
+    }
+    
+    // Handle credit roll completion
+    finishCreditRoll(gameScene) {
+        // TGM1: Don't show GAME OVER text, just end the game gracefully
+        console.log('TGM1: Credit roll completed');
+        // Save final score
+        this.saveBestScore(gameScene);
     }
 }
 
